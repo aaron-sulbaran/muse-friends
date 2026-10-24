@@ -1,0 +1,27 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and builds
+node_modules/
+.next/
+dist/
+build/
+.venv/
+__pycache__/
+
+# OS and editor noise
+.DS_Store
+.vscode/
+.idea/
+
+# Agent working documents and tooling, private per Living Document Protocol
+AGENTS.md
+AGENTS_ARCHIVE.md
+CLAUDE.md
+CLAUDE.local.md
+CLAUDE_ARCHIVE.md
+.cursor/
+.claude/
+.vercel/
