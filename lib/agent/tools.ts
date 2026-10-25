@@ -115,7 +115,7 @@ export function buildTools(ctx: AgentRuntimeContext): { tools: ToolDefinition[];
         agent,
         contextId: ctx.contextId,
         planId: plan?.id,
-        text: `${displayName(agent)} read the reel caption: ${parsed.data.place}${parsed.data.area ? `, ${parsed.data.area}` : ""}${parsed.data.hours ? `, ${parsed.data.hours.toLowerCase()}` : ""} (extracted from caption)`,
+        text: `${displayName(agent)} read the reel caption: ${parsed.data.place}${parsed.data.area ? `, ${parsed.data.area}` : ""}${parsed.data.hours ? `, ${parsed.data.hours.charAt(0).toLowerCase()}${parsed.data.hours.slice(1)}` : ""} (extracted from caption)`,
       };
       await store.appendEvent(row);
       return { ok: true, saved: parsed.data, free_hint: plan?.window ? describeWindow(plan.window) : undefined };

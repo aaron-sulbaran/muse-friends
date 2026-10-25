@@ -44,9 +44,7 @@ export async function injectSignal(store: Store, signal: Signal, wallNow: () => 
     planId,
     text: `${displayName(signal.from)} shared a reel with ${displayName(signal.to)}${signal.dmText ? `: "${signal.dmText}"` : ""}`,
   };
-  await store.putSignal({ ...signal, receivedAt: at });
-  await store.putPlan(plan);
-  await store.appendEvent(event);
+  await Promise.all([store.putSignal({ ...signal, receivedAt: at }), store.putPlan(plan), store.appendEvent(event)]);
   return { contextId, planId };
 }
 
@@ -82,6 +80,9 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
 // friend's windows are also free (computed here), and answer through send_to_friend_agent.
 export async function runInboxTurn(options: RuntimeOptions & { agent: AgentId; contextId: string }): Promise<TurnResult> {
   const { store, agent, contextId } = options;
+  // A thread that ended (agreed, declined, or hit the cap) gets no further turn and no model call.
+  const current = await store.getThread(contextId);
+  if (current && current.state !== "working") return { status: "completed", finalText: "", nudged: false, toolCalls: [], calls: [], totalMs: 0 };
   const thread = (await store.listMessages(contextId)).map((record) => record.message);
   const friendLast = [...thread].reverse().find((message) => message.from !== agent);
   const nowMs = options.wallNow?.() ?? Date.now();

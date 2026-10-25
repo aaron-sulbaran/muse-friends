@@ -1,4 +1,5 @@
 import {
+  THREAD_CAP,
   type ActivityEvent,
   type AgentId,
   type AgentMessage,
@@ -26,45 +27,45 @@ export function messageEventText(message: AgentMessage): string {
   return `${displayName(message.from)} sent ${message.type}${windows ? `: ${windows}` : ""}`;
 }
 
-async function ensurePlan(store: Store, message: AgentMessage, at: string): Promise<Plan> {
-  const existing = await store.getPlanByContext(message.contextId);
-  if (existing) return existing;
-  const plan: Plan = {
-    id: newId("plan"),
-    contextId: message.contextId,
-    initiator: message.from,
-    participants: [message.from, message.to],
-    state: "detected",
-    decisions: { aaron: "pending", lisa: "pending" },
-    history: [{ state: "detected", at }],
-    createdAt: at,
-    updatedAt: at,
-  };
-  await store.putPlan(plan);
-  return plan;
-}
+export type CommitResult = {
+  // The state the thread is in after this message ("failed" when the cap ended it).
+  threadState: Thread["state"];
+  // True when this was the sixth message and the agents still had not agreed: the plan is dropped.
+  capped: boolean;
+  // Everything the receiving agent's next turn and the Activity timeline need that the 202 does not:
+  // the redaction record, the rejected-window ledger, and the timeline rows. Await it before running
+  // the turn (the inbox does so in after()).
+  finish: () => Promise<void>;
+};
 
-export async function commitMessage(store: Store, record: MessageRecord, redaction: Redaction | null = null): Promise<void> {
+// Persists the part of a message that has to exist before anyone is told it arrived: the message, the
+// thread, the plan (with the cards when the agents just agreed). These writes are independent, so they
+// go out together, and the whole step costs one store round trip however slow the store is. The rest
+// comes back as `finish`, so an inbox can answer 202 first.
+export async function commitMessageCore(store: Store, record: MessageRecord, redaction: Redaction | null = null): Promise<CommitResult> {
   const { message } = record;
   const at = message.at;
-  const plan = await ensurePlan(store, message, at);
-  const prior = (await store.listMessages(message.contextId)).map((entry) => entry.message);
+  const [existingPlan, priorRecords, existingThread] = await Promise.all([
+    store.getPlanByContext(message.contextId),
+    store.listMessages(message.contextId),
+    store.getThread(message.contextId),
+  ]);
+  const plan = existingPlan ?? (await createPlan(store, message, at));
+  const prior = priorRecords.map((entry) => entry.message);
 
-  let thread = await store.getThread(message.contextId);
-  const opening = thread === null;
-  thread ??= {
-    contextId: message.contextId,
-    planId: plan.id,
-    initiator: message.from,
-    participants: [message.from, message.to],
-    state: "working",
-    messageCount: 0,
-    createdAt: at,
-    updatedAt: at,
-  } satisfies Thread;
-
-  await store.appendMessage(record);
-  if (redaction) await store.appendRedaction(redaction);
+  const opening = existingThread === null;
+  const thread: Thread =
+    existingThread ??
+    ({
+      contextId: message.contextId,
+      planId: plan.id,
+      initiator: message.from,
+      participants: [message.from, message.to],
+      state: "working",
+      messageCount: 0,
+      createdAt: at,
+      updatedAt: at,
+    } satisfies Thread);
 
   const events: ActivityEvent[] = [];
   const event = (kind: ActivityEvent["kind"], actor: ActivityEvent["actor"], text: string, extra: Partial<ActivityEvent> = {}) =>
@@ -86,11 +87,13 @@ export async function commitMessage(store: Store, record: MessageRecord, redacti
 
   // The ledger remembers windows that were offered and then passed over.
   const friendLast = [...prior].reverse().find((entry) => entry.from !== message.from);
-  for (const window of passedOver(friendLast?.windows, message.windows)) {
-    await store.addRejectedWindow(message.contextId, windowHash(window));
-  }
+  const passed = passedOver(friendLast?.windows, message.windows).map(windowHash);
 
   const dropReason: DropReason | undefined = message.state === "rejected" ? (message.reason === "no_overlap" ? "no_overlap" : "declined") : undefined;
+  const capped = message.seq >= THREAD_CAP && message.state === "working";
+  let threadState: Thread["state"] = message.state;
+  let threadDropReason: DropReason | undefined = dropReason;
+
   if (message.state === "input-required" && nextPlan.state === "negotiating") {
     nextPlan = {
       ...transitionPlan(nextPlan, "awaiting_humans", at, { note: "Both agents accepted" }),
@@ -106,12 +109,50 @@ export async function commitMessage(store: Store, record: MessageRecord, redacti
   } else if (message.state === "rejected" && nextPlan.state === "negotiating") {
     nextPlan = transitionPlan(nextPlan, "dropped", at, { note: "A decline ended the thread", dropReason });
     event("plan_state", "system", "Plan dropped: the thread ended in a decline", { agent: undefined });
+  } else if (capped && canTransition(nextPlan.state, "dropped")) {
+    // The conversation used all its messages without both agents accepting: it ends here, on the timeline.
+    threadState = "failed";
+    threadDropReason = "cap_reached";
+    nextPlan = transitionPlan(nextPlan, "dropped", at, { note: `No agreement within ${THREAD_CAP} messages`, dropReason: "cap_reached" });
+    event("plan_state", "system", `Plan dropped: no agreement within ${THREAD_CAP} messages (cap reached)`, { agent: undefined });
   }
 
-  await store.putThread({ ...thread, state: message.state, messageCount: Math.max(thread.messageCount, message.seq), dropReason, updatedAt: at });
-  await store.putPlan(nextPlan);
-  for (const card of cards) await store.putCard(card);
-  for (const row of events) await store.appendEvent(row);
+  await Promise.all([
+    store.appendMessage(record),
+    store.putThread({ ...thread, state: threadState, messageCount: Math.max(thread.messageCount, message.seq), dropReason: threadDropReason, updatedAt: at }),
+    store.putPlan(nextPlan),
+    ...cards.map((card) => store.putCard(card)),
+  ]);
+
+  const finish = async () => {
+    await Promise.all([...(redaction ? [store.appendRedaction(redaction)] : []), ...passed.map((hash) => store.addRejectedWindow(message.contextId, hash))]);
+    // Timeline rows go in order, one after another, so the Activity view reads the way it happened.
+    for (const row of events) await store.appendEvent(row);
+  };
+  return { threadState, capped, finish };
+}
+
+// The whole commit, finished before returning: for the in-process delivery path and tests.
+export async function commitMessage(store: Store, record: MessageRecord, redaction: Redaction | null = null): Promise<CommitResult> {
+  const result = await commitMessageCore(store, record, redaction);
+  await result.finish();
+  return result;
+}
+
+async function createPlan(store: Store, message: AgentMessage, at: string): Promise<Plan> {
+  const plan: Plan = {
+    id: newId("plan"),
+    contextId: message.contextId,
+    initiator: message.from,
+    participants: [message.from, message.to],
+    state: "detected",
+    decisions: { aaron: "pending", lisa: "pending" },
+    history: [{ state: "detected", at }],
+    createdAt: at,
+    updatedAt: at,
+  };
+  await store.putPlan(plan);
+  return plan;
 }
 
 // A turn that could not produce a valid message ends the thread as failed, with the reason on screen.
@@ -131,6 +172,6 @@ export async function failThread(store: Store, contextId: string, agent: AgentId
     agent,
     contextId,
     planId: plan?.id,
-    text: `${displayName(agent)}'s turn ended without a message (${detail}); the thread is marked failed`,
+    text: `${displayName(agent)}'s turn ended without a message (${detail}); the thread is marked failed and the plan dropped with reason cap_reached`,
   });
 }

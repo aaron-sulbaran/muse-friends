@@ -157,6 +157,12 @@ describe("turn taking, the cap, and the ledger", () => {
     const sixth = await send("lisa", { type: "counter", reason: "both_free", windows: [TUE] });
     expect(isError(sixth) && sixth.error).toMatch(/must be an accept or a decline/);
     expect(await send("lisa", { type: "accept", reason: "both_free", windows: [TUE] })).toMatchObject({ ok: true, seq: 6, state: "working" });
+
+    // Six messages and still no agreement from both: the thread fails at the cap and the plan is dropped.
+    expect(await store.getThread(contextId)).toMatchObject({ state: "failed", messageCount: 6, dropReason: "cap_reached" });
+    expect(await store.getPlanByContext(contextId)).toMatchObject({ state: "dropped", dropReason: "cap_reached" });
+    expect((await store.listEvents()).at(-1)).toMatchObject({ kind: "plan_state", text: "Plan dropped: no agreement within 6 messages (cap reached)" });
+    expect(await store.listCards()).toHaveLength(0);
   });
 
   it("reaches awaiting_humans when both agents accept the same window, in four messages", async () => {

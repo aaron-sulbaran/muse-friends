@@ -84,7 +84,7 @@ export type Window = z.infer<typeof Window>;
 export const Activity = z.strictObject({
   kind: Category,
   title: z.string().min(1).max(TITLE_MAX),
-  place: z.string().min(1).max(60).optional(),
+  place: z.string().min(1).max(60).optional().describe("The street or area from the reel, not the venue name"),
 });
 export type Activity = z.infer<typeof Activity>;
 
