@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { postSimulatedFriendSwitch } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import { FRIEND_PARAM, runInProgress, wantsSimulatedFriend } from "@/lib/ui/entry";
+import { FRIEND_PARAM, markMichelleSeen, needsMichelleOnLoad, runInProgress, wantsSimulatedFriend, wasMichelleSeen } from "@/lib/ui/entry";
 import { namesFor } from "@/lib/ui/format";
+import { getRoom } from "@/lib/ui/room";
 import { useMediaQuery } from "@/lib/ui/use-media-query";
 import { useReplay } from "@/lib/ui/use-replay";
 import { useSimulatedFriend } from "@/lib/ui/use-simulated-friend";
@@ -25,7 +26,7 @@ import { FitPhone } from "./PhoneFrame";
  * sends a phone to) switches Michelle on once, unless a run is already going in the room.
  */
 export function PhoneRoute({ role }: { role: Role }) {
-  const live = useSnapshot();
+  const live = useSnapshot(role);
   const replay = useReplay();
   const { refresh } = live;
   // A recording stands in for the live snapshot while it plays, and nothing on screen may act on live state.
@@ -70,6 +71,20 @@ export function PhoneRoute({ role }: { role: Role }) {
     if (runInProgress(liveSnapshot.plan) || liveSnapshot.simulatedFriend) return;
     void postSimulatedFriendSwitch(true).then(() => refresh());
   }, [liveSnapshot, refresh]);
+
+  // A fresh phone room with no friend turns Michelle on by itself, once per tab, so the judge lands on the reel.
+  useEffect(() => {
+    if (role !== "a" || !liveSnapshot || startedFriend.current) return;
+    const room = getRoom();
+    if (liveSnapshot.simulatedFriend) {
+      markMichelleSeen(room);
+      return;
+    }
+    if (!needsMichelleOnLoad(liveSnapshot, wasMichelleSeen(room))) return;
+    startedFriend.current = true;
+    markMichelleSeen(room);
+    void postSimulatedFriendSwitch(true).then(() => refresh());
+  }, [liveSnapshot, refresh, role]);
 
   if (!snapshot) return <div className="h-dvh bg-screen" />;
 

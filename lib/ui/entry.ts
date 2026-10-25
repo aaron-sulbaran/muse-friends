@@ -1,4 +1,4 @@
-import type { UiPlan } from "./types";
+import type { UiPlan, UiSnapshot } from "./types";
 
 /*
  * How a judge's phone gets in. Scanning the QR opens the root page, which sends a phone straight to Sprout's side
@@ -30,4 +30,32 @@ export function wantsSimulatedFriend(search: string): boolean {
  */
 export function runInProgress(plan: UiPlan | null): boolean {
   return plan !== null && plan.state !== "dropped" && plan.state !== "followed_up";
+}
+
+/** The tab remembers it has seen Michelle on in a room, so a reload after the Invite sheet turned her off never turns her back on. */
+const michelleSeenKey = (room: string) => `muse-friends:michelle-seen:${room}`;
+
+export function wasMichelleSeen(room: string): boolean {
+  try {
+    return sessionStorage.getItem(michelleSeenKey(room)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markMichelleSeen(room: string): void {
+  try {
+    sessionStorage.setItem(michelleSeenKey(room), "1");
+  } catch {
+    // Storage can be blocked: the worst case is that Michelle is offered once more on a reload.
+  }
+}
+
+/**
+ * A phone room with no plan and no simulated friend, in a tab that has not seen her on, turns Michelle on at first
+ * load, so a judge lands on the reel with Sprout already reading it (D24: Michelle is the default on a phone). A
+ * stopgap for rooms created without her: the proper default is for a new room to start with her on.
+ */
+export function needsMichelleOnLoad(snapshot: Pick<UiSnapshot, "plan" | "simulatedFriend">, seenInThisTab: boolean): boolean {
+  return snapshot.plan === null && !snapshot.simulatedFriend && !seenInThisTab;
 }
