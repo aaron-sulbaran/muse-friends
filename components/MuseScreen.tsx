@@ -179,7 +179,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         // On the stage, Activity already sits between the phones; a phone on its own opens it as a sheet.
         return standalone ? <AgreedLine names={item.names} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
       case "member-card":
-        return <MemberCard planId={item.planId} member={item.member} name={item.name} readOnly={readOnly} onChanged={onChanged} />;
+        return <MemberCard planId={item.planId} member={item.member} name={item.name} simulated={item.simulated} readOnly={readOnly} onChanged={onChanged} />;
       case "outcome-replies":
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":

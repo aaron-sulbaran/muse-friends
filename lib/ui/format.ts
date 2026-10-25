@@ -1,4 +1,4 @@
-import { categoryLabel, simulatedFriend } from "./tokens";
+import { categoryLabel, simulatedFriend, simulatedMember } from "./tokens";
 import type { Category, MemberId, TimeWindow, UiMessage, UiSnapshot } from "./types";
 
 /** Every time the UI shows is Central, matching the event schedule. */
@@ -143,7 +143,7 @@ export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "simulatedFriend">
   const simulated = snapshot.simulatedFriend;
   return {
     muse: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.muse : snapshot.sides.lisa, kai: snapshot.sides.kai },
-    human: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.human : snapshot.sides.lisa, kai: snapshot.sides.kai },
+    human: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.human : snapshot.sides.lisa, kai: simulatedMember.human },
   };
 }
 

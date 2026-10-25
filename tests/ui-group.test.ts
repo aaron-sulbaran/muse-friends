@@ -82,7 +82,7 @@ describe("the snapshot of a plan for three", () => {
     const toPebble = snapshot.messages.filter((message) => message.to === "kai" || message.from === "kai");
     expect(toPebble.length).toBeGreaterThan(0);
     expect(namesFor(snapshot).muse.kai).toBe("Pebble");
-    expect(namesFor(snapshot).human.kai).toBe("Pebble");
+    expect(namesFor(snapshot).human.kai).toBe("Kai");
   });
 
   it("leaves a pair's plan without a group", () => {
@@ -125,25 +125,25 @@ describe("a plan for three on the two phones", () => {
     const snapshot = ui("awaiting_humans");
     const a = viewForRole(snapshot, "a");
     const b = viewForRole(snapshot, "b");
-    expect(texts(a.items).join("\n")).toMatch(/You, Mochi and Pebble all want to try .+, and you're all free/);
-    expect(texts(b.items).join("\n")).toMatch(/Sprout is getting Pebble and you together for .+\. You're all free\./);
-    expect(a.group).toMatchObject({ coordinator: true, others: [{ name: "Mochi" }, { name: "Pebble" }] });
+    expect(texts(a.items).join("\n")).toMatch(/You, Mochi and Kai all want to try .+, and you're all free/);
+    expect(texts(b.items).join("\n")).toMatch(/Sprout is getting Kai and you together for .+\. You're all free\./);
+    expect(a.group).toMatchObject({ coordinator: true, others: [{ name: "Mochi" }, { name: "Kai" }] });
     expect(b.group).toMatchObject({ coordinator: false, coordinatorName: "Sprout" });
   });
 
-  it("gives each human one card, and Pebble's card only to the coordinator's phone", () => {
+  it("gives each human one card, and Kai's card only to the coordinator's phone", () => {
     const snapshot = ui("awaiting_humans");
     expect(kinds(viewForRole(snapshot, "a").items)).toEqual(expect.arrayContaining(["plan-card", "member-card"]));
     expect(kinds(viewForRole(snapshot, "b").items)).toContain("plan-card");
     expect(kinds(viewForRole(snapshot, "b").items)).not.toContain("member-card");
     const card = viewForRole(snapshot, "a").items.find((item) => item.kind === "member-card");
-    expect(card).toMatchObject({ member: "kai", name: "Pebble" });
+    expect(card).toMatchObject({ member: "kai", name: "Kai" });
   });
 
-  it("waits for whoever is still deciding, and drops Pebble's card once they answer", () => {
+  it("waits for whoever is still deciding, and drops Kai's card once they answer", () => {
     const afterSprout = ui("awaiting_humans", { aaron: "accepted" });
     const a = viewForRole(afterSprout, "a");
-    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi and Pebble" });
+    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi and Kai" });
     expect(kinds(a.items)).toContain("member-card");
     expect(kinds(a.items)).not.toContain("plan-card");
 
@@ -175,9 +175,9 @@ describe("a plan for three on the two phones", () => {
 
   it("holds the time with both others once it is confirmed", () => {
     const view = viewForRole(ui("scheduled", { aaron: "accepted", lisa: "accepted", kai: "accepted" }), "a");
-    expect(texts(view.items).join("\n")).toContain("Mochi and Pebble are in");
+    expect(texts(view.items).join("\n")).toContain("Mochi and Kai are in");
     const hold = view.items.find((item) => item.kind === "hold-row");
-    expect(hold).toMatchObject({ title: expect.stringMatching(/ with Mochi and Pebble$/) });
+    expect(hold).toMatchObject({ title: expect.stringMatching(/ with Mochi and Kai$/) });
   });
 
   it("says who passed when a plan for three is dropped", () => {
@@ -186,8 +186,8 @@ describe("a plan for three on the two phones", () => {
     plan.state = "dropped";
     plan.history = [...plan.history, { state: "dropped", at: plan.updatedAt }];
     const snapshot = toUiSnapshot(state, live);
-    expect(texts(viewForRole(snapshot, "a").items)).toContain("Pebble said not now.");
-    expect(texts(viewForRole(snapshot, "b").items)).toContain("Pebble said not now.");
+    expect(texts(viewForRole(snapshot, "a").items)).toContain("Kai said not now.");
+    expect(texts(viewForRole(snapshot, "b").items)).toContain("Kai said not now.");
   });
 
   it("keeps a pair's phones exactly as they were", () => {

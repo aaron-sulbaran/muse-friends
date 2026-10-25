@@ -74,6 +74,11 @@ export function postSimulatedAnswer(planId: string) {
   return post("/api/simulated-friend", { planId });
 }
 
+/** Asks the model that plays Kai (the third person of a plan for three) to answer their card. Safe to repeat: the server answers once. */
+export function postSimulatedMemberAnswer(planId: string) {
+  return post("/api/simulated-member", { planId, member: "kai" });
+}
+
 /**
  * "That time doesn't work for me": mark the plan's window busy for this person, then start a new run so the
  * agents plan around it.

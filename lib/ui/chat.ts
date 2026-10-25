@@ -17,7 +17,7 @@ export type ChatItem =
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
   | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; names: string[]; count: number }
-  | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string }
+  | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string; simulated: boolean }
   | { kind: "payment-card"; id: string; payment: UiPayment; side: "payer" | "payee"; friendName: string; friendMuse: string }
   | { kind: "settle-card"; id: string; planId: string; offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>; friendName: string; friendMuse: string }
   | { kind: "outcome-replies"; id: string; planId: string }
@@ -158,9 +158,10 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
         items.push({ kind: "plan-card", id: "plan-card", plan, role, state: "live" });
         status = { glyph: "waiting-you", text: copy.statusWaitingYou };
       }
-      // Pebble has no phone: the coordinator's phone carries Pebble's card until they answer.
+      // Kai (Pebble's person) has no phone: the coordinator's phone carries Kai's card until they answer, and when one judge plays
+      // alone a model answers it (the card says so).
       const phoneless = groupView?.coordinator ? pendingOthers.find((other) => other.id === "kai") : undefined;
-      if (phoneless) items.push({ kind: "member-card", id: `member-card-${phoneless.id}`, planId: plan.id, member: phoneless.id, name: phoneless.name });
+      if (phoneless) items.push({ kind: "member-card", id: `member-card-${phoneless.id}`, planId: plan.id, member: phoneless.id, name: phoneless.name, simulated: snapshot.simulatedFriend });
       if (agreedCount > 0) items.push(agreedLine);
       break;
     case "confirmed":

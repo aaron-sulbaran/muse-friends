@@ -118,6 +118,8 @@ export const copy = {
   groupDropped: "The Muses couldn't find a time that works for all three this week. I'll keep an eye out.",
   memberCardTitle: (name: string) => `${name} has no phone`,
   memberCardDetail: (name: string) => `${name} is a fictional friend, so you answer for ${name}.`,
+  memberDeciding: (name: string) => `${name} is deciding`,
+  memberPlayedByModel: (name: string) => `${name} is fictional and played by a model. If it stalls, you can answer for ${name}.`,
   memberAccept: (name: string) => `${name} says yes`,
   memberDecline: (name: string) => `${name} says not now`,
   planForThree: "Plan for three",

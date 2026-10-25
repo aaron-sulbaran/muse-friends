@@ -40,6 +40,9 @@ export const phone = {
 /** The simulated friend who stands in for side b when one judge plays alone. */
 export const simulatedFriend = { human: "Michelle", muse: "Michelle's Muse" } as const;
 
+/** The third person of a plan for three, fictional in every room: Kai, whose Muse is Pebble. A model plays Kai when one judge plays alone. */
+export const simulatedMember = { human: "Kai", muse: "Pebble" } as const;
+
 export const categoryLabel: Record<Category, string> = {
   food: "food",
   events: "events",

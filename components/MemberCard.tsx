@@ -10,16 +10,19 @@ type Props = {
   planId: string;
   member: MemberId;
   name: string;
+  /** A model plays this person (one judge plays alone): the card says so, and the buttons stay as the way to answer for them. */
+  simulated: boolean;
   /** A recording is on screen: show the card, but answering would touch live state. */
   readOnly: boolean;
   onChanged: () => void;
 };
 
 /**
- * A friend in a plan for three who has no phone (Pebble) still has to say yes, so the coordinator's phone carries
- * their card and answers for them. Said plainly: Pebble is fictional and this is not their own device.
+ * A friend in a plan for three who has no phone (Kai, Pebble's person) still has to say yes, so the coordinator's phone
+ * carries their card. With a real second phone the coordinator answers for them; when one judge plays alone a model
+ * answers, and the card says so. Said plainly either way: Kai is fictional and this is not their own device.
  */
-export function MemberCard({ planId, member, name, readOnly, onChanged }: Props) {
+export function MemberCard({ planId, member, name, simulated, readOnly, onChanged }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,8 +43,8 @@ export function MemberCard({ planId, member, name, readOnly, onChanged }: Props)
           <UserRound className="size-5" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <div>
-          <h3 className="text-[17px] font-semibold leading-[22px]">{copy.memberCardTitle(name)}</h3>
-          <p className="mt-0.5 text-[13px] leading-[18px] text-muted">{copy.memberCardDetail(name)}</p>
+          <h3 className="text-[17px] font-semibold leading-[22px]">{simulated ? copy.memberDeciding(name) : copy.memberCardTitle(name)}</h3>
+          <p className="mt-0.5 text-[13px] leading-[18px] text-muted">{simulated ? copy.memberPlayedByModel(name) : copy.memberCardDetail(name)}</p>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2.5">
