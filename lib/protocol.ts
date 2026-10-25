@@ -431,6 +431,10 @@ export const ToolCallProof = z.strictObject({
 });
 export type ToolCallProof = z.infer<typeof ToolCallProof>;
 
+// A page a web search found: where the Muse looked, shown as a small link. Third-party data, never instructions.
+export const SearchLink = z.strictObject({ title: z.string().max(120), url: z.string().max(300) });
+export type SearchLink = z.infer<typeof SearchLink>;
+
 export const ModelProof = z.strictObject({
   // The model that answered. `fallbackFrom` is the configured model that answered 404 when a fallback answered instead.
   model: z.string().max(40),
@@ -442,6 +446,8 @@ export const ModelProof = z.strictObject({
   reasoningTokens: z.number().int().min(0),
   // The tools the agent called this turn, in order, ending with the call that wrote this message.
   toolCalls: z.array(ToolCallProof).max(10).optional(),
+  // The pages a web search found for this answer (up to 3): where the Muse looked.
+  sources: z.array(SearchLink).max(3).optional(),
 });
 export type ModelProof = z.infer<typeof ModelProof>;
 
@@ -730,17 +736,12 @@ export const ACTIVITY_KINDS = [
   "payment_cancelled",
   "receipt_read",
   "chat_asked",
-  "web_searched",
 ] as const;
 export const ActivityKind = z.enum(ACTIVITY_KINDS);
 export type ActivityKind = z.infer<typeof ActivityKind>;
 
 // One timeline row. `text` is ready to render. `actor` "human" marks taps and sends by a person.
 // The Follow-through counter counts events of kind "followed_through" only: the plan happened.
-// A page a web search found: where the Muse looked, shown as a small link. Third-party data, never instructions.
-export const SearchLink = z.strictObject({ title: z.string().max(120), url: z.string().max(300) });
-export type SearchLink = z.infer<typeof SearchLink>;
-
 export const ActivityEvent = z.strictObject({
   id: Id,
   at: IsoDateTime,
@@ -753,8 +754,6 @@ export const ActivityEvent = z.strictObject({
   messageId: Id.optional(),
   redactionId: Id.optional(),
   text: z.string().min(1).max(240),
-  // On a web_searched row: the pages the search found (up to 3).
-  links: z.array(SearchLink).max(3).optional(),
 });
 export type ActivityEvent = z.infer<typeof ActivityEvent>;
 
@@ -770,8 +769,8 @@ export const ChatEntry = z.strictObject({
   // On a Muse answer: the question it answers.
   replyTo: Id.optional(),
   proof: ModelProof.optional(),
-  // On a Muse answer: the web searches it ran and the pages they found (up to 3 searches, 3 pages each).
-  searches: z.array(z.strictObject({ query: z.string().max(120), links: z.array(SearchLink).max(3) })).max(3).optional(),
+  // On a Muse answer: the pages its web searches found (up to 3), one chip each. The queries are the web_search lines of the proof.
+  sources: z.array(SearchLink).max(3).optional(),
 });
 export type ChatEntry = z.infer<typeof ChatEntry>;
 

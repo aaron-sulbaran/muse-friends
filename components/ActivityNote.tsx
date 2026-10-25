@@ -1,7 +1,6 @@
-import { CalendarX, Film, MessageCircle, Receipt, Search, Shield, ShieldCheck, TriangleAlert, Undo2, UserMinus, Users, Wallet, type LucideIcon } from "lucide-react";
+import { CalendarX, Film, MessageCircle, Receipt, Shield, ShieldCheck, TriangleAlert, Undo2, UserMinus, Users, Wallet, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
-import { SourceChips } from "./SourceChips";
 import { ToolsCalled } from "./ToolsCalled";
 
 const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: boolean }> = {
@@ -22,7 +21,6 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
   receipt_read: { icon: Receipt, title: "Read a receipt" },
   // Lane B shows the tools under this row (UiNote.toolCalls) and pairs it with the answer in UiSnapshot.chat.
   chat_asked: { icon: MessageCircle, title: "You asked your Muse" },
-  web_searched: { icon: Search, title: "Searched the web" },
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */
@@ -41,7 +39,6 @@ export function ActivityNote({ note }: { note: UiNote }) {
           </span>
           <span className="mt-0.5 block text-[13px] leading-[18px] text-muted">{note.text}</span>
           {note.toolCalls && note.toolCalls.length > 0 ? <ToolsCalled calls={note.toolCalls} /> : null}
-          {note.links && note.links.length > 0 ? <SourceChips sources={note.links} /> : null}
         </span>
       </div>
     </li>

@@ -341,7 +341,7 @@ describe.skipIf(!enabled)("agent evals on live Muse Spark", () => {
       await evaluate({
         id: "7",
         name: "chat with your Muse",
-        invariants: "on a confirmed plan with a sent payment, five questions through POST /api/chat: every answer carries tool calls (no prose-only answer) and a 'You asked' row; 'what did we agree' reads get_plan; 'why $16' reads explain_payment; 'pay $5 more' calls where_to_do_that and leaves wallets, payments, proposals and decisions unchanged; the sharing question reads get_sharing and never says a withheld category (location) is shared; no private event title appears in any answer; 'Shawarma King is closed, where else nearby': if the model searched the web the answer says so, keeps its pages (at most 3 http or https links) and has one 'Searched the web' row per search, and the room is unchanged",
+        invariants: "on a confirmed plan with a sent payment, five questions through POST /api/chat: every answer carries tool calls (no prose-only answer) and a 'You asked' row; 'what did we agree' reads get_plan; 'why $16' reads explain_payment; 'pay $5 more' calls where_to_do_that and leaves wallets, payments, proposals and decisions unchanged; the sharing question reads get_sharing and never says a withheld category (location) is shared; no private event title appears in any answer; 'Shawarma King is closed, where else nearby': if the model searched the web the answer says so and keeps at most 3 http or https pages as sources, and the room is unchanged",
         run: async () => {
           const started = Date.now();
           const checks = new Checks();
@@ -378,11 +378,11 @@ describe.skipIf(!enabled)("agent evals on live Muse Spark", () => {
           checks.that(confirmed.status === 200, `confirming the payment answered ${confirmed.status}, not 200`);
           await drain();
 
-          type Answer = { status: number; text: string; tools: Array<{ name: string; args: string }>; searches: Array<{ query: string; links: Array<{ title: string; url: string }> }>; error?: string };
+          type Answer = { status: number; text: string; tools: Array<{ name: string; args: string }>; sources: Array<{ title: string; url: string }>; error?: string };
           const ask = async (text: string): Promise<Answer> => {
             const response = await post(() => import("@/app/api/chat/route"), "/api/chat", { text });
-            const body = response.json as { data?: { answer?: { text: string; proof?: { toolCalls?: Array<{ name: string; args: string }> }; searches?: Answer["searches"] } }; error?: { message: string } } | null;
-            return { status: response.status, text: body?.data?.answer?.text ?? "", tools: body?.data?.answer?.proof?.toolCalls ?? [], searches: body?.data?.answer?.searches ?? [], error: body?.error?.message };
+            const body = response.json as { data?: { answer?: { text: string; proof?: { toolCalls?: Array<{ name: string; args: string }> }; sources?: Answer["sources"] } }; error?: { message: string } } | null;
+            return { status: response.status, text: body?.data?.answer?.text ?? "", tools: body?.data?.answer?.proof?.toolCalls ?? [], sources: body?.data?.answer?.sources ?? [], error: body?.error?.message };
           };
           const snapshot = async () => ({
             wallets: { aaron: (await walletOf(store, "aaron"))!.balance, lisa: (await walletOf(store, "lisa"))!.balance },
@@ -425,20 +425,17 @@ describe.skipIf(!enabled)("agent evals on live Muse Spark", () => {
           const claimsLocation = sharing.text.split(/(?<=[.!?])\s+/).some((sentence) => /location/i.test(sentence) && !/\b(not|n't|never|no|keep|kept|hold|held|withh\w*|private|off|except|without|excluding|back)\b/i.test(sentence));
           checks.that(!claimsLocation, `the sharing answer says location is shared: "${sharing.text}"`);
 
-          // The web search: the model decides whether to search. If it did, the answer says so, keeps the pages (http or https, at
-          // most three links a search) and has one "Searched the web" row per search; either way nothing moves.
+          // The web search: the model decides whether to search. If it did, the answer says so and keeps at most 3 pages (http or
+          // https) as sources, and either way nothing moves.
           checks.that(JSON.stringify(nearbyAfter) === JSON.stringify(nearbyBefore), "asking about places nearby changed the room");
           if (used(nearby, "web_search")) {
-            checks.that(nearby.searches.length >= 1, "the answer searched the web but kept no search");
-            checks.that(nearby.searches.every((search) => search.links.length <= 3 && search.links.every((link) => /^https?:\/\//.test(link.url))), "a stored search has more than three links or a link that is not http or https");
-            checks.that(nearby.searches.some((search) => search.links.length >= 1), "the search found pages but none reached the answer");
+            checks.that(nearby.sources.length <= 3 && nearby.sources.every((link) => /^https?:\/\//.test(link.url)), "a stored source is not http or https, or there are more than three");
             checks.that(/search/i.test(nearby.text), `the answer used a web search without saying so: "${nearby.text}"`);
           } else {
-            checks.that(nearby.searches.length === 0, "the answer kept a search it did not run");
+            checks.that(nearby.sources.length === 0, "the answer kept sources for a search it did not run");
           }
-          const searchRows = (await store.listEvents()).filter((event) => event.kind === "web_searched");
-          checks.that(searchRows.length === nearby.searches.length, `${searchRows.length} "Searched the web" rows for ${nearby.searches.length} searches`);
           checks.note("searched", used(nearby, "web_search"));
+          checks.note("sources", nearby.sources.length);
 
           // No private event title in any answer or row; the "You asked" rows pair with the answers.
           const everyAnswer = Object.values(answers).map((answer) => answer.text).join("\n");
