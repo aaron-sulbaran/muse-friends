@@ -4,12 +4,13 @@ import { BatteryFull, Shield, Signal, Users, Wallet, Wifi } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
+import { ARRIVAL_AT_MS, ARRIVAL_LINGER_MS, withReelArrival, type ArrivalStage } from "@/lib/ui/arrival";
 import { copy } from "@/lib/ui/copy";
 import { discInitials, formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
 import { postChat, postDecision, postHandoff, postPrivacy, postReplan, postSignal, postSimulatedFriendSwitch, type Result } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import { runInProgress } from "@/lib/ui/entry";
-import { friendsIndicator, pickerMode, ROOM_FRIEND, roomFriendTier, shareFriend, startRequest } from "@/lib/ui/onboarding-flow";
+import { friendsIndicator, pickerMode, ROOM_FRIEND, roomFriendTier, shareFriend, startRequest, startsRunAtDone } from "@/lib/ui/onboarding-flow";
 import { getRoom } from "@/lib/ui/room";
 import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
 import { useFriendReplied } from "@/lib/ui/use-friend-reply";
@@ -134,9 +135,22 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const onboardingOn = onboarding && role === "a" && !readOnly;
   const onboardingActive = onboardingOn && onboardingState.step !== "done";
   const friendsOff = onboardingOn && onboardingState.step === "done" && !onboardingState.friendsOn;
-  const chatItems: ChatItem[] = onboardingOn
+  // After Done, Michelle's reel arrives as a new message and the run starts a beat later (see lib/ui/arrival.ts). Null is the
+  // static chat: a reload, the stage, or a phone that never ran onboarding in this tab.
+  const [arrival, setArrival] = useState<ArrivalStage | null>(null);
+  const arrivalTimers = useRef<number[]>([]);
+  const livePlan = useRef(snapshot.plan);
+  useEffect(() => {
+    livePlan.current = snapshot.plan;
+  }, [snapshot.plan]);
+  useEffect(() => {
+    const timers = arrivalTimers.current;
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, []);
+  const shownItems: ChatItem[] = onboardingOn
     ? [...onboardingItems(onboardingState, view.friendHumanName), ...(onboardingActive ? [] : friendsOff ? view.items.filter((item) => item.kind !== "start-card" && item.kind !== "contact-entry") : view.items)]
     : view.items;
+  const chatItems = withReelArrival(shownItems, arrival, snapshot.plan !== null);
   const composerOn = role === "a" && !readOnly && !onboardingActive;
   const goalContext: GoalContext = {
     friend: view.group ? listOf(view.group.others.map((other) => other.name)) : view.friendHumanName,
@@ -202,9 +216,9 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   }
 
   /**
-   * Continue on the who step: the judge's tier for the room's friend is written for their own Muse and the plan starts
-   * through the simulated friend. Michelle comes on first (switching her on resets the room, so it never follows the
-   * tier), and a run already going is left alone. Nobody who can take part above Off is the opt-out: nothing starts.
+   * Continue on the who step: the judge's tier for the room's friend is written for their own Muse, with Michelle on
+   * first (switching her on resets the room, so it never follows the tier). Nothing runs yet: the run starts at Done,
+   * with the reel's arrival. Nobody who can take part above Off is the opt-out, and nothing will start.
    */
   async function continueFromWho() {
     const request = startRequest(onboardingState);
@@ -212,9 +226,34 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     if (!request) return;
     setOnboardingError(null);
     if (!snapshot.simulatedFriend && !reportOnboarding(await postSimulatedFriendSwitch(true))) return;
-    if (!reportOnboarding(await postPrivacy({ tier: request.tier }, "a"))) return;
-    if (runInProgress(snapshot.plan)) return;
-    reportOnboarding(await postSignal());
+    reportOnboarding(await postPrivacy({ tier: request.tier }, "a"));
+  }
+
+  /**
+   * Done on the share step: the reel arrives (the card, then the judge's own "we should go!") and the run starts a beat
+   * after, so the Muses' exchange happens in view. A run already going is left alone, and a failed start puts the
+   * start card back with the error under it. Every timer is cleared if the screen goes away.
+   */
+  function finishOnboarding() {
+    const starts = startsRunAtDone(onboardingState);
+    dispatchOnboarding({ type: "done" });
+    if (!starts) return;
+    const timers = arrivalTimers.current;
+    timers.forEach((timer) => window.clearTimeout(timer));
+    timers.length = 0;
+    setArrival(0);
+    const at = (stage: Exclude<ArrivalStage, 0>, run: () => void) => window.setTimeout(run, ARRIVAL_AT_MS[stage]);
+    timers.push(
+      at(1, () => setArrival(1)),
+      at(2, () => setArrival(2)),
+      at(3, async () => {
+        if (runInProgress(livePlan.current)) return setArrival(null);
+        setArrival(3);
+        const started = reportOnboarding(await postSignal());
+        if (!started) setArrival(null);
+        else timers.push(window.setTimeout(() => setArrival(null), ARRIVAL_LINGER_MS));
+      }),
+    );
   }
 
   function renderItem(item: ChatItem) {
@@ -473,7 +512,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             onChanged();
           }}
           onBack={() => dispatchOnboarding({ type: "back" })}
-          onDone={() => dispatchOnboarding({ type: "done" })}
+          onDone={finishOnboarding}
         />
       ) : null}
       {contactsOpen && role === "a" && !onboardingActive ? (

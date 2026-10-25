@@ -35,12 +35,17 @@ export function roomFriendTier(state: OnboardingState): ShareTier {
 }
 
 /**
- * What Continue starts: the tier to write for the judge's own Muse, then the plan through the simulated friend. Null
- * when the room's friend is at Off, because nothing can start without her.
+ * What Continue writes: the tier for the judge's own Muse, with the simulated friend switched on. Null when the room's
+ * friend is at Off, because nothing can start without her. The run itself starts at Done, with the reel's arrival.
  */
 export function startRequest(state: OnboardingState): { tier: Exclude<ShareTier, "off"> } | null {
   const tier = roomFriendTier(state);
   return tier === "off" ? null : { tier };
+}
+
+/** Done on the share step starts the reel's arrival and then the run, only for a room whose friend can take part. */
+export function startsRunAtDone(state: OnboardingState): boolean {
+  return state.friendsOn && roomFriendTier(state) !== "off";
 }
 
 /** The persistent indicator on the avatar sheet's shield: shown while Friends is on, never after an opt-out. */
