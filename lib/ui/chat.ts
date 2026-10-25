@@ -30,6 +30,10 @@ export type ChatItem =
   | { kind: "trip-itinerary"; id: string; trip: UiTrip }
   | { kind: "trip-open"; id: string; trip: UiTrip }
   | { kind: "trip-pot"; id: string; planId: string; trip: UiTrip; answerable: MemberId[]; viewer: MemberId; state: PlanState }
+  // After the trip is confirmed, Sprout books it with each person's yes: the progress, the flight seat, the hotel.
+  | { kind: "trip-booking"; id: string; trip: UiTrip; viewer: MemberId }
+  | { kind: "trip-flights"; id: string; planId: string; trip: UiTrip; answerable: MemberId[]; viewer: MemberId }
+  | { kind: "trip-hotel"; id: string; planId: string; trip: UiTrip; answerable: MemberId[]; viewer: MemberId }
   | { kind: "payment-card"; id: string; payment: UiPayment; side: "payer" | "payee"; friendName: string; friendMuse: string }
   | { kind: "settle-card"; id: string; planId: string; offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>; friendName: string; friendMuse: string; museName: string }
   | { kind: "outcome-replies"; id: string; planId: string }

@@ -55,6 +55,10 @@ export function toUiBooking(trip: TripState, ledger: Record<string, number>): Ui
             })) as Partial<Record<MemberId, string>>,
             approvals: MEMBERS.flatMap((member) => (hotel.approvals[member] ? [{ member, answer: hotel.approvals[member]!, by: hotel.by?.[member] ?? null }] : [])),
             refusals: hotel.refusals.map((entry) => ({ stayId: entry.stayId, stayLabel: catalogItem(entry.stayId)?.label ?? entry.stayId, member: entry.member, reason: entry.reason })),
+            offered: hotel.offered.flatMap((id) => {
+              const stay = catalogItem(id);
+              return stay ? [{ id: stay.id, label: stay.label, cost: stay.cost, why: id === ranking[0]?.id ? `The outline's stay: ${reasonFor(stay, ranking[0], trip)}.` : `${reasonFor(stay, ranking[0], trip)}.` }] : [];
+            }),
             lower: ranking
               .filter((stay) => !hotel.offered.includes(stay.id))
               .map((stay) => ({ id: stay.id, label: stay.label, cost: stay.cost, reason: reasonFor(stay, ranking[0], trip) })),

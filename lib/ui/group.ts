@@ -40,6 +40,8 @@ export type UiBooking = {
     misfits: Partial<Record<MemberId, string>>;
     approvals: Array<{ member: MemberId; answer: "yes" | "no"; by: "person" | "person_model" | "seed" | null }>;
     refusals: Array<{ stayId: string; stayLabel: string; member: MemberId; reason: string }>;
+    /** Every stay offered so far, in order, with why Sprout put each one on the table. */
+    offered: Array<{ id: string; label: string; cost: number; why: string }>;
     /** The stays not offered yet, in Sprout's order, and why each ranks lower. */
     lower: Array<{ id: string; label: string; cost: number; reason: string }>;
     booked: Array<{ member: MemberId; amount: number; by: "person" | "person_model" | "seed" }>;
@@ -83,6 +85,23 @@ export const tripCopy = {
   asking: (muses: string) => `${muses} is asking`,
   composing: "Sprout is putting the plan together",
   allInStatus: "all three are in",
+  // Booking the trip with each person's yes (Lisa's plan): nothing that costs money until the person it is for says yes.
+  bookingIntro: "Everyone's in. I'll book it one piece at a time, and nothing that costs money until the person it is for says yes. The dates cost nothing, so I'm holding those first.",
+  flightsFound: (fits: number, total: number, cap: number) => `I found ${total} flights. ${fits === 1 ? "One fits" : `${fits} fit`} the ${money(cap)} cap. Each of you books your own seat.`,
+  seatMine: "Booking my seat.",
+  seatBooked: (name: string, label: string, amount: number, fromPot: number, fromWallet: number) =>
+    `${name} booked a seat on ${label}, ${money(amount)}: ${money(fromPot)} from the pot${fromWallet > 0 ? ` and ${money(fromWallet)} from their trip wallet` : ""}.`,
+  hotelIntro: "Now the hotel. It books only when all three of you say yes, and it comes out of each of your trip wallets.",
+  hotelFits: (name: string) => `Step-free works for ${name}.`,
+  hotelNo: "Not this one.",
+  hotelYes: "Looks good.",
+  hotelNext: (label: string, why: string) => `Next best: ${label}. ${why}`,
+  hotelBooked: (label: string, amount: number) => `All three said yes, so I booked ${label}: ${money(amount)} each.`,
+  hotelNone: "No stay is left that all three of you can do, so I am not booking a hotel, and I won't guess.",
+  daysHeld: (days: string) => `The days are free holds, pay on the day: ${days}.`,
+  bookedWrap: (hotel: boolean) => `Booked: your seat, ${hotel ? "the hotel, " : ""}the dates and two days. Simulated booking, seeded prices; nothing real was bought.`,
+  bookingStatus: "Sprout is booking the trip",
+  bookedStatus: "trip booked",
 } as const;
 
 /** "July 10 to 17, 2027" from the trip's horizon, read in Central like every time on screen. */
@@ -255,6 +274,48 @@ export function tripThread(snapshot: UiSnapshot, role: Role): TripThread {
     }
   }
   if (plan.state === "confirmed" && trip.pot) say(muse("aaron"), tripCopy.allIn(trip.pot.target));
+  // Round 4: Sprout books it with each person's yes, one decision on screen at a time.
+  const booking = trip.booking;
+  if (plan.state === "confirmed" && booking) {
+    say(muse("aaron"), tripCopy.bookingIntro);
+    card({ kind: "trip-booking", id: "booking", trip, viewer });
+    const seatMembers = trip.people.map((entry) => entry.member);
+    const seatOf = new Map(booking.seats.map((seat) => [seat.member, seat]));
+    if (booking.datesHeld && !booking.hotel) {
+      const fits = booking.flights.filter((flight) => flight.withinCap).length;
+      say(muse("aaron"), tripCopy.flightsFound(fits, booking.flights.length, trip.cap?.amount ?? 0));
+      card({ kind: "trip-flights", id: "flights", planId: plan.id, trip, answerable: mine, viewer });
+    }
+    for (const member of seatMembers) {
+      const seat = seatOf.get(member);
+      if (!seat) continue;
+      say(person(member), tripCopy.seatMine);
+      if (member !== "aaron") say(muse(member), tripCopy.seatBooked(personOf(trip, member).name, seat.label, seat.amount, seat.fromPot, seat.fromWallet));
+    }
+    const hotel = booking.hotel;
+    if (hotel) {
+      say(muse("aaron"), tripCopy.hotelIntro);
+      // Who said no to which stay, in order, with Sprout offering the next best after each.
+      hotel.refusals.forEach((refusal, index) => {
+        if (refusal.member === "kai") say(muse("kai"), refusal.reason);
+        else say(person(refusal.member), tripCopy.hotelNo);
+        const next = hotel.offered[index + 1];
+        if (next) say(muse("aaron"), tripCopy.hotelNext(next.label, next.why));
+      });
+      if (hotel.state === "proposed") {
+        const kaiMisfit = hotel.misfits.kai;
+        if (trip.people.some((entry) => entry.member === "kai")) say(muse("kai"), kaiMisfit ? `That does not work for Kai: ${kaiMisfit}.` : tripCopy.hotelFits(personOf(trip, "kai").name));
+        for (const approval of hotel.approvals) if (approval.answer === "yes") say(person(approval.member), tripCopy.hotelYes);
+        card({ kind: "trip-hotel", id: "hotel", planId: plan.id, trip, answerable: mine, viewer });
+      } else if (hotel.state === "booked") {
+        say(muse("aaron"), tripCopy.hotelBooked(hotel.option.label, hotel.option.cost));
+      } else {
+        say(muse("aaron"), tripCopy.hotelNone);
+      }
+    }
+    if (booking.daysHeld) say(muse("aaron"), tripCopy.daysHeld(booking.days.map((day) => day.label).join("; ")));
+    if (booking.done) say(muse("aaron"), tripCopy.bookedWrap(hotel?.state === "booked"));
+  }
   if (plan.state === "dropped") say(muse("aaron"), trip.pot ? tripCopy.dropped : (trip.unknowns.at(-1) ?? tripCopy.dropped));
 
   return { items, ...statusOf(snapshot, role, trip, mine, answered) };
@@ -279,6 +340,16 @@ function statusOf(snapshot: UiSnapshot, role: Role, trip: UiTrip, mine: MemberId
     if (pending.some((deposit) => mine.includes(deposit.member))) return { status: { glyph: "waiting-you", text: "waiting for you" }, mood: "idle" };
     const names = pending.filter((deposit) => deposit.member !== viewer).map((deposit) => personOf(trip, deposit.member).name);
     return { status: names.length > 0 ? { glyph: "waiting-friend", text: tripCopy.waitingFor(listOf(names)) } : null, mood: "idle" };
+  }
+  if (plan.state === "confirmed" && trip.booking) {
+    const booking = trip.booking;
+    if (booking.done) return { status: { glyph: "done", text: tripCopy.bookedStatus }, mood: "idle" };
+    const ownSeatOpen = booking.datesHeld && !booking.hotel && mine.some((member) => !booking.seats.some((seat) => seat.member === member));
+    const ownStayOpen = booking.hotel?.state === "proposed" && mine.some((member) => !booking.hotel!.approvals.some((approval) => approval.member === member));
+    if (ownSeatOpen || ownStayOpen) return { status: { glyph: "waiting-you", text: "waiting for you" }, mood: "idle" };
+    const waiting = booking.datesHeld && !booking.hotel ? trip.people.filter((entry) => !booking.seats.some((seat) => seat.member === entry.member) && entry.member !== viewer) : [];
+    if (waiting.length > 0) return { status: { glyph: "waiting-friend", text: tripCopy.waitingFor(listOf(waiting.map((entry) => entry.name))) }, mood: "idle" };
+    return { status: { glyph: "thinking", text: tripCopy.bookingStatus }, mood: "thinking" };
   }
   if (plan.state === "confirmed") return { status: { glyph: "done", text: tripCopy.allInStatus }, mood: "idle" };
   return { status: null, mood: "idle" };
