@@ -3,7 +3,7 @@ import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
 import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
-import { describeNote, describePayment } from "./payments";
+import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
 import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
@@ -331,6 +331,7 @@ function toUiPayment(view: PaymentView, plan: Pick<UiPlan, "activityTitle" | "wi
     amount: view.amount,
     reason: view.reason,
     description: describePayment(view.reason, plan),
+    ...(plan ? { planLabel: eventLabel(plan) } : {}),
     ...(view.note ? { note: view.note } : {}),
     status: view.status,
     source: view.source,

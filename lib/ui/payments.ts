@@ -56,10 +56,15 @@ export function settleOffer(
 
 const dayFormat = new Intl.DateTimeFormat("en-US", { timeZone: displayTimeZone, weekday: "short", month: "short", day: "numeric" });
 
-/** "Tue Oct 27": the Central day a plan's window starts, written the way the event slides write dates. */
-export function formatPlanDay(window: TimeWindow): string {
-  const part = Object.fromEntries(dayFormat.formatToParts(new Date(window.start)).map((entry) => [entry.type, entry.value]));
+/** "Tue Oct 27": the Central day an instant falls on, written the way the event slides write dates. */
+export function formatDay(iso: string): string {
+  const part = Object.fromEntries(dayFormat.formatToParts(new Date(iso)).map((entry) => [entry.type, entry.value]));
   return `${part.weekday} ${part.month} ${part.day}`;
+}
+
+/** The Central day a plan's window starts. */
+export function formatPlanDay(window: TimeWindow): string {
+  return formatDay(window.start);
 }
 
 /** "Shawarma Point, Tue Oct 27": what the plan is and when, from the snapshot's own plan; the day is left out when there is no window. */
