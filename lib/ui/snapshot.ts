@@ -1,5 +1,5 @@
 import type { RunBudget } from "@/lib/agent/caps";
-import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { AGENT_IDS, CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
 import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiSnapshot } from "./types";
@@ -16,6 +16,45 @@ export type UiOverlay = {
   /** The run caps for the JSON drawer; omit for a recording, which spends nothing. */
   budget?: RunBudget | null;
 };
+
+/*
+ * The people this build can draw. A store can hold rows written by a newer build (a group plan's third friend,
+ * left in a shared room by a branch run); drawing them would give a row with no name and no avatar, so
+ * everything that names a stranger is left out instead.
+ */
+const KNOWN_AGENTS: ReadonlySet<string> = new Set(AGENT_IDS);
+
+function isKnownAgent(id: string | undefined): boolean {
+  return id !== undefined && KNOWN_AGENTS.has(id);
+}
+
+/** The snapshot without any message, thread, redaction or timeline event that names an agent this build does not know. */
+export function withoutUnknownAgents(state: StateSnapshot): StateSnapshot {
+  const unknownContexts = new Set<string>();
+  for (const thread of state.threads) {
+    if (![thread.initiator, ...thread.participants].every(isKnownAgent)) unknownContexts.add(thread.contextId);
+  }
+  for (const { message } of state.messages) {
+    if (!isKnownAgent(message.from) || !isKnownAgent(message.to)) unknownContexts.add(message.contextId);
+  }
+  const unknownRedaction = (redaction: StateSnapshot["redactions"][number]) => !isKnownAgent(redaction.from) || !isKnownAgent(redaction.to);
+  const staysEvent = (event: StateSnapshot["events"][number]) =>
+    (event.agent === undefined || isKnownAgent(event.agent)) && !(event.contextId !== undefined && unknownContexts.has(event.contextId));
+  if (
+    unknownContexts.size === 0 &&
+    !state.redactions.some(unknownRedaction) &&
+    state.events.every(staysEvent)
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    threads: state.threads.filter((thread) => !unknownContexts.has(thread.contextId)),
+    messages: state.messages.filter(({ message }) => !unknownContexts.has(message.contextId)),
+    redactions: state.redactions.filter((redaction) => !unknownRedaction(redaction) && !unknownContexts.has(redaction.contextId)),
+    events: state.events.filter(staysEvent),
+  };
+}
 
 /** Taps and sends that move a plan along. Not the outcome, so never counted. */
 const humanTapKinds = new Set(["human_decision", "handoff_opened"]);
@@ -182,7 +221,8 @@ function toFollowThrough(events: StateSnapshot["events"], rename: (text: string)
   return events.filter((event) => event.kind === "followed_through").map((event) => ({ id: event.id, label: rename(event.text), at: event.at }));
 }
 
-export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapshot {
+export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnapshot {
+  const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
   const messages = toUiMessages(state);
   return {
