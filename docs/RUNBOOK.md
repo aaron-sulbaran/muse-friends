@@ -363,6 +363,16 @@ done
 
 Three `404` lines for `muse-spark-1.3` and `200` for `muse-spark-1.2` means switch; three `200` lines (about 1 to 2 seconds each) mean the flap is over and nothing changes. `MODEL_ID` is read by `lib/model.ts` on every call, so it is a Vercel environment variable (Settings, Environment Variables, Production, then Redeploy), not a code change; remove it again when `1.3` answers. Checked Sun Oct 25 about 3:00am: `1.3` answered 200 at 0.95, 1.94 and 1.76 seconds and `1.2` at 0.59 seconds.
 
+## Onboarding on a phone (D26)
+
+A judge who opens `/a?room=<id>` lands in Sprout's chat and is greeted, asked for a first name, and offered Friends before the plan arrives. It is a small state machine in the browser: the step, the first name and the tier choices live in memory and in `sessionStorage` under `muse-friends:onboarding:<room>`. They are never sent to the server, the hub or the logs. Choices that matter do reach the server in the existing way: the tier writes side a's sharing (`POST /api/controls` with `side: "a"`), and Continue starts the plan through the simulated friend, the same start the card in the chat uses.
+
+- **Skip it:** add `?onboarding=off` to the phone's address. The presenter's stage (the laptop view) never shows it, and tests and rehearsals can bypass it the same way.
+- **Resume:** a reload on the same room returns to the same step with the same name. A new room (a new QR scan, a new `?room=`) starts over. A private window keeps the flow working but forgets it on reload.
+- **Reset one phone:** open the room in a new tab or window with a new `?room=` value, or clear the key in the browser's Application, Session Storage panel and reload. Resetting the room itself (the demo controls) does not touch it.
+- **The opt-out is real:** "Not now" on either screen, or Continue with the room's friend at Off, starts no run. The chat still shows the reel, and "Turn on Friends" brings the choice back. Check it by watching Activity on the stage stay empty.
+- **The check (about 5 minutes, a stopwatch):** open `/a?room=check1` at 390 by 844. Fast path: type a name, Turn on Friends, Sync, Continue, Done; expect under 25 seconds to the opening moment and the whole moment on one screen. Then `/a?room=check2` and Not now: the reel still arrives and "That needs Friends." shows. Then `/a?room=check3`, Pick friends, leave everyone at Off, Continue: the opt-out card and no run.
+
 ## Installing the app on a phone
 
 The site is installable: `app/manifest.ts` (name Muse Friends, standalone, start page `/`, the phone screen color for window and splash), 192 and 512 pixel icons in `public/icons/` rendered from `app/icon.svg`, and `appleWebApp` metadata so iOS titles the Home Screen icon "Muse Friends". There is no service worker, no offline mode, and no push; installing only adds an icon and a window without browser chrome.
