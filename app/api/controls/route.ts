@@ -20,13 +20,17 @@ const privacySchema = z
     message: "Send a tier, or a category with on",
   });
 
-const bodySchema = z.union([privacySchema, z.object({ type: z.literal("reset") })]);
+const bodySchema = z.union([
+  privacySchema,
+  z.object({ type: z.literal("reset") }),
+  z.object({ type: z.literal("simulated_friend"), on: z.boolean() }),
+]);
 
 function refuse(message: string, status: number) {
   return NextResponse.json({ data: null, error: { message } }, { status });
 }
 
-/** The presenter's controls: a sharing switch on side b, and Reset for the one demo room. */
+/** The controls: a sharing switch on side b, Reset for the one demo room, and the simulated friend for a judge playing alone. */
 export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return refuse("Expected a privacy change or a reset", 400);
@@ -36,6 +40,11 @@ export async function POST(request: Request) {
   if (body.type === "reset") {
     const { resetCount } = await resetDemo(store);
     return NextResponse.json({ data: { reset: true, resetCount }, error: null });
+  }
+  if (body.type === "simulated_friend") {
+    // Switching who plays side b starts the room over, so the judge begins from the empty stage.
+    const { resetCount } = await resetDemo(store, { simulatedFriend: body.on });
+    return NextResponse.json({ data: { simulatedFriend: body.on, resetCount }, error: null });
   }
   if (body.tier === "off") return refuse("Turning sharing off ends the plan, so it stays on in this demo", 409);
   if (body.category === "availability" && body.on === false) {

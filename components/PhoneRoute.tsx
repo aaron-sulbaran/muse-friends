@@ -2,6 +2,7 @@
 
 import { namesFor } from "@/lib/ui/format";
 import { useMediaQuery } from "@/lib/ui/use-media-query";
+import { useSimulatedFriend } from "@/lib/ui/use-simulated-friend";
 import { useSnapshot } from "@/lib/ui/use-snapshot";
 import type { Role } from "@/lib/ui/types";
 import { MuseScreen } from "./MuseScreen";
@@ -15,6 +16,7 @@ import { ReplayBadge } from "./ReplayBadge";
 export function PhoneRoute({ role }: { role: Role }) {
   const { snapshot, connected, refresh } = useSnapshot();
   const framed = useMediaQuery("(min-width: 600px)");
+  useSimulatedFriend(snapshot, refresh);
 
   if (!snapshot) return <div className="h-dvh bg-screen" />;
 

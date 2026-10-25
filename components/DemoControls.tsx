@@ -7,13 +7,14 @@ import type { UiSnapshot } from "@/lib/ui/types";
 type Props = {
   snapshot: UiSnapshot | null;
   onChanged: () => void;
+  replay: { active: boolean; start: () => Promise<void>; stop: () => void; error: string | null };
 };
 
 /**
  * Presenter-only controls: start the run, move the clock, reset the room. Each
  * posts to the real route and the timeline fills from the store as the agents work.
  */
-export function DemoControls({ snapshot, onChanged }: Props) {
+export function DemoControls({ snapshot, onChanged, replay }: Props) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -28,13 +29,17 @@ export function DemoControls({ snapshot, onChanged }: Props) {
     onChanged();
   }
 
+  const toggleReplay = async () => {
+    if (replay.active) replay.stop();
+    else await replay.start();
+  };
   const loadReel = () => run(postSignal);
   const jump = () => run(postClockAdvance);
   const reset = () => run(postReset);
 
-  const actions = useRef({ loadReel, jump, reset });
+  const actions = useRef({ loadReel, jump, reset, toggleReplay });
   useEffect(() => {
-    actions.current = { loadReel, jump, reset };
+    actions.current = { loadReel, jump, reset, toggleReplay };
   });
 
   useEffect(() => {
@@ -47,15 +52,18 @@ export function DemoControls({ snapshot, onChanged }: Props) {
       if (key === "s") void actions.current.loadReel();
       else if (key === "f") void actions.current.jump();
       else if (key === "0") void actions.current.reset();
+      else if (key === "r") void actions.current.toggleReplay();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const replaying = replay.active;
   const items: ReadonlyArray<{ label: string; key: string; run: () => void; disabled?: boolean }> = [
-    { label: "Load the shawarma reel", key: "S", run: loadReel, disabled: planIsAlive },
-    { label: jumpLabel, key: "F", run: jump, disabled: !canJump },
-    { label: "Reset", key: "0", run: reset },
+    { label: "Load the shawarma reel", key: "S", run: loadReel, disabled: planIsAlive || replaying },
+    { label: jumpLabel, key: "F", run: jump, disabled: !canJump || replaying },
+    { label: replaying ? "Stop the replay" : "Replay a recorded run", key: "R", run: toggleReplay },
+    { label: "Reset", key: "0", run: reset, disabled: replaying },
   ];
 
   return (
@@ -83,9 +91,9 @@ export function DemoControls({ snapshot, onChanged }: Props) {
               <kbd className="rounded-tile bg-group px-1.5 py-0.5 font-sans text-[12px] text-muted">{item.key}</kbd>
             </button>
           ))}
-          {message ? (
+          {message ?? replay.error ? (
             <p role="alert" className="px-3 pb-2 pt-1 text-[13px] leading-[18px] text-withheld">
-              {message}
+              {message ?? replay.error}
             </p>
           ) : null}
         </div>

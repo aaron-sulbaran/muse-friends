@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PLAN_STATES, type PlanState, type StateSnapshot } from "@/lib/protocol";
-import { recordedSnapshot } from "@/lib/seed/fixtures";
+import { recordedSnapshot, seedSnapshot } from "@/lib/seed/fixtures";
 import { snapshotAtPlanState } from "@/lib/seed/states";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
@@ -28,6 +28,27 @@ describe("every plan state renders on both phones", () => {
       }
     });
   }
+});
+
+describe("how a judge starts", () => {
+  const empty = () => toUiSnapshot(seedSnapshot(), live);
+
+  it("side b can send the reel, and side a can bring in the simulated friend", () => {
+    expect(viewForRole(empty(), "b").items.find((item) => item.kind === "start-card")).toMatchObject({ variant: "send-reel", friendName: "Sprout" });
+    expect(viewForRole(empty(), "a").items.find((item) => item.kind === "start-card")).toMatchObject({ variant: "simulated-friend" });
+  });
+
+  it("with a simulated friend, side b has nothing to tap: she sends the reel herself", () => {
+    const state = seedSnapshot();
+    state.room = { ...state.room, simulatedFriend: true };
+    const snapshot = toUiSnapshot(state, live);
+    expect(kinds(viewForRole(snapshot, "b").items)).not.toContain("start-card");
+    expect(viewForRole(snapshot, "b").museName).toBe("Michelle's Muse");
+  });
+
+  it("once a plan exists, nobody is offered a start", () => {
+    for (const role of ["a", "b"] as Role[]) expect(kinds(viewForRole(at("detected"), role).items)).not.toContain("start-card");
+  });
 });
 
 describe("the journey, phone by phone", () => {

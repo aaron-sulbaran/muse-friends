@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { copy } from "@/lib/ui/copy";
 import { formatClockLabel, namesFor } from "@/lib/ui/format";
+import { useReplay } from "@/lib/ui/use-replay";
+import { useSimulatedFriend } from "@/lib/ui/use-simulated-friend";
 import { useSnapshot } from "@/lib/ui/use-snapshot";
 import type { UiMessage } from "@/lib/ui/types";
 import { ActivityPanel } from "./ActivityPanel";
@@ -14,7 +16,13 @@ import { TopBar } from "./TopBar";
 
 /** The laptop stage: Phone A, the Activity panel, Phone B, with the presenter controls underneath. */
 export function Stage() {
-  const { snapshot, connected, refresh } = useSnapshot();
+  const live = useSnapshot();
+  const replay = useReplay();
+  // A recording stands in for the live snapshot while it plays, and nothing on screen may act on live state.
+  const snapshot = replay.active ? replay.snapshot : live.snapshot;
+  const { refresh } = live;
+  const connected = replay.active ? true : live.connected;
+  useSimulatedFriend(live.snapshot, refresh, !replay.active);
   const [openMessage, setOpenMessage] = useState<UiMessage | null>(null);
   const names = snapshot ? namesFor(snapshot) : null;
 
@@ -25,7 +33,7 @@ export function Stage() {
         <div className="h-[640px] min-h-0 min-[900px]:order-1 min-[900px]:h-full">
           {snapshot ? (
             <FitPhone label={`${names?.muse.aaron ?? "Sprout"}'s side`}>
-              <MuseScreen snapshot={snapshot} role="a" framed onChanged={refresh} />
+              <MuseScreen snapshot={snapshot} role="a" framed onChanged={refresh} readOnly={replay.active} />
             </FitPhone>
           ) : null}
         </div>
@@ -35,13 +43,13 @@ export function Stage() {
         <div className="h-[640px] min-h-0 min-[600px]:order-2 min-[900px]:order-3 min-[900px]:h-full">
           {snapshot ? (
             <FitPhone label={snapshot.simulatedFriend ? `${names?.muse.lisa}, a simulated friend` : `${names?.muse.lisa}'s side`}>
-              <MuseScreen snapshot={snapshot} role="b" framed onChanged={refresh} />
+              <MuseScreen snapshot={snapshot} role="b" framed onChanged={refresh} readOnly={replay.active} />
             </FitPhone>
           ) : null}
         </div>
       </main>
       <footer className="flex h-12 shrink-0 items-center justify-between px-6 min-[900px]:px-12">
-        <DemoControls snapshot={snapshot} onChanged={refresh} />
+        <DemoControls snapshot={snapshot} onChanged={refresh} replay={replay} />
         {snapshot?.clockSimulated ? (
           <p className="text-[13px] leading-[18px] text-muted">
             {copy.simulatedClock}: {formatClockLabel(snapshot.now)}

@@ -14,7 +14,8 @@ export type ChatItem =
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
   | { kind: "collapsed"; id: string; text: string }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
-  | { kind: "hold-row"; id: string; title: string; detail: string; planId: string };
+  | { kind: "hold-row"; id: string; title: string; detail: string; planId: string }
+  | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend"; friendName: string };
 
 export type PhoneView = {
   role: Role;
@@ -52,6 +53,13 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   }
 
   if (!plan) {
+    // Before any plan: side b can send the reel; a judge on side a can bring in the simulated friend
+    // (and tap again if the first start did not take).
+    if (role === "b" && !snapshot.simulatedFriend) {
+      items.push({ kind: "start-card", id: "start-reel", variant: "send-reel", friendName: theirs.muse });
+    } else if (role === "a") {
+      items.push({ kind: "start-card", id: "start-simulated", variant: "simulated-friend", friendName: theirs.muse });
+    }
     return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status: null, items };
   }
 
