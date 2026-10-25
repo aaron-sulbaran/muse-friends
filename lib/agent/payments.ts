@@ -11,6 +11,7 @@ import {
 import { enforceSharePolicy, paymentsCheck } from "@/lib/policy";
 import type { ToolMeta } from "@/lib/model";
 import { displayName, getPersona } from "@/lib/seed/fixtures";
+import { summarizeToolCall } from "@/lib/tool-summary";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
 import { commitMessage } from "./inbound";
@@ -51,9 +52,19 @@ export const DeclineArgs = z.strictObject({ paymentId: z.string().min(1).max(64)
 
 const nowMs = (ctx: PaymentContext) => ctx.wallNow?.() ?? Date.now();
 
-function proofFrom(meta?: ToolMeta): MessageRecord["proof"] {
+// The proof on a payment message, with the tools the agent called on the way here and the call that wrote it
+// (one line each, no balances: see lib/tool-summary.ts).
+function proofFrom(meta: ToolMeta | undefined, current: { name: string; args: unknown; output: unknown }): MessageRecord["proof"] {
   return meta
-    ? { model: meta.model, responseId: meta.responseId, latencyMs: meta.call.ms, inputTokens: meta.call.inputTokens, outputTokens: meta.call.outputTokens, reasoningTokens: meta.call.reasoningTokens }
+    ? {
+        model: meta.model,
+        responseId: meta.responseId,
+        latencyMs: meta.call.ms,
+        inputTokens: meta.call.inputTokens,
+        outputTokens: meta.call.outputTokens,
+        reasoningTokens: meta.call.reasoningTokens,
+        toolCalls: [...meta.toolCalls, summarizeToolCall({ ...current, ok: true })].slice(-10),
+      }
     : undefined;
 }
 
@@ -180,7 +191,7 @@ export async function sendMoney(ctx: PaymentContext, rawArgs: unknown, meta?: To
     payment,
     at,
   };
-  const delivered = await send(ctx, message, proofFrom(meta));
+  const delivered = await send(ctx, message, proofFrom(meta, { name: "send_money", args, output: { amount: args.amount } }));
   if (!delivered.ok) {
     // The money left the account but the message did not arrive: put it back, and say so.
     const refund = await client.deposit(wallet.data.accountId, { amount: args.amount, description: `Refund of Muse ${paymentId}: not delivered` });
@@ -250,7 +261,7 @@ export async function acceptPayment(ctx: PaymentContext, rawArgs: unknown, meta?
     },
     at: toCentralIso(nowMs(ctx)),
   };
-  const delivered = await send(ctx, message, proofFrom(meta));
+  const delivered = await send(ctx, message, proofFrom(meta, { name: "accept_payment", args: parsed.data, output: { amount: view.amount } }));
   if (!delivered.ok) {
     await failureRow(ctx, `Payment received but the receipt could not be delivered: ${delivered.error}`, { planId: view.planId, contextId: view.contextId });
     return fail(`The money arrived in your wallet, but telling your friend failed: ${delivered.error}.`);
@@ -302,7 +313,7 @@ export async function declinePayment(ctx: PaymentContext, rawArgs: unknown, meta
     },
     at: toCentralIso(nowMs(ctx)),
   };
-  const delivered = await send(ctx, message, proofFrom(meta));
+  const delivered = await send(ctx, message, proofFrom(meta, { name: "decline_payment", args: parsed.data, output: { amount: view.amount } }));
   if (!delivered.ok) {
     await failureRow(ctx, `Payment refunded but the answer could not be delivered: ${delivered.error}`, { planId: view.planId, contextId: view.contextId });
     return fail(`The money was sent back, but telling your friend failed: ${delivered.error}.`);

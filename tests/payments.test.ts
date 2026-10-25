@@ -238,6 +238,18 @@ describe("the agents decide: nothing about the amount is scripted", () => {
     expect(turn.status).toBe("completed");
     expect(await balances()).toEqual({ aaron: 111, lisa: 89 });
     expect(toUiSnapshot(await store.snapshot(), { mode: "live" }).payments).toMatchObject([{ from: "aaron", to: "lisa", amount: 9, reason: "your half of the shawarma", status: "received", balanceBefore: 80, balanceAfter: 89 }]);
+
+    // Each payment message carries the tools the agent called on the way to it, one line each, no balance.
+    const [payment, receipt] = await store.listMessages();
+    expect(payment.proof?.toolCalls).toEqual([
+      { name: "get_wallet", args: "", result: "balance read" },
+      { name: "send_money", args: "$9 to lisa", result: "withdrew $9, payment sent" },
+    ]);
+    expect(receipt.proof?.toolCalls).toEqual([
+      { name: "get_wallet", args: "", result: "balance read" },
+      { name: "accept_payment", args: payment.message.payment!.paymentId, result: "deposited $9" },
+    ]);
+    expect(JSON.stringify([payment.proof, receipt.proof])).not.toMatch(/\b(120|111|89|80)\b/);
   });
 
   it("covers a friend's ticket just as well: a different amount, a different reason, the same code", async () => {
