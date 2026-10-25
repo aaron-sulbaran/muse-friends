@@ -28,6 +28,30 @@ vercel logs <deployment-url>    # runtime logs of one deployment
 vercel inspect <deployment-url> # build details
 ```
 
+## Deploy quota
+
+The Hobby plan allows **100 deployments per day**, and every push counts: each push to any branch builds a preview, each merge to `main` builds production, and a CLI deploy counts too. On Sun Oct 25 at 12:36am Central the team hit the cap and Vercel started refusing builds.
+
+**Today's numbers** (counted at 12:48am Central with the command below): this project had 91 deployments in the previous 24 hours, the first at Sat 8:17pm and the last at Sun 12:36am. 32 were production (31 from `main`), 59 were previews (88 ready, 3 canceled). By 12:54am it was 92 and 33 production. The cap is counted per team, so other projects on the "Aaron's Personal Projects" team add to it; I did not count those.
+
+**What it looks like:**
+
+- The `Vercel` check on a pull request fails with "Deployment rate limited, retry in 24 hours."
+- `vercel deploy` from the CLI answered `Resource is limited - try again in 24 hours (more than 100, code: "api-deployments-free-per-day")`, so a CLI deploy is not a way around the cap (I did not try `vercel --prod`).
+- Production keeps serving the last deployment that succeeded; a refused build leaves it where it was.
+- **The cap did not behave like a hard daily wall.** Previews from three of the platform lane's branches were refused between about 12:38am and 12:50am, yet a batched merge to `main` (commit `3db196d`) deployed to production and went Ready at 12:53am, and the orchestrator saw previews build again around 12:56am. We do not know whether production is exempt or the limit is a rolling counter that freed a slot. Plan as if any build can be refused, and check production's commit after every merge: `curl -s https://www.musefriends.tech/api/health` shows the deployed `sha`.
+
+**The fix, if builds keep being refused, is the Pro step (about 2 minutes, works from a phone):** open https://vercel.com/aaron-sulbaran-projects?upgradeToPro=build-rate-limit, or in Vercel switch to the team "Aaron's Personal Projects", then **Settings**, **Billing**, **Upgrade to Pro** (take the free trial if it is offered). Pro raises the cap to 6000 deployments a day and also allows a cron every 15 minutes instead of once a day. I have not seen the upgrade take effect, so check it: push anything or **Redeploy** the latest production deployment, then `vercel ls muse-friends` should show a new Ready deployment, the pull request check should turn green, and `./scripts/smoke-production.sh` should pass. The first deploy after the cap lifts builds the latest `main`, so everything merged while it was capped goes live in that one.
+
+**While it is capped:** batch merges into as few as possible (one local gate of lint, typecheck, test, and build over several pull requests, then one merge window); do not push small commits to open branches; leave the project settings alone (turning preview deployments off would also take the lanes' checks away once the cap is raised). If the cap cannot be raised before judging, the fallback from the build plan is one laptop behind a tunnel with the JSON store.
+
+**Count it yourself** (read-only; a result near 100 means the team is at the cap, and other projects add to it):
+
+```bash
+vercel api "/v6/deployments?app=muse-friends&since=$(( ($(date +%s) - 86400) * 1000 ))&limit=100" --scope aaron-sulbaran-projects > /tmp/deploys.json
+python3 -c 'import json; d=json.load(open("/tmp/deploys.json"))["deployments"]; print(len(d), "deployments,", sum(1 for x in d if x.get("target")=="production"), "production")'
+```
+
 ## Regenerating the QR code
 
 Run this whenever the production address changes, then commit `public/qr.svg`. It last changed on Sat Oct 24 evening, when `musefriends.tech` went live; before that it encoded the vercel.app address.
@@ -120,7 +144,7 @@ The site is installable: `app/manifest.ts` (name Muse Friends, standalone, start
 - **iPhone:** Safari, Share, **Add to Home Screen**. (`beforeinstallprompt` does not exist on iOS, so there is no in-page install button.)
 - **Android:** Chrome menu, **Install app**.
 
-Verified on the local server (Sat Oct 24, about 12:40am): the manifest is served as `application/manifest+json`; Chrome fetches it, raises no manifest issues, and decodes both icons at their declared sizes; no service worker is registered; `/` passes the smoke script. **Not verified: a real iPhone.** Before saying "installable" anywhere (README, Devpost, the pitch), do the 5 minute check: add it from Safari, open the Home Screen icon, run one negotiation, tap **Open WhatsApp** and come back with the app switcher. If the standalone window traps navigation or WhatsApp does not open from it, say nothing about installing and keep the Copy button prominent.
+Verified on the local server (Sun Oct 25, about 12:40am): the manifest is served as `application/manifest+json`; Chrome fetches it, raises no manifest issues, and decodes both icons at their declared sizes; no service worker is registered; `/` passes the smoke script. Verified on production too (commit `3db196d`, Sun Oct 25 about 12:55am), on `www.musefriends.tech`, `musefriends.tech`, and `muse-friends.vercel.app`: the manifest is served as `application/manifest+json`, both icons come back as PNGs of exactly 5969 and 22106 bytes, the page head has the manifest link and the apple web-app title, and `./scripts/smoke-production.sh` passes 7 of 7. **Not verified: a real iPhone.** Before saying "installable" anywhere (README, Devpost, the pitch), do the 5 minute check: add it from Safari, open the Home Screen icon, run one negotiation, tap **Open WhatsApp** and come back with the app switcher. If the standalone window traps navigation or WhatsApp does not open from it, say nothing about installing and keep the Copy button prominent.
 
 ## If production shows old styles after a deploy
 
