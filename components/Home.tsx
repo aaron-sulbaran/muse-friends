@@ -2,8 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { useMediaQueryKnown } from "@/lib/ui/use-media-query";
-import type { Role } from "@/lib/ui/types";
-import { PhoneChooser } from "./PhoneChooser";
+import { PhoneEntry } from "./PhoneEntry";
 import { Stage } from "./Stage";
 
 const DESIGN_W = 1440;
@@ -53,13 +52,13 @@ function ScaledStage() {
 /**
  * The root page shows the laptop stage (both phones and the Activity panel side by side) on every laptop and
  * desktop window: fluid from 1024px up, scaled down to fit below that. Only a real phone (coarse pointer and a
- * narrow screen) gets the one-screen chooser that leads to a single phone. Nothing renders until the browser
+ * narrow screen) is sent straight to its own Muse, with no side to choose. Nothing renders until the browser
  * has said which, so neither side flashes the wrong layout.
  */
-export function Home({ sides }: { sides: Record<Role, string> }) {
+export function Home() {
   const phone = useMediaQueryKnown("(pointer: coarse) and (max-width: 767px)");
   const wide = useMediaQueryKnown("(min-width: 1024px)");
   if (phone === null || wide === null) return <div className="min-h-dvh bg-linear-to-b from-surface to-stage-end" />;
-  if (phone) return <PhoneChooser sides={sides} />;
+  if (phone) return <PhoneEntry />;
   return wide ? <Stage /> : <ScaledStage />;
 }

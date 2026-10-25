@@ -64,6 +64,9 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     // (and tap again if the first start did not take).
     if (role === "b" && !snapshot.simulatedFriend) {
       items.push({ kind: "start-card", id: "start-reel", variant: "send-reel", friendName: theirs.muse });
+    } else if (role === "a" && snapshot.simulatedFriend) {
+      // Michelle is already the friend (the default on a phone): one tap has Sprout check with her.
+      items.push({ kind: "start-card", id: "start-reel", variant: "send-reel", friendName: theirs.human });
     } else if (role === "a") {
       items.push({ kind: "start-card", id: "start-simulated", variant: "simulated-friend", friendName: theirs.muse });
     }

@@ -1,11 +1,10 @@
 "use client";
 
-import { Activity, ArrowLeftRight, BatteryFull, Shield, Signal, Wifi } from "lucide-react";
-import Link from "next/link";
+import { BatteryFull, Shield, Signal, Wifi } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
-import { otherRole, sideHref } from "@/lib/ui/entry";
 import { formatStatusBarTime, namesFor } from "@/lib/ui/format";
 import { postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
@@ -24,6 +23,9 @@ import { ReplayBadge } from "./ReplayBadge";
 import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
 import { TabBar, type Tab } from "./TabBar";
+
+// The Invite sheet carries a QR encoder, so it loads only when someone opens it.
+const InviteSheet = dynamic(() => import("./InviteSheet").then((module) => module.InviteSheet), { ssr: false });
 
 type Props = {
   snapshot: UiSnapshot;
@@ -66,37 +68,6 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
   return sameSpeaker ? "mt-1.5" : "mt-3.5";
 }
 
-type StandaloneBarProps = { snapshot: UiSnapshot; role: Role; onOpenActivity: () => void };
-
-/** Switch to the other side, see the recording badge, open Activity: what the stage gives a judge for free and a lone phone has to carry. */
-function StandaloneBar({ snapshot, role, onOpenActivity }: StandaloneBarProps) {
-  const other = otherRole(role);
-  const otherName = namesFor(snapshot).human[other === "a" ? "aaron" : "lisa"];
-  return (
-    <div className="flex h-10 shrink-0 items-center justify-between gap-2 px-4">
-      <Link
-        href={sideHref(other)}
-        aria-label={copy.switchSideLabel(otherName)}
-        className="inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full bg-group px-3 text-[13px] font-semibold transition-colors hover:bg-bubble-muse"
-      >
-        <ArrowLeftRight className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-        <span className="truncate">{copy.switchSide(otherName)}</span>
-      </Link>
-      <div className="flex shrink-0 items-center gap-2">
-        {snapshot.mode === "replay" ? <ReplayBadge mode="replay" compact /> : null}
-        <button
-          type="button"
-          onClick={onOpenActivity}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-group px-3 text-[13px] font-semibold transition-colors hover:bg-bubble-muse"
-        >
-          <Activity className="size-4" strokeWidth={1.75} aria-hidden="true" />
-          {copy.activityOpen}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
 export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, standalone }: Props) {
   const view = viewForRole(snapshot, role);
@@ -104,6 +75,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const [replanError, setReplanError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("chat");
   const [goalOpen, setGoalOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -210,7 +182,6 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   return (
     <div className="relative flex h-full flex-col bg-screen">
       {framed ? <StatusBar time={formatStatusBarTime(snapshot.now)} /> : <div className="h-[env(safe-area-inset-top)] shrink-0" />}
-      {standalone ? <StandaloneBar snapshot={snapshot} role={role} onOpenActivity={() => setActivityOpen(true)} /> : null}
       {simulated && role === "b" ? (
         <p className="shrink-0 bg-group px-4 py-2 text-center text-[13px] font-semibold">{copy.simulatedFriendBanner}</p>
       ) : null}
@@ -226,10 +197,34 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
               >
                 <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
               </button>
+            ) : standalone && !readOnly ? (
+              // Muse opens Activity from the avatar; Sprout's phone has no settings sheet to compete with.
+              <button
+                type="button"
+                onClick={() => setActivityOpen(true)}
+                aria-label={copy.activityOpen}
+                className="rounded-full transition-transform hover:scale-105"
+              >
+                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
+              </button>
             ) : (
               <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
             )}
             <StatusPill name={view.museName} status={view.status} />
+            {standalone && snapshot.mode === "replay" ? (
+              <div className="absolute left-4 top-2">
+                <ReplayBadge mode="replay" compact />
+              </div>
+            ) : null}
+            {role === "a" && standalone && !readOnly ? (
+              <button
+                type="button"
+                onClick={() => setInviteOpen(true)}
+                className="absolute right-4 top-2 inline-flex h-8 items-center rounded-full bg-group px-3 text-[13px] font-semibold transition-colors hover:bg-bubble-muse"
+              >
+                {copy.invitePill}
+              </button>
+            ) : null}
             {role === "b" && !readOnly ? (
               <button
                 type="button"
@@ -294,12 +289,23 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
           </div>
         </div>
       ) : null}
+      {inviteOpen && role === "a" ? (
+        <InviteSheet plan={snapshot.plan} simulatedFriend={simulated} onChanged={onChanged} onClose={() => setInviteOpen(false)} />
+      ) : null}
       {sheetOpen && role === "b" ? (
         <AvatarSheet
           simulated={simulated}
           museName={view.museName}
           friendMuseName={view.friendMuseName}
           sharing={snapshot.sharing.lisa}
+          onOpenActivity={
+            standalone
+              ? () => {
+                  setSheetOpen(false);
+                  setActivityOpen(true);
+                }
+              : undefined
+          }
           onChanged={onChanged}
           onClose={() => setSheetOpen(false)}
         />

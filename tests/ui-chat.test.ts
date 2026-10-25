@@ -43,6 +43,14 @@ describe("how a judge starts", () => {
     expect(viewForRole(empty(), "a").items.find((item) => item.kind === "start-card")).toMatchObject({ variant: "simulated-friend" });
   });
 
+  it("with Michelle already on, Sprout's one tap is checking with her; with her off it is bringing her in", () => {
+    const state = seedSnapshot();
+    state.room = { ...state.room, simulatedFriend: true };
+    const withMichelle = toUiSnapshot(state, live);
+    expect(viewForRole(withMichelle, "a").items.find((item) => item.kind === "start-card")).toMatchObject({ variant: "send-reel", friendName: "Michelle" });
+    expect(viewForRole(empty(), "a").items.find((item) => item.kind === "start-card")).toMatchObject({ variant: "simulated-friend" });
+  });
+
   it("with a simulated friend, side b has nothing to tap: she sends the reel herself", () => {
     const state = seedSnapshot();
     state.room = { ...state.room, simulatedFriend: true };
