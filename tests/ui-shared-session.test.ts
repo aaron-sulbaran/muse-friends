@@ -72,7 +72,7 @@ describe("the free-time card", () => {
   });
 
   it("has no emoji and no em dash", () => {
-    expect(card()).not.toMatch(/\p{Extended_Pictographic}|—|–/u);
+    expect(card()).not.toMatch(/\p{Extended_Pictographic}|\u2014|\u2013/u);
   });
 });
 
