@@ -23,7 +23,10 @@ function makeWindow(startMs: number, endMs: number): Window {
   return { start: toCentralIso(startMs), end: toCentralIso(endMs) };
 }
 
-function localMidnight(ms: number): number {
+// Free blocks only ever sit inside waking hours: 9am to 10pm, split at midnight.
+export const WAKING_HOURS = { start: 9, end: 22 } as const;
+
+export function localMidnight(ms: number): number {
   const shifted = ms + CENTRAL_OFFSET_MINUTES * MINUTE_MS;
   return Math.floor(shifted / DAY_MS) * DAY_MS - CENTRAL_OFFSET_MINUTES * MINUTE_MS;
 }
@@ -36,7 +39,7 @@ export type FreeBlockOptions = {
 
 // Free blocks inside waking hours, clipped to `range`, at least `minMinutes` long.
 export function freeBlocks(calendar: CalendarEvent[], range: Window, options: FreeBlockOptions = {}): Window[] {
-  const { dayStartHour = 9, dayEndHour = 22, minMinutes = 60 } = options;
+  const { dayStartHour = WAKING_HOURS.start, dayEndHour = WAKING_HOURS.end, minMinutes = 60 } = options;
   const rangeStart = toMs(range.start);
   const rangeEnd = toMs(range.end);
   const busy = calendar

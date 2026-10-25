@@ -7,6 +7,7 @@ import { validateTripIncoming } from "./trip-rules";
 import { getPersona, displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
+import { scannedAs } from "./availability";
 import { ownFreeBlocks } from "./calendar";
 import { claimCoordinatorTurn, planForContext } from "./group";
 import { commitMessageCore } from "./inbound";
@@ -69,12 +70,13 @@ export async function receiveMessage(
   // One message into a thread at a time, so a retry that races its original cannot commit twice.
   return withLock(`thread:${contextId || "none"}`, async () => {
     // Every read the checks need goes out together: the 202 waits one store round trip for them, not six.
-    const [thread, priorRecords, senderFreeBlocks, senderPolicy, rejectedWindowHashes] = await Promise.all([
+    const [thread, priorRecords, senderFreeBlocks, senderPolicy, rejectedWindowHashes, senderPersona] = await Promise.all([
       contextId ? store.getThread(contextId) : Promise.resolve(null),
       contextId ? store.listMessages(contextId) : Promise.resolve([]),
       ownFreeBlocks(store, input.sender),
       store.getPolicy(input.sender, input.recipient),
       contextId ? store.listRejectedWindows(contextId) : Promise.resolve([]),
+      scannedAs(store, getPersona(input.sender)),
     ]);
     const prior = priorRecords.map((record) => record.message);
 
@@ -90,7 +92,7 @@ export async function receiveMessage(
       prior,
       senderFreeBlocks,
       senderPolicy,
-      senderPersona: getPersona(input.sender),
+      senderPersona,
       rejectedWindowHashes,
     });
 
