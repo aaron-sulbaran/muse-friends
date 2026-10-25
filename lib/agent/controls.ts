@@ -13,6 +13,7 @@ import { CALENDAR_RANGE, displayName, getPersona, seedSnapshot } from "@/lib/see
 import type { Store } from "@/lib/store";
 import type { LifecycleResult } from "./lifecycle";
 import { newId } from "./ids";
+import { PLAN_LOCK, withLock } from "./lock";
 import { describeWindow, toCentralIso, toMs } from "./windows";
 
 // What the demo controls do to the engine. Lane B's routes call these; they hold the rules.
@@ -25,10 +26,18 @@ const nowIso = (options: Options) => toCentralIso(options.wallNow?.() ?? Date.no
 // setting: anything the setting now forbids is removed from the stored message, the stamp turns to
 // "withheld", and a redaction names the category (never the value). Turning something back on only
 // affects messages sent from then on.
-export async function setSharePolicy(
+export function setSharePolicy(
   store: Store,
   input: { owner: AgentId; friend: AgentId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
   options: Options = {},
+): Promise<LifecycleResult<{ policy: SharePolicy; replayed: Redaction[] }>> {
+  return withLock(PLAN_LOCK, () => setSharePolicyLocked(store, input, options));
+}
+
+async function setSharePolicyLocked(
+  store: Store,
+  input: { owner: AgentId; friend: AgentId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
+  options: Options,
 ): Promise<LifecycleResult<{ policy: SharePolicy; replayed: Redaction[] }>> {
   if (input.owner === input.friend) return { ok: false, status: 422, error: "a person cannot share with themselves" };
   const at = nowIso(options);
