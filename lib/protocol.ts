@@ -12,6 +12,12 @@ export const AGENT_IDS = ["aaron", "lisa"] as const;
 export const AgentId = z.enum(AGENT_IDS);
 export type AgentId = z.infer<typeof AgentId>;
 
+// The two phones. Role "a" is the first judge's side, "b" the second (or the simulated friend).
+// AgentId stays internal; people see the persona's displayName.
+export const ROLES = ["a", "b"] as const;
+export const Role = z.enum(ROLES);
+export type Role = z.infer<typeof Role>;
+
 export const CATEGORIES = ["food", "events", "availability", "location", "interests"] as const;
 export const Category = z.enum(CATEGORIES);
 export type Category = z.infer<typeof Category>;
@@ -323,7 +329,8 @@ export type CalendarEvent = z.infer<typeof CalendarEvent>;
 
 export const Persona = z.strictObject({
   id: AgentId,
-  name: z.string().min(1).max(40),
+  role: Role,
+  displayName: z.string().min(1).max(40),
   calendar: z.array(CalendarEvent),
   interests: z.partialRecord(SharedCategory, z.array(z.string().min(1).max(40))),
   provenance: z.strictObject({
@@ -392,15 +399,18 @@ export const ACTIVITY_KINDS = [
   "human_decision",
   "handoff_opened",
   "hold_issued",
+  "followed_through",
   "clock_advanced",
   "policy_changed",
+  "busy_added",
+  "room_reset",
   "turn_failed",
 ] as const;
 export const ActivityKind = z.enum(ACTIVITY_KINDS);
 export type ActivityKind = z.infer<typeof ActivityKind>;
 
-// One timeline row. `text` is ready to render. `actor` "human" marks the events the
-// Follow-through counter counts.
+// One timeline row. `text` is ready to render. `actor` "human" marks taps and sends by a person.
+// The Follow-through counter counts events of kind "followed_through" only: the plan happened.
 export const ActivityEvent = z.strictObject({
   id: Id,
   at: IsoDateTime,
@@ -419,8 +429,24 @@ export type ActivityEvent = z.infer<typeof ActivityEvent>;
 export const DemoClock = z.strictObject({ now: IsoDateTime });
 export type DemoClock = z.infer<typeof DemoClock>;
 
+// The single demo room. `simulatedFriend` means side b is played by a model (Michelle) because
+// only one judge is present; the UI must label it.
+export const Room = z.strictObject({
+  id: z.literal("demo"),
+  simulatedFriend: z.boolean(),
+  resetCount: z.number().int().min(0),
+  updatedAt: IsoDateTime,
+});
+export type Room = z.infer<typeof Room>;
+
+// A busy block a judge adds from the controls; get_my_calendar merges these into the persona's calendar.
+export const BusyBlock = z.strictObject({ agent: AgentId, event: CalendarEvent });
+export type BusyBlock = z.infer<typeof BusyBlock>;
+
 export const StateSnapshot = z.strictObject({
+  room: Room,
   clock: DemoClock,
+  busy: z.array(BusyBlock),
   signals: z.array(Signal),
   threads: z.array(Thread),
   messages: z.array(MessageRecord),

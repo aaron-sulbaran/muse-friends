@@ -11,15 +11,25 @@ import {
   type RecordedRun,
   type Recommendation,
   type Redaction,
+  type Room,
   type SharePolicy,
   type Signal,
   type StateSnapshot,
   type Thread,
   type Window,
 } from "@/lib/protocol";
-import { DEMO_START } from "./personas";
+import { DEMO_START, displayName } from "./personas";
 
-export { CALENDAR_RANGE, DEMO_START, getPersona, PERSONAS, PRIVATE_STRINGS } from "./personas";
+export {
+  AGENT_TO_ROLE,
+  CALENDAR_RANGE,
+  DEMO_START,
+  ROLE_TO_AGENT,
+  displayName,
+  getPersona,
+  PERSONAS,
+  PRIVATE_STRINGS,
+} from "./personas";
 
 // Everything here is fictional demo data, labeled as seeded. The recorded shawarma thread is a
 // scripted fixture so Lane B can render the whole timeline before any live agent exists; a real
@@ -42,7 +52,13 @@ const allOn: SharePolicy["categories"] = {
   interests: true,
 };
 
-// Aaron and Lisa are close friends who share everything; the privacy toggle flips Lisa's location.
+const SPROUT = displayName("aaron");
+const MOCHI = displayName("lisa");
+
+// The demo room starts empty: both judges are people, no simulated friend.
+export const DEFAULT_ROOM: Room = { id: "demo", simulatedFriend: false, resetCount: 0, updatedAt: DEMO_START };
+
+// The two personas are close friends who share everything; the privacy toggle flips Lisa's location.
 export const DEFAULT_POLICIES: SharePolicy[] = [
   { owner: "aaron", friend: "lisa", tier: "close", categories: { ...allOn } },
   { owner: "lisa", friend: "aaron", tier: "close", categories: { ...allOn } },
@@ -150,7 +166,7 @@ const shawarmaMessages: AgentMessage[] = [
     state: "working",
     activity: { ...SHAWARMA_ACTIVITY },
     reason: "interest_match",
-    note: "Saw Lisa's reel and I'm hungry. Want to make it happen this week?",
+    note: `Saw ${MOCHI}'s reel and I'm hungry. Want to make it happen this week?`,
     shared: { food: ["shawarma", "ramen", "breakfast tacos"] },
   },
   {
@@ -197,10 +213,6 @@ const shawarmaMessages: AgentMessage[] = [
   },
 ];
 
-function agentName(id: AgentId): string {
-  return id === "aaron" ? "Aaron" : "Lisa";
-}
-
 function messageEvent(message: AgentMessage): ActivityEvent {
   const windows = message.windows?.map(describeWindow).join(", ");
   return {
@@ -211,12 +223,12 @@ function messageEvent(message: AgentMessage): ActivityEvent {
     agent: message.from,
     contextId: message.contextId,
     messageId: message.id,
-    text: `${agentName(message.from)}'s agent sent ${message.type}${windows ? `: ${windows}` : ""}`,
+    text: `${displayName(message.from)} sent ${message.type}${windows ? `: ${windows}` : ""}`,
   };
 }
 
 const draft =
-  "Hey Lisa, that shawarma reel stuck with me. Tuesday 6 to 8 works for both of us. " +
+  `Hey ${MOCHI}, that shawarma reel stuck with me. Tuesday 6 to 8 works for both of us. ` +
   "Want to meet at Shawarma Point around 6:30?";
 
 const thread: Thread = {
@@ -256,7 +268,7 @@ const cards: Recommendation[] = [
     planId: SHAWARMA_PLAN_ID,
     forAgent: "aaron",
     friend: "lisa",
-    text: `You and Lisa both want to try Shawarma Point, and you're both free ${describeWindow(TUE_EVENING)}. Reach out?`,
+    text: `You and ${MOCHI} both want to try Shawarma Point, and you're both free ${describeWindow(TUE_EVENING)}. Reach out?`,
     activity: { ...SHAWARMA_ACTIVITY },
     window: TUE_EVENING,
     draft,
@@ -268,7 +280,7 @@ const cards: Recommendation[] = [
     planId: SHAWARMA_PLAN_ID,
     forAgent: "lisa",
     friend: "aaron",
-    text: `Aaron's agent and yours agreed on Shawarma Point, ${describeWindow(TUE_EVENING)}. Expect a message from Aaron and confirm when it lands.`,
+    text: `${SPROUT} and you agreed on Shawarma Point, ${describeWindow(TUE_EVENING)}. Expect a message from ${SPROUT} and confirm when it lands.`,
     activity: { ...SHAWARMA_ACTIVITY },
     window: TUE_EVENING,
     status: "pending",
@@ -285,7 +297,7 @@ const events: ActivityEvent[] = [
     agent: "lisa",
     contextId: SHAWARMA_CONTEXT_ID,
     planId: SHAWARMA_PLAN_ID,
-    text: "Lisa shared a reel with Aaron: \"we should go!!\"",
+    text: `${MOCHI} shared a reel with ${SPROUT}: "we should go!!"`,
   },
   {
     id: "evt_caption",
@@ -295,7 +307,7 @@ const events: ActivityEvent[] = [
     agent: "aaron",
     contextId: SHAWARMA_CONTEXT_ID,
     planId: SHAWARMA_PLAN_ID,
-    text: "Aaron's agent read the reel caption: Shawarma Point, E 6th St, open until 9pm (extracted by the caption model)",
+    text: `${SPROUT} read the reel caption: Shawarma Point, E 6th St, open until 9pm (extracted by the caption model)`,
   },
   {
     id: "evt_thread",
@@ -305,7 +317,7 @@ const events: ActivityEvent[] = [
     agent: "aaron",
     contextId: SHAWARMA_CONTEXT_ID,
     planId: SHAWARMA_PLAN_ID,
-    text: "Aaron's agent opened a thread with Lisa's agent",
+    text: `${SPROUT} opened a thread with ${MOCHI}`,
   },
   ...shawarmaMessages.map(messageEvent),
   {
@@ -315,7 +327,7 @@ const events: ActivityEvent[] = [
     actor: "system",
     contextId: SHAWARMA_CONTEXT_ID,
     planId: SHAWARMA_PLAN_ID,
-    text: `Both agents accepted ${describeWindow(TUE_EVENING)}. Waiting on Aaron and Lisa.`,
+    text: `${SPROUT} and ${MOCHI} agreed on ${describeWindow(TUE_EVENING)}. Waiting on both people.`,
   },
   {
     id: "evt_card_aaron",
@@ -325,7 +337,7 @@ const events: ActivityEvent[] = [
     agent: "aaron",
     contextId: SHAWARMA_CONTEXT_ID,
     planId: SHAWARMA_PLAN_ID,
-    text: "Card for Aaron: reach out to Lisa about Shawarma Point",
+    text: `Card for ${SPROUT}: reach out to ${MOCHI} about Shawarma Point`,
   },
   {
     id: "evt_card_lisa",
@@ -335,13 +347,15 @@ const events: ActivityEvent[] = [
     agent: "lisa",
     contextId: SHAWARMA_CONTEXT_ID,
     planId: SHAWARMA_PLAN_ID,
-    text: "Card for Lisa: Aaron is about to reach out",
+    text: `Card for ${MOCHI}: ${SPROUT} is about to reach out`,
   },
 ];
 
 export function seedSnapshot(): StateSnapshot {
   return structuredClone({
+    room: DEFAULT_ROOM,
     clock: { now: DEMO_START },
+    busy: [],
     signals: [],
     threads: [],
     messages: [],
@@ -356,7 +370,9 @@ export function seedSnapshot(): StateSnapshot {
 
 export function recordedSnapshot(): StateSnapshot {
   return structuredClone({
+    room: DEFAULT_ROOM,
     clock: { now: at(38) },
+    busy: [],
     signals: [extractedShawarmaSignal()],
     threads: [thread],
     messages: shawarmaMessages.map((message) => record(message)),
@@ -404,7 +420,7 @@ export function privacyToggleDemo() {
     from: "lisa",
     to: "aaron",
     removed: ["location"],
-    detail: "Location is off for aaron: the place and the shared location list were removed before sending.",
+    detail: `Location is off for ${SPROUT}: the place and the shared location list were removed before sending.`,
     at: at(70),
   };
 
@@ -416,7 +432,7 @@ export function privacyToggleDemo() {
       actor: "human",
       agent: "lisa",
       contextId: SHAWARMA_CONTEXT_ID,
-      text: "Lisa turned location off for Aaron",
+      text: `${MOCHI} turned location off for ${SPROUT}`,
     },
     {
       id: "evt_redaction_002",
@@ -427,7 +443,7 @@ export function privacyToggleDemo() {
       contextId: SHAWARMA_CONTEXT_ID,
       messageId: original.id,
       redactionId: redaction.id,
-      text: "Policy removed location from Lisa's propose",
+      text: `Policy removed location from ${MOCHI}'s propose`,
     },
   ];
 

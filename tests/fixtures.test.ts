@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { freeBlocks, intersectWindows, isSubsetOfBlocks, windowHash } from "@/lib/agent/windows";
 import {
   AgentMessage,
+  PLAN_STATES,
   Persona,
   RecordedRun,
   SharePolicy,
@@ -16,6 +17,8 @@ import {
   PERSONAS,
   PRIVATE_STRINGS,
   SHAWARMA_CONTEXT_ID,
+  AGENT_TO_ROLE,
+  ROLE_TO_AGENT,
   deadReelSignal,
   extractedShawarmaSignal,
   privacyToggleDemo,
@@ -24,12 +27,19 @@ import {
   seedSnapshot,
   shawarmaRun,
 } from "@/lib/seed/fixtures";
+import { snapshotAtPlanState } from "@/lib/seed/states";
 
 describe("personas", () => {
   it("parse, and only seed two fictional people", () => {
     expect(Persona.parse(PERSONAS.aaron).id).toBe("aaron");
     expect(Persona.parse(PERSONAS.lisa).id).toBe("lisa");
     expect(PERSONAS.aaron.provenance.fictional).toBe(true);
+  });
+
+  it("map to roles a and b with the Muse characters as display names", () => {
+    expect(ROLE_TO_AGENT).toEqual({ a: "aaron", b: "lisa" });
+    expect(AGENT_TO_ROLE).toEqual({ aaron: "a", lisa: "b" });
+    expect([PERSONAS.aaron.displayName, PERSONAS.lisa.displayName]).toEqual(["Sprout", "Mochi"]);
   });
 
   it("have free blocks that overlap on Tuesday 6 to 8pm", () => {
@@ -165,5 +175,49 @@ describe("the privacy toggle beat", () => {
     expect(demo.redaction.removed).toEqual(["location"]);
     expect(demo.redaction.detail).not.toContain("E 6th St");
     expect(demo.redaction.detail).not.toContain("East Austin");
+  });
+});
+
+describe("snapshotAtPlanState", () => {
+  it("parses for every plan state and lands in that state", () => {
+    for (const state of PLAN_STATES) {
+      const snapshot = StateSnapshot.parse(snapshotAtPlanState(state));
+      expect(snapshot.plans[0].state).toBe(state);
+      expect(snapshot.plans[0].history.at(-1)?.state).toBe(state);
+    }
+  });
+
+  it("keeps each timeline in time order", () => {
+    for (const state of PLAN_STATES) {
+      const times = snapshotAtPlanState(state).events.map((entry) => Date.parse(entry.at));
+      expect([...times].sort((a, b) => a - b)).toEqual(times);
+    }
+  });
+
+  it("shows messages, cards, and the thread state the phones need", () => {
+    expect(snapshotAtPlanState("detected").messages).toHaveLength(0);
+    expect(snapshotAtPlanState("negotiating").messages).toHaveLength(3);
+    expect(snapshotAtPlanState("negotiating").threads[0].state).toBe("working");
+    expect(snapshotAtPlanState("awaiting_humans").cards.map((card) => card.status)).toEqual(["pending", "pending"]);
+    expect(snapshotAtPlanState("confirmed").cards.map((card) => card.status)).toEqual(["accepted", "accepted"]);
+    expect(snapshotAtPlanState("scheduled").threads[0].state).toBe("completed");
+    expect(snapshotAtPlanState("dropped").plans[0]).toMatchObject({ dropReason: "declined" });
+  });
+
+  it("counts follow-through only once the plan happened", () => {
+    const counted = (state: (typeof PLAN_STATES)[number]) =>
+      snapshotAtPlanState(state).events.filter((entry) => entry.kind === "followed_through").length;
+    for (const state of ["detected", "negotiating", "awaiting_humans", "confirmed", "scheduled", "reminded", "dropped"] as const) {
+      expect(counted(state)).toBe(0);
+    }
+    expect(counted("happened")).toBe(1);
+    expect(counted("followed_up")).toBe(1);
+  });
+
+  it("moves the demo clock forward through the lifecycle", () => {
+    const clock = (state: (typeof PLAN_STATES)[number]) => Date.parse(snapshotAtPlanState(state).clock.now);
+    expect(clock("reminded")).toBeGreaterThan(clock("scheduled"));
+    expect(clock("happened")).toBeGreaterThan(clock("reminded"));
+    expect(clock("followed_up")).toBeGreaterThan(clock("happened"));
   });
 });
