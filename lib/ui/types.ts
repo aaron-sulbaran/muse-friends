@@ -31,7 +31,10 @@ export type AvatarMood = "idle" | "thinking" | "talking";
 export type UiToolCall = { name: string; args: string; result: string };
 
 export type ModelProof = {
+  /** The model that answered. */
   model: string;
+  /** Present when a fallback answered: the configured model that did not (it answered 404 model not found). */
+  fallbackFrom?: string;
   responseId: string;
   latencyMs: number;
   inputTokens: number;
@@ -273,6 +276,8 @@ export type UiSnapshot = {
   simulatedFriend: boolean;
   /** What people see for each side: the Muse characters' names, never the internal ids. */
   sides: Record<MemberId, string>;
+  /** What each side's person is called, when someone said (onboarding, or a second phone). Unset, the other side says "your friend". */
+  humans?: Partial<Record<AgentId, string>>;
   messages: UiMessage[];
   /** Non-message timeline rows, merged with the messages by time. */
   notes: UiNote[];

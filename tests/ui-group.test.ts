@@ -122,13 +122,14 @@ describe("who is thinking in a plan for three", () => {
 
 describe("a plan for three on the two phones", () => {
   it("tells the coordinator who is in, and the member who is getting them together", () => {
-    const snapshot = ui("awaiting_humans");
+    // With Michelle played by a model, the friends have names; unnamed, a person is "your friend" and never a Muse's name.
+    const snapshot = { ...ui("awaiting_humans"), simulatedFriend: true };
     const a = viewForRole(snapshot, "a");
     const b = viewForRole(snapshot, "b");
-    expect(texts(a.items).join("\n")).toMatch(/You, Mochi and Kai all want to try .+, and you're all free/);
-    expect(texts(b.items).join("\n")).toMatch(/Sprout is getting Kai and you together for .+\. You're all free\./);
-    expect(a.group).toMatchObject({ coordinator: true, others: [{ name: "Mochi" }, { name: "Kai" }] });
-    expect(b.group).toMatchObject({ coordinator: false, coordinatorName: "Sprout" });
+    expect(texts(a.items).join("\n")).toMatch(/You, Michelle and Kai all want to try .+, and you're all free/);
+    expect(texts(b.items).join("\n")).toMatch(/Your friend is getting Kai and you together for .+\. You're all free\./);
+    expect(a.group).toMatchObject({ coordinator: true, others: [{ name: "Michelle" }, { name: "Kai" }] });
+    expect(b.group).toMatchObject({ coordinator: false, coordinatorName: "your friend" });
   });
 
   it("gives each human one card, and Kai's card only to the coordinator's phone", () => {
@@ -141,15 +142,15 @@ describe("a plan for three on the two phones", () => {
   });
 
   it("waits for whoever is still deciding, and drops Kai's card once they answer", () => {
-    const afterSprout = ui("awaiting_humans", { aaron: "accepted" });
+    const afterSprout = { ...ui("awaiting_humans", { aaron: "accepted" }), simulatedFriend: true };
     const a = viewForRole(afterSprout, "a");
-    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi and Kai" });
+    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for Michelle and Kai" });
     expect(kinds(a.items)).toContain("member-card");
     expect(kinds(a.items)).not.toContain("plan-card");
 
-    const afterPebble = ui("awaiting_humans", { aaron: "accepted", kai: "accepted" });
+    const afterPebble = { ...ui("awaiting_humans", { aaron: "accepted", kai: "accepted" }), simulatedFriend: true };
     const later = viewForRole(afterPebble, "a");
-    expect(later.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi" });
+    expect(later.status).toEqual({ glyph: "waiting-friend", text: "waiting for Michelle" });
     expect(kinds(later.items)).not.toContain("member-card");
   });
 
@@ -174,10 +175,10 @@ describe("a plan for three on the two phones", () => {
   });
 
   it("holds the time with both others once it is confirmed", () => {
-    const view = viewForRole(ui("scheduled", { aaron: "accepted", lisa: "accepted", kai: "accepted" }), "a");
-    expect(texts(view.items).join("\n")).toContain("Mochi and Kai are in");
+    const view = viewForRole({ ...ui("scheduled", { aaron: "accepted", lisa: "accepted", kai: "accepted" }), simulatedFriend: true }, "a");
+    expect(texts(view.items).join("\n")).toContain("Michelle and Kai are in");
     const hold = view.items.find((item) => item.kind === "hold-row");
-    expect(hold).toMatchObject({ title: expect.stringMatching(/ with Mochi and Kai$/) });
+    expect(hold).toMatchObject({ title: expect.stringMatching(/ with Michelle and Kai$/) });
   });
 
   it("says who passed when a plan for three is dropped", () => {

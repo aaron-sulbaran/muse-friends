@@ -216,7 +216,7 @@ There is **no tool that sends a protocol message, moves money, decides a plan or
 
 **Caps.** 20 chat turns per room per hour (`MAX_CHAT_TURNS_PER_ROOM_PER_HOUR`), counted in memory like the run caps, and each turn also spends from the app-wide hourly total. Past either: 429 `{ paused, reason, text, budget }` with `Retry-After`. A bad body (empty, over 500 characters) is a 400 and spends nothing.
 
-**Snapshot.** `UiSnapshot.chat: UiChatMessage[]` (`{ id, from: "user" | "muse", text, at, replyTo?, proof? }`, in order; text is renamed like the rest of the screen, so the Muse shows as "Michelle's Muse" when the simulated friend plays side b) and `UiNote` kind `chat_asked` with `answerId` and `toolCalls`. The snapshot is the same for both roles, so a real second phone could read these lines in the JSON; the screen draws them on side a only.
+**Snapshot.** `UiSnapshot.chat: UiChatMessage[]` (`{ id, from: "user" | "muse", text, at, replyTo?, proof? }`, in order; text is renamed like the rest of the screen, so the Muse shows as "Michelle's Muse" when the simulated friend plays side b) and `UiNote` kind `chat_asked` with `answerId` and `toolCalls`. `GET /api/state?role=b` returns the snapshot **without** the chat lines and the `chat_asked` rows (and `role` of anything but `a` fails closed the same way), so a real second phone never receives side a's questions; no `role`, or `a`, is the full view the stage and the gate use. The restricted view has its own ETag. A recorded run for Replay does not keep the chat either.
 
 ## Group of three and the trip (D20, D30)
 

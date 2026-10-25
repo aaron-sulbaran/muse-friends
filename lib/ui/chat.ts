@@ -4,6 +4,7 @@ import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, listOf, namesFor
 import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib/seed/past-signals";
 import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
 import { tripThread, type GroupLine } from "./group";
+import { capital } from "./tokens";
 import type { AgentId, AvatarMood, Decision, MemberId, PlanState, Role, UiPayment, UiPlan, UiSnapshot, UiTrip } from "./types";
 
 /*
@@ -140,7 +141,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     if (!groupView) return copy.proposalBubble(theirs.human, plan.activityTitle, when);
     if (groupView.coordinator) return copy.groupProposalA(groupView.others[0].name, groupView.others[1].name, plan.activityTitle, when);
     const otherMember = groupView.others.find((other) => other.name !== groupView.coordinatorName)?.name ?? groupView.others[0].name;
-    return copy.groupProposalB(groupView.coordinatorName, otherMember, plan.activityTitle, when);
+    return copy.groupProposalB(capital(groupView.coordinatorName), otherMember, plan.activityTitle, when);
   };
   const pendingOthers = groupView ? groupView.others.filter((other) => other.decision === "pending") : [];
 
