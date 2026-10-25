@@ -198,21 +198,24 @@ export function nextStepDue(plan: Plan, nowMs: number): RealStep | null {
 // morning; "next" (the default) is whichever comes next. Naming a later step runs the ones in
 // between, so a two-button control can jump from scheduled straight to the follow-up. A confirmed
 // plan that never had its hold issued gets it first. The clock only moves forward.
+// `from` makes the call idempotent: the automatic time skip on every open phone names the state it saw,
+// and only the first call finds the plan still there; the rest change nothing (`changed: false`).
 export function advanceClock(
   store: Store,
-  input: { step?: ClockStep; planId?: string } = {},
+  input: { step?: ClockStep; planId?: string; from?: Plan["state"] } = {},
   options: Options = {},
-): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan }>> {
+): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan; changed: boolean }>> {
   return withLock(PLAN_LOCK, () => advanceClockLocked(store, input, options));
 }
 
 async function advanceClockLocked(
   store: Store,
-  input: { step?: ClockStep; planId?: string },
+  input: { step?: ClockStep; planId?: string; from?: Plan["state"] },
   options: Options,
-): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan }>> {
+): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan; changed: boolean }>> {
   const found = input.planId ? await store.getPlan(input.planId) : await currentPlan(store);
   if (!found) return { ok: false, status: 404, error: "no plan to move forward" };
+  if (input.from && found.state !== input.from) return { ok: true, value: { clock: await store.getClock(), plan: found, changed: false } };
   if (!found.window) return { ok: false, status: 409, error: "the plan has no time yet" };
 
   const wanted = STEP_FOR_STATE[found.state];
@@ -228,7 +231,7 @@ async function advanceClockLocked(
     if (!last.ok) return last;
     plan = last.value.plan;
   }
-  return last;
+  return last.ok ? { ok: true, value: { ...last.value, changed: true } } : last;
 }
 
 async function runStep(store: Store, plan: Plan, step: RealStep): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan }>> {

@@ -85,6 +85,38 @@ describe("decision, handoff, hold, clock", () => {
     expect((await store.getPlan(SHAWARMA_PLAN_ID))?.state).toBe("followed_up");
   });
 
+  it("moves the clock once when every phone asks to skip at the same moment", async () => {
+    await postDecision(json({ role: "a", choice: "accept" }), ctx());
+    await postDecision(json({ role: "b", choice: "accept" }), ctx());
+    await postDraft(json({ role: "a", via: "whatsapp" }), ctx());
+    expect((await store.getPlan(SHAWARMA_PLAN_ID))?.state).toBe("scheduled");
+
+    // Side a, side b and the stage all saw the hold row and ask together: one reminder, the rest change nothing.
+    const toReminder = await Promise.all([1, 2, 3].map(async () => answer(await postClock(json({ action: "advance", from: "scheduled" })))));
+    expect(toReminder.map((result) => result.status)).toEqual([200, 200, 200]);
+    expect(toReminder.map((result) => (result.body.data as { changed: boolean }).changed).sort()).toEqual([false, false, true]);
+    expect((await store.getPlan(SHAWARMA_PLAN_ID))?.state).toBe("reminded");
+    const reminders = async () => (await store.listEvents()).filter((event) => event.text === "Demo clock moved to two hours before the plan");
+    expect(await reminders()).toHaveLength(1);
+
+    // A late phone still asking for the reminder after the clock moved on is answered ok with no change.
+    const late = await answer(await postClock(json({ action: "advance", from: "scheduled" })));
+    expect(late).toMatchObject({ status: 200, body: { data: { plan: "reminded", changed: false } } });
+    expect(await reminders()).toHaveLength(1);
+
+    const toNextDay = await Promise.all([1, 2].map(async () => answer(await postClock(json({ action: "advance", from: "reminded" })))));
+    expect(toNextDay.map((result) => (result.body.data as { changed: boolean }).changed).sort()).toEqual([false, true]);
+    expect((await store.getPlan(SHAWARMA_PLAN_ID))?.state).toBe("followed_up");
+    expect((await store.listEvents()).filter((event) => event.text === "Demo clock moved to the next morning")).toHaveLength(1);
+    expect((await answer(await postClock(json({ action: "advance", from: "reminded" })))).body.data).toMatchObject({ plan: "followed_up", changed: false });
+  });
+
+  it("never skips before the plan is scheduled, and refuses a from it does not know", async () => {
+    expect((await answer(await postClock(json({ action: "advance", from: "scheduled" })))).body.data).toMatchObject({ changed: false });
+    expect((await store.getPlan(SHAWARMA_PLAN_ID))?.state).toBe("awaiting_humans");
+    expect((await answer(await postClock(json({ action: "advance", from: "happened" })))).status).toBe(400);
+  });
+
   it("refuses the clock before both people said yes", async () => {
     expect((await answer(await postClock(json({ action: "advance" })))).status).toBe(409);
   });
