@@ -90,7 +90,7 @@ describe("what the header avatar is doing", () => {
 
 describe("the journey, phone by phone", () => {
   it("reading the reel, then talking, are status lines and nothing else in the chat", () => {
-    expect(viewForRole(at("detected"), "a").status).toEqual({ glyph: "reading", text: "reading Mochi's reel" });
+    expect(viewForRole(at("detected"), "a").status).toEqual({ glyph: "reading", text: "reading your friend's reel" });
     expect(viewForRole(quietNegotiation(), "a").status).toEqual({ glyph: "talking", text: "talking to Mochi" });
     expect(viewForRole(quietNegotiation(), "b").status).toEqual({ glyph: "talking", text: "talking to Sprout" });
     expect(kinds(viewForRole(at("negotiating"), "a").items)).not.toContain("plan-card");
@@ -103,7 +103,7 @@ describe("the journey, phone by phone", () => {
       expect(view.status).toEqual({ glyph: "waiting-you", text: "waiting for you" });
     }
     const bubble = viewForRole(at("awaiting_humans"), "a").items.find((item) => item.kind === "bubble" && item.id === "proposal");
-    expect(bubble).toMatchObject({ text: "You and Mochi both want to try Shawarma Point, and you're both free Tuesday 6 to 8." });
+    expect(bubble).toMatchObject({ text: "You both want to try Shawarma Point, and you're both free Tuesday 6 to 8." });
   });
 
   it("collapses a card to a line after that person's yes, and waits for the other", () => {
@@ -113,7 +113,7 @@ describe("the journey, phone by phone", () => {
     const a = viewForRole(snapshot, "a");
     expect(kinds(a.items)).toContain("collapsed");
     expect(kinds(a.items)).not.toContain("plan-card");
-    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi" });
+    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for your friend" });
     expect(kinds(viewForRole(snapshot, "b").items)).toContain("plan-card");
   });
 
@@ -130,12 +130,12 @@ describe("the journey, phone by phone", () => {
   it("the hold row offers a prefilled Google Calendar event naming the other person, in UTC, with the place", () => {
     const row = viewForRole(at("scheduled"), "a").items.find((item) => item.kind === "hold-row");
     const url = new URL(row && row.kind === "hold-row" && row.googleUrl ? row.googleUrl : "");
-    expect(url.searchParams.get("text")).toBe("Shawarma Point with Mochi");
+    expect(url.searchParams.get("text")).toBe("Shawarma Point with your friend");
     expect(url.searchParams.get("dates")).toBe("20261027T230000Z/20261028T010000Z");
     expect(url.searchParams.get("details")).toBe("Sprout and Mochi planned this in Muse Friends.");
     expect(url.searchParams.get("location")).toBe("E 6th St, Austin");
     const other = viewForRole(at("scheduled"), "b").items.find((item) => item.kind === "hold-row");
-    expect(new URL(other && other.kind === "hold-row" && other.googleUrl ? other.googleUrl : "").searchParams.get("text")).toBe("Shawarma Point with Sprout");
+    expect(new URL(other && other.kind === "hold-row" && other.googleUrl ? other.googleUrl : "").searchParams.get("text")).toBe("Shawarma Point with your friend");
   });
 
   it("the Google Calendar link never carries a place that was withheld", () => {
@@ -148,7 +148,7 @@ describe("the journey, phone by phone", () => {
 
   it("reminded and followed up add a day separator and the Muse's line", () => {
     const reminded = viewForRole(at("reminded"), "a").items;
-    expect(reminded.some((item) => item.kind === "bubble" && item.text.startsWith("Shawarma Point with Mochi at 6"))).toBe(true);
+    expect(reminded.some((item) => item.kind === "bubble" && item.text.startsWith("Shawarma Point with your friend at 6"))).toBe(true);
     const followed = viewForRole(at("followed_up"), "a").items;
     expect(followed.some((item) => item.kind === "bubble" && item.text === "Did you two make it?")).toBe(true);
     // The recording counted the hangout, so the answer shows and the next idea comes from another shared signal.
@@ -165,13 +165,13 @@ describe("the journey, phone by phone", () => {
     expect(lastWeek).toBeGreaterThan(-1);
     expect(reel).toBeGreaterThan(lastWeek);
     expect(today).toBeGreaterThan(reel);
-    expect(items[today + 1]).toMatchObject({ kind: "bubble", from: "muse", text: "Mochi sent you this a week ago. Want me to see if you two can make it happen?" });
+    expect(items[today + 1]).toMatchObject({ kind: "bubble", from: "muse", text: "Your friend sent you this a week ago. Want me to see if you two can make it happen?" });
   });
 
   it("a friend's no reads neutrally on each side", () => {
     const a = viewForRole(at("dropped"), "a").items.find((item) => item.kind === "bubble" && item.id === "dropped");
     const b = viewForRole(at("dropped"), "b").items.find((item) => item.kind === "bubble" && item.id === "dropped");
-    expect(a).toMatchObject({ text: "Mochi said not now." });
+    expect(a).toMatchObject({ text: "Your friend said not now." });
     expect(b).toMatchObject({ text: "You said not now" });
   });
 });

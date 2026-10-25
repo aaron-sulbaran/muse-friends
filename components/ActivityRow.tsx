@@ -55,7 +55,7 @@ export function ActivityRow({ message, names, onOpen }: Props) {
           <PolicyStamp stamp={stamp} animateWithheld />
           {message.proof ? (
             <span className="mt-1.5 block text-[12px] leading-4 text-faint">
-              {message.proof.model}, {formatLatency(message.proof.latencyMs)}, {message.proof.inputTokens + message.proof.outputTokens} tokens
+              {message.proof.fallbackFrom ? `answered by ${message.proof.model} (${message.proof.fallbackFrom} was not found)` : message.proof.model}, {formatLatency(message.proof.latencyMs)}, {message.proof.inputTokens + message.proof.outputTokens} tokens
             </span>
           ) : null}
         </span>

@@ -84,7 +84,8 @@ const withMichelle = { ...sprout, simulatedFriend: true } as const;
 
 describe("names", () => {
   it("come from the persona display names, and swap in the simulated friend", () => {
-    expect(namesFor(sprout)).toEqual({ muse: { aaron: "Sprout", lisa: "Mochi", kai: "Pebble" }, human: { aaron: "Sprout", lisa: "Mochi", kai: "Pebble" } });
+    // The Muses have characters' names; their people have none until someone says, and are never called by a Muse's name. Kai is fictional and named.
+    expect(namesFor(sprout)).toEqual({ muse: { aaron: "Sprout", lisa: "Mochi", kai: "Pebble" }, human: { aaron: "your friend", lisa: "your friend", kai: "Kai" } });
     expect(namesFor(withMichelle).muse.lisa).toBe("Michelle's Muse");
     expect(namesFor(withMichelle).human.lisa).toBe("Michelle");
   });
