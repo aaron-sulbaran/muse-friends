@@ -56,7 +56,8 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   const names = namesFor(snapshot);
   const agent = roleAgent[role];
   const friend = roleAgent[role === "a" ? "b" : "a"];
-  const mine = { muse: names.muse[agent], human: names.human[agent] };
+  // Michelle's own phone calls her Muse by its name, Mochi; the other phone still says "Michelle's Muse".
+  const mine = { muse: role === "b" && snapshot.simulatedFriend ? snapshot.sides.lisa : names.muse[agent], human: names.human[agent] };
   const theirs = { muse: names.muse[friend], human: names.human[friend] };
 
   const items: ChatItem[] = [];

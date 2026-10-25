@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PLAN_STATES, type PlanState, type StateSnapshot } from "@/lib/protocol";
 import { recordedSnapshot, seedSnapshot } from "@/lib/seed/fixtures";
 import { snapshotAtPlanState } from "@/lib/seed/states";
+import { copy } from "@/lib/ui/copy";
 import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { initialOnboarding, reduceOnboarding, type OnboardingAction } from "@/lib/ui/onboarding";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
@@ -57,7 +58,7 @@ describe("how a judge starts", () => {
     state.room = { ...state.room, simulatedFriend: true };
     const snapshot = toUiSnapshot(state, live);
     expect(kinds(viewForRole(snapshot, "b").items)).not.toContain("start-card");
-    expect(viewForRole(snapshot, "b").museName).toBe("Michelle's Muse");
+    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
   });
 
   it("once a plan exists, nobody is offered a start", () => {
@@ -240,7 +241,7 @@ describe("what the store can say that the recorded states do not", () => {
     state.room = { ...state.room, simulatedFriend: true };
     const snapshot = toUiSnapshot(state, live);
     expect(snapshot.simulatedFriend).toBe(true);
-    expect(viewForRole(snapshot, "b").museName).toBe("Michelle's Muse");
+    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
     expect(viewForRole(snapshot, "a").friendHumanName).toBe("Michelle");
   });
 });
@@ -306,5 +307,36 @@ describe("the onboarding in the chat", () => {
   it("gives every item a distinct id, so the chat can key them", () => {
     const items = onboardingItems(after({ type: "notNow" }), "Michelle");
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+  });
+});
+
+describe("the app's own lines carry no emoji", () => {
+  const emoji = /\p{Extended_Pictographic}/u;
+  const everyLine = (snapshot: ReturnType<typeof at>) =>
+    (["a", "b"] as Role[]).flatMap((role) => viewForRole(snapshot, role).items.flatMap((item) => (item.kind === "bubble" || item.kind === "collapsed" ? [item.text] : [])));
+
+  it("in the seeded history on both phones, with and without the simulated friend", () => {
+    const lines = everyLine(at("awaiting_humans"));
+    expect(lines.some((line) => /sent you a reel/.test(line))).toBe(true);
+    expect(lines.some((line) => /Cedar Bluff Trail/.test(line))).toBe(true);
+    for (const line of lines) expect(line).not.toMatch(emoji);
+  });
+
+  it("in the reply after a plan happens, and in the nudge", () => {
+    expect(copy.outcomeWentReply).not.toMatch(emoji);
+    expect(copy.nudgeSent("Michelle")).not.toMatch(emoji);
+  });
+});
+
+describe("Michelle's own phone names her Muse Mochi", () => {
+  it("in the pill, and in the line under the plan card, while Sprout's phone says Michelle's Muse", () => {
+    const state = snapshotAtPlanState("awaiting_humans");
+    state.room = { ...state.room, simulatedFriend: true };
+    const snapshot = toUiSnapshot(state, live);
+    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
+    expect(viewForRole(snapshot, "b").humanName).toBe("Michelle");
+    expect(viewForRole(snapshot, "a").friendMuseName).toBe("Michelle's Muse");
+    const agreed = viewForRole(snapshot, "b").items.find((item) => item.kind === "agreed-line");
+    expect(agreed && agreed.kind === "agreed-line" ? agreed.first : null).toBe("Mochi");
   });
 });
