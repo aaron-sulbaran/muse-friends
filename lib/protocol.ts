@@ -41,7 +41,7 @@ export const TASK_STATES = ["working", "input-required", "completed", "rejected"
 export const TaskState = z.enum(TASK_STATES);
 export type TaskState = z.infer<typeof TaskState>;
 
-export const REASONS = ["both_free", "interest_match", "no_overlap", "cap_reached"] as const;
+export const REASONS = ["both_free", "interest_match", "no_overlap", "not_interested", "cap_reached"] as const;
 export const Reason = z.enum(REASONS);
 export type Reason = z.infer<typeof Reason>;
 
