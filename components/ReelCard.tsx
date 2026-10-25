@@ -61,7 +61,7 @@ function SampleReel({ image, poster, caption, place, align, label = "Sample reel
         <div className="relative aspect-[9/16] w-full overflow-hidden bg-grey-disc">
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt={`Sample reel of ${place}`} className="size-full object-cover" />
+            <img src={image} alt={`${label}: ${place}`} className="size-full object-cover" />
           ) : (
             <div
               role="img"

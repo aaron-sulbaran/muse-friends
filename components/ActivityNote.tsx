@@ -8,6 +8,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string }> = {
   policy_changed: { icon: Shield, title: "Changed sharing" },
   busy_added: { icon: CalendarX, title: "Marked a time busy" },
   message_rejected: { icon: ShieldAlert, title: "Inbox rejected a message" },
+  reel_source: { icon: Film, title: "Where the reel came from" },
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */
