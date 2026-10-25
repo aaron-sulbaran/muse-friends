@@ -52,9 +52,21 @@ export function provenanceRows(payment: Pick<UiPayment, "breakdown" | "receipt">
     .map((line) => ({ label: line.label, amount: signedDollars(line.amount), tag: provenanceTag(line, payment) }));
 }
 
+/**
+ * A tool's name as the sheet lists it. send_money only prepares a payment until the person confirms it (D28), so
+ * before that it says so instead of reading as if money had moved.
+ */
+function toolLabel(name: string, status: UiPayment["status"]): string {
+  if (name !== "send_money") return name;
+  if (status === "proposed") return copy.toolPrepared("waits for you");
+  if (status === "failed") return copy.toolPrepared("nothing moved");
+  if (status === "declined") return copy.toolPrepared("not sent");
+  return name;
+}
+
 /** The tools the payer's Muse called, each once, in the order it first called them. */
-export function toolsCalled(payment: Pick<UiPayment, "toolCalls">): string[] {
-  return [...new Set((payment.toolCalls ?? []).map((call) => call.name))];
+export function toolsCalled(payment: Pick<UiPayment, "toolCalls" | "status">): string[] {
+  return [...new Set((payment.toolCalls ?? []).map((call) => call.name))].map((name) => toolLabel(name, payment.status));
 }
 
 /** The Nessie ids (or the local ledger's) once something was sent; until then, a promise that they will appear. */
