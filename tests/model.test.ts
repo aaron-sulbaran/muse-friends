@@ -24,7 +24,7 @@ describe("runAgentTurn (stateless, the default)", () => {
     for (const call of fake.calls) {
       expect(call.instructions).toBe("You are Sprout.");
       expect((call.tools as unknown[]).length).toBe(2);
-      expect(call.reasoning).toEqual({ effort: "low" });
+      expect(call.reasoning).toEqual({ effort: "minimal" });
       expect(call.temperature).toBeUndefined();
       expect(call.store).toBe(false);
       expect(call.include).toEqual(["reasoning.encrypted_content"]);
@@ -266,7 +266,7 @@ describe("runAgentTurn (chain mode, the TECH_SPEC fallback)", () => {
     expect(fake.calls[0].previous_response_id).toBeUndefined();
     expect(fake.calls[1].previous_response_id).toBe("resp_1");
     expect(fake.calls[1].instructions).toBe("You are Sprout.");
-    expect(fake.calls[1].reasoning).toEqual({ effort: "low" });
+    expect(fake.calls[1].reasoning).toEqual({ effort: "minimal" });
     expect(fake.calls[1].store).toBeUndefined();
     expect((fake.calls[1].input as unknown[]).length).toBe(1);
   });

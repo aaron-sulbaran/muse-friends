@@ -1,3 +1,4 @@
+import { recordedSnapshot } from "@/lib/seed/fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as postInbox } from "@/app/api/agents/[id]/inbox/route";
 import { POST as postLeak } from "@/app/api/proof/leak/route";
@@ -42,7 +43,9 @@ describe("try to leak", () => {
     expect(rejections).toHaveLength(1);
     expect(rejections[0].text).toMatch(/inbox rejected a message from .+ \(422\)/);
     const notes = toUiSnapshot(state, { mode: "live" }).notes;
-    expect(notes).toEqual([expect.objectContaining({ kind: "message_rejected", text: rejections[0].text })]);
+    // Shown as privacy proof, with the technical text kept as the row's hover detail.
+    expect(notes).toEqual([expect.objectContaining({ kind: "message_rejected", detail: rejections[0].text })]);
+    expect(notes[0].text).toMatch(/^(Blocked|Held back): /);
   });
 
   it("forges a message that is valid in every way but its note, so the policy is what refuses it", () => {
@@ -57,5 +60,25 @@ describe("try to leak", () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { data: { attempts: Array<{ status: number }> } | null };
     expect(body.data?.attempts.map((attempt) => attempt.status)).toEqual([401, 422]);
+  });
+});
+
+describe("a rejection reads as privacy proof, one sentence per reason", () => {
+  const reject = (reason: string, status = 422) => {
+    const state = recordedSnapshot();
+    state.events.push({ id: `evt_rej_${status}_${reason.length}`, at: state.clock.now, kind: "message_rejected", actor: "system", agent: "lisa", text: `Mochi's inbox rejected a message from Sprout (${status}): ${reason}` });
+    return toUiSnapshot(state, { mode: "live" }).notes.find((note) => note.kind === "message_rejected");
+  };
+
+  it.each([
+    ["the message carries data the sender's sharing policy does not allow (events)", 422, "Blocked: Sprout tried to share events with Mochi; the sharing settings don't allow it"],
+    ["a window is outside the sender's free blocks", 422, "Blocked: Sprout offered a time that isn't really free; only real free times go out"],
+    ["a window was already passed over in this conversation", 422, "Blocked: Sprout offered a time that was already turned down"],
+    ["from does not match the authenticated sender", 403, "Blocked: a message that didn't come from Sprout was refused"],
+    ["the sixth message must be an accept or a decline", 422, "Held back: an out-of-turn message from Sprout was stopped before it reached Mochi"],
+  ])("%s", (reason, status, sentence) => {
+    const note = reject(reason, status);
+    expect(note?.text).toBe(sentence);
+    expect(note?.detail).toContain(`(${status}): ${reason}`);
   });
 });

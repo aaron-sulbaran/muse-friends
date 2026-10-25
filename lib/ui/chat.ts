@@ -5,7 +5,7 @@ import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib
 import type { OnboardingState } from "./onboarding";
 import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
 import { tripThread, type GroupLine } from "./group";
-import { capital } from "./tokens";
+import { capital, unnamedFriend } from "./tokens";
 import { threadLines, type ThreadLine } from "./thread";
 import type { AgentId, AvatarMood, Decision, MemberId, PlanState, Role, UiPayment, UiPlan, UiSnapshot, UiTrip } from "./types";
 
@@ -143,7 +143,9 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   // Muse picks up the plan that died in the chat a week ago. A follow-up has no reel, so only a shared reel is picked up.
   if (!plan.target) {
     if (role === "b") {
-      items.push({ kind: "bubble", id: "reel-sent", from: "user", text: copy.nudgeSent(theirs.human) });
+      // Side a started it, so side b hears about it from its own Muse: the other person's Muse is asking.
+      const asker = theirs.human === unnamedFriend ? theirs.muse : `${theirs.human}'s Muse`;
+      items.push({ kind: "bubble", id: "reel-asked", from: "muse", text: copy.friendMuseAsking(asker) });
       items.push({ kind: "bubble", id: "reel-sent-ack", from: "muse", text: SHAWARMA_REEL.nextIdeaMine(theirs.human) });
     } else {
       items.push({ kind: "bubble", id: "pickup", from: "muse", text: SHAWARMA_REEL.nextIdea(theirs.human) });

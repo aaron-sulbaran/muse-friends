@@ -161,10 +161,12 @@ export function contextMode(): ContextMode {
 
 type Effort = "minimal" | "low" | "medium" | "high";
 
-// "low" unless MODEL_EFFORT says otherwise (minimal, low, medium, high).
+// "minimal" unless MODEL_EFFORT says otherwise (minimal, low, medium, high). Measured on 2026-10-25: the
+// send call at "low" spent 1400 reasoning tokens (9 s) on a one-line message; "minimal" spends about 500 (4.5 s)
+// and the windows it picks are as good. The windows are checked in code either way.
 function defaultEffort(): Effort {
   const configured = process.env.MODEL_EFFORT;
-  return configured === "minimal" || configured === "medium" || configured === "high" ? configured : "low";
+  return configured === "low" || configured === "medium" || configured === "high" ? configured : "minimal";
 }
 
 export type AgentTurnOptions = {
