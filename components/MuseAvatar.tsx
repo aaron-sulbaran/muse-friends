@@ -1,10 +1,9 @@
-import { simulatedFriend } from "@/lib/ui/tokens";
 import type { AgentId } from "@/lib/ui/types";
 
 type Props = {
   agent: AgentId;
-  /** True when side b is played by the simulated friend; shows a grey initial disc instead of a character. */
-  simulated?: boolean;
+  /** A letter: show a grey initial disc instead of the character (the simulated friend, or a contact). */
+  initial?: string | null;
   /** The Muse's name, for the accessible label. */
   name?: string;
   size?: number;
@@ -44,15 +43,15 @@ function Mochi() {
 }
 
 /** A Muse's character: a circle with a 10 percent tint of the body color and the character bottom-aligned. */
-export function MuseAvatar({ agent, simulated = false, name = "Muse", size = 44, className = "" }: Props) {
-  if (agent === "lisa" && simulated) {
+export function MuseAvatar({ agent, initial = null, name = "Muse", size = 44, className = "" }: Props) {
+  if (agent === "lisa" && initial) {
     return (
       <span
         aria-hidden="true"
         className={`inline-grid shrink-0 place-items-center rounded-full bg-grey-disc font-semibold text-ink ${className}`}
         style={{ width: size, height: size, fontSize: size * 0.42 }}
       >
-        {simulatedFriend.human.charAt(0)}
+        {initial}
       </span>
     );
   }

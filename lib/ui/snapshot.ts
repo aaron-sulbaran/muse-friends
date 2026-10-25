@@ -1,7 +1,7 @@
 import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
+import { CONTACTS, getContact, isMutual } from "@/lib/seed/contacts";
 import { simulatedFriend } from "./tokens";
-import { fixtureContacts } from "./contacts";
 import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiPlan, UiRefusal, UiSnapshot } from "./types";
 
 /*
@@ -18,19 +18,38 @@ export type UiOverlay = {
 /** Taps and sends that move a plan along. Not the outcome, so never counted. */
 const humanTapKinds = new Set(["human_decision", "handoff_opened"]);
 
-/**
- * With a simulated friend, side b's person is Michelle, but the agents and the fixtures write text with
- * the persona name. People see Michelle in every sentence about her; the raw JSON in the drawer stays as sent.
- */
-function renameFor(state: StateSnapshot): (text: string) => string {
-  if (!state.room.simulatedFriend) return (text) => text;
-  const persona = displayName("lisa");
-  const pattern = new RegExp(`\\b${persona}\\b`, "g");
-  return (text) => text.replace(pattern, simulatedFriend.human);
-}
-
 function latestPlan(plans: Plan[]): Plan | null {
   return plans.at(-1) ?? null;
+}
+
+/** A follow-up the start gate refused: a dropped plan that names a contact, with nothing started. */
+function isRefused(plan: Plan): boolean {
+  return plan.state === "dropped" && plan.dropReason === "policy_blocked" && plan.target !== undefined;
+}
+
+/**
+ * Who side b's person is when it is not the Muse's own persona. A plan that names a contact is with that
+ * contact (their Muse is still the seeded agent on screen); otherwise a room with a simulated friend is with
+ * Michelle. The contact wins, because it is the more specific fact.
+ */
+function standInOf(state: StateSnapshot, plan: Plan | null): UiSnapshot["standIn"] {
+  // A refused follow-up never had a counterpart: nothing started, so side b keeps its own identity.
+  if (plan?.target !== undefined && !isRefused(plan)) {
+    const name = getContact(plan.target)?.displayName ?? plan.target;
+    return { person: name, muse: `${name}'s Muse` };
+  }
+  if (state.room.simulatedFriend) return { person: simulatedFriend.human, muse: simulatedFriend.muse };
+  return null;
+}
+
+/**
+ * The agents and fixtures write text with the persona name. When side b's person is someone else (Michelle, or
+ * the contact), people see that name in every sentence about them; the raw JSON in the drawer stays as sent.
+ */
+function renameFor(standIn: UiSnapshot["standIn"]): (text: string) => string {
+  if (!standIn) return (text) => text;
+  const pattern = new RegExp(`\\b${displayName("lisa")}\\b`, "g");
+  return (text) => text.replace(pattern, standIn.person);
 }
 
 function placeWithheld(plan: Plan, state: StateSnapshot): boolean {
@@ -54,8 +73,9 @@ function placeFor(plan: Plan, state: StateSnapshot): string | null {
   return candidates.find((candidate): candidate is string => Boolean(candidate) && candidate !== title) ?? null;
 }
 
-function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
-  const rename = renameFor(state);
+function toUiPlan(plan: Plan, state: StateSnapshot, rename: (text: string) => string): UiPlan {
+  const refused = isRefused(plan);
+  const target = plan.target !== undefined ? { id: plan.target, name: getContact(plan.target)?.displayName ?? plan.target } : null;
   return {
     id: plan.id,
     contextId: plan.contextId,
@@ -64,13 +84,19 @@ function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
     activityTitle: plan.activity?.title ?? "the plan",
     place: placeFor(plan, state),
     placeWithheld: placeWithheld(plan, state),
+    target,
+    refused,
     window: plan.window ?? null,
     decisions: {
       a: (plan.decisions.aaron ?? "pending") as Decision,
       b: (plan.decisions.lisa ?? "pending") as Decision,
     },
     draft: plan.draft ? rename(plan.draft) : null,
-    droppedReason: plan.state === "dropped" ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null) : null,
+    droppedReason: refused
+      ? `${displayName("aaron")} only reaches out to people who follow each other`
+      : plan.state === "dropped"
+        ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null)
+        : null,
     history: plan.history.map(({ state, at }) => ({ state, at })),
   };
 }
@@ -93,34 +119,33 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-/** A start-path refusal: the gate said no before any thread or message existed, so the event names neither. */
-function isRefusal(event: StateSnapshot["events"][number]): boolean {
-  return event.kind === "message_rejected" && !event.messageId;
-}
-
 const noteKinds = new Set<string>(["caption_extracted", "thread_opened", "policy_changed"]);
 
-function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
-  return events.flatMap((event): UiNote[] => {
+function toNotes(state: StateSnapshot, rename: (text: string) => string): UiNote[] {
+  const followUps = new Map(state.plans.filter((plan) => plan.target !== undefined).map((plan) => [plan.id, plan]));
+  return state.events.flatMap((event): UiNote[] => {
     const text = rename(event.text);
-    if (isRefusal(event)) return [{ id: event.id, kind: "contact_refused", at: event.at, text }];
+    const followUp = event.planId ? followUps.get(event.planId) : undefined;
+    if (followUp && event.kind === "signal_received") return [{ id: event.id, kind: "contact_chosen", at: event.at, text }];
+    if (followUp && isRefused(followUp) && event.kind === "plan_state") return [{ id: event.id, kind: "contact_refused", at: event.at, text }];
     if (noteKinds.has(event.kind)) return [{ id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text }];
     return [];
   });
 }
 
-/** The latest refusal, shown on the phone only while no plan is running: a plan that started has superseded it. */
+/** The latest plan, when it is a refused follow-up: a plan that starts afterwards supersedes it on the phone. */
 function refusalOf(state: StateSnapshot, plan: Plan | null, rename: (text: string) => string): UiRefusal | null {
-  if (plan && plan.state !== "dropped") return null;
-  const refused = state.events.filter(isRefusal).at(-1);
-  if (!refused) return null;
-  const text = rename(refused.text);
-  const contact = fixtureContacts.find((candidate) => text.includes(candidate.name));
-  return { id: refused.id, at: refused.at, contactName: contact?.name ?? "them", text };
+  if (!plan || !isRefused(plan) || plan.target === undefined) return null;
+  const shown = state.events.filter((event) => event.kind === "plan_state" && event.planId === plan.id).at(-1);
+  return {
+    id: plan.id,
+    at: plan.history.at(-1)?.at ?? plan.updatedAt,
+    contactName: getContact(plan.target)?.displayName ?? plan.target,
+    text: shown ? rename(shown.text) : "Nothing was started",
+  };
 }
 
-function toUiMessages(state: StateSnapshot): UiMessage[] {
-  const rename = renameFor(state);
+function toUiMessages(state: StateSnapshot, rename: (text: string) => string): UiMessage[] {
   return state.messages.map((record) => {
     const { message } = record;
     const rejected = record.delivery !== "delivered";
@@ -181,20 +206,31 @@ function toFollowThrough(events: StateSnapshot["events"], rename: (text: string)
 
 export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapshot {
   const plan = latestPlan(state.plans);
-  const messages = toUiMessages(state);
+  const standIn = standInOf(state, plan);
+  const rename = renameFor(standIn);
+  const messages = toUiMessages(state, rename);
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
     mode: overlay.mode,
     simulatedFriend: state.room.simulatedFriend,
+    standIn,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: toNotes(state.events, renameFor(state)),
-    contacts: fixtureContacts,
-    refusal: refusalOf(state, plan, renameFor(state)),
-    plan: plan ? toUiPlan(plan, state) : null,
+    notes: toNotes(state, rename),
+    contacts: CONTACTS.map((contact) => ({
+      id: contact.id,
+      name: contact.displayName,
+      tier: contact.tier,
+      youFollow: contact.youFollow,
+      followsYou: contact.followsYou,
+      mutualFollow: isMutual(contact),
+      note: contact.howYouMet,
+    })),
+    refusal: refusalOf(state, plan, rename),
+    plan: plan ? toUiPlan(plan, state, rename) : null,
     followThrough: {
-      events: toFollowThrough(state.events, renameFor(state)),
+      events: toFollowThrough(state.events, rename),
       agentMessageCount: messages.length,
       humanTapCount: state.events.filter((event) => event.actor === "human" && humanTapKinds.has(event.kind)).length,
     },

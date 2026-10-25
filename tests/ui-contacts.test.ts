@@ -1,92 +1,145 @@
 import { describe, expect, it } from "vitest";
+import { startFollowUp } from "@/lib/agent/followup";
 import { recordedSnapshot, seedSnapshot } from "@/lib/seed/fixtures";
+import { JsonStore } from "@/lib/store/json";
 import { viewForRole } from "@/lib/ui/chat";
-import { fixtureContacts, followMark } from "@/lib/ui/contacts";
+import { followMark } from "@/lib/ui/contacts";
+import { goalSteps } from "@/lib/ui/goals";
+import { discInitials, namesFor } from "@/lib/ui/format";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 
 const live = { mode: "live" } as const;
 
-function refused(name = "Pax") {
-  const state = seedSnapshot();
-  state.events.push({
-    id: "evt_refused",
-    at: state.clock.now,
-    kind: "message_rejected",
-    actor: "system",
-    text: `Sprout did not start a thread with ${name}: you do not follow each other`,
-  });
-  return state;
+async function freshStore() {
+  const store = new JsonStore(null);
+  await store.replaceAll(seedSnapshot());
+  return store;
+}
+
+async function ui(store: JsonStore) {
+  return toUiSnapshot(await store.snapshot(), live);
 }
 
 describe("who the entry offers", () => {
-  it("lists a friend, a mutual acquaintance, and one who does not follow back", () => {
-    const byTier = (tier: string) => fixtureContacts.filter((contact) => contact.tier === tier);
-    expect(byTier("friend").every((contact) => contact.mutualFollow)).toBe(true);
-    expect(byTier("acquaintance").some((contact) => contact.mutualFollow)).toBe(true);
-    expect(byTier("acquaintance").some((contact) => !contact.mutualFollow)).toBe(true);
+  it("lists Lane A's contacts with the follow graph, and nothing private", async () => {
+    const { contacts } = await ui(await freshStore());
+    expect(contacts.map((contact) => contact.name)).toEqual(["Jules", "Riley"]);
+    expect(contacts.map((contact) => contact.mutualFollow)).toEqual([true, false]);
+    expect(Object.keys(contacts[0]).sort()).toEqual(["followsYou", "id", "mutualFollow", "name", "note", "tier", "youFollow"]);
   });
 
-  it("says the mutual-follow fact in words", () => {
-    expect(followMark({ ...fixtureContacts[0], mutualFollow: true })).toBe("Follows each other");
-    expect(followMark({ ...fixtureContacts[0], mutualFollow: false })).toBe("Doesn't follow back");
-  });
-
-  it("hands the UI only name, tier, mutual flag, and note: no calendar, no policy", () => {
-    const [contact] = toUiSnapshot(seedSnapshot(), live).contacts;
-    expect(Object.keys(contact).sort()).toEqual(["id", "mutualFollow", "name", "note", "tier"]);
+  it("says the follow graph in words, including which side is missing", () => {
+    expect(followMark({ youFollow: true, followsYou: true })).toBe("Follows each other");
+    expect(followMark({ youFollow: false, followsYou: true })).toBe("Follows you, you don't follow back");
+    expect(followMark({ youFollow: true, followsYou: false })).toBe("You follow, doesn't follow back");
+    expect(followMark({ youFollow: false, followsYou: false })).toBe("Not connected");
   });
 });
 
 describe("the phone entry", () => {
-  it("is on Sprout's side only, and only before a plan exists", () => {
-    const empty = toUiSnapshot(seedSnapshot(), live);
-    expect(viewForRole(empty, "a").items.some((item) => item.kind === "contact-entry")).toBe(true);
+  it("is on Sprout's side only, only before a plan is running, and after the shawarma card", async () => {
+    const empty = await ui(await freshStore());
+    const a = viewForRole(empty, "a").items.map((item) => item.kind);
+    expect(a).toContain("contact-entry");
+    expect(a.indexOf("start-card")).toBeLessThan(a.indexOf("contact-entry"));
     expect(viewForRole(empty, "b").items.some((item) => item.kind === "contact-entry")).toBe(false);
-    const running = toUiSnapshot(recordedSnapshot(), live);
-    expect(viewForRole(running, "a").items.some((item) => item.kind === "contact-entry")).toBe(false);
-  });
-
-  it("keeps the main demo path first: the simulated-friend card comes before the extra entry", () => {
-    const items = viewForRole(toUiSnapshot(seedSnapshot(), live), "a").items.map((item) => item.kind);
-    expect(items.indexOf("start-card")).toBeLessThan(items.indexOf("contact-entry"));
+    expect(viewForRole(toUiSnapshot(recordedSnapshot(), live), "a").items.some((item) => item.kind === "contact-entry")).toBe(false);
   });
 });
 
-describe("when the gate refuses", () => {
-  it("shows the person's choice and a neutral line, and nothing started", () => {
-    const snapshot = toUiSnapshot(refused(), live);
-    expect(snapshot.refusal).toMatchObject({ contactName: "Pax" });
-    expect(snapshot.plan).toBeNull();
+describe("a contact who does not follow back: the gate refuses", () => {
+  it("records a refused plan, and the phone says so neutrally while the entry stays available", async () => {
+    const store = await freshStore();
+    const result = await startFollowUp(store, { target: "riley" });
+    expect(result).toMatchObject({ ok: true, started: false, reason: "not_mutual" });
+    const snapshot = await ui(store);
+    expect(snapshot.plan).toMatchObject({ refused: true, state: "dropped", target: { id: "riley", name: "Riley" } });
+    expect(snapshot.plan?.droppedReason).toBe("Sprout only reaches out to people who follow each other");
+    expect(snapshot.refusal).toMatchObject({ contactName: "Riley", text: "No thread opened: you and Riley do not follow each other." });
+    expect(snapshot.messages).toEqual([]);
+    expect(snapshot.standIn).toBeNull();
+    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
+
     const items = viewForRole(snapshot, "a").items;
-    expect(items.find((item) => item.kind === "bubble" && item.id === "contact-chosen")).toMatchObject({ from: "user", text: "Follow up with Pax" });
+    expect(items.find((item) => item.kind === "bubble" && item.id === "contact-chosen")).toMatchObject({ from: "user", text: "Follow up with Riley" });
     expect(items.find((item) => item.kind === "bubble" && item.id === "contact-refused")).toMatchObject({
       from: "muse",
       text: "Sprout only reaches out to people who follow each other.",
     });
+    expect(items.some((item) => item.kind === "contact-entry")).toBe(true);
+    expect(items.some((item) => item.kind === "bubble" && item.id === "dropped")).toBe(false);
   });
 
-  it("leaves a plain row on the timeline, not a message and not a thread", () => {
-    const snapshot = toUiSnapshot(refused(), live);
-    expect(snapshot.notes.map((note) => note.kind)).toEqual(["contact_refused"]);
-    expect(snapshot.messages).toEqual([]);
+  it("leaves two plain rows on the timeline: who was asked about, and the refusal", async () => {
+    const store = await freshStore();
+    await startFollowUp(store, { target: "riley" });
+    const { notes } = await ui(store);
+    expect(notes.map((note) => note.kind)).toEqual(["contact_chosen", "contact_refused"]);
+    expect(notes[1].text).toContain("do not follow each other");
   });
 
-  it("does not show the refusal on Mochi's side", () => {
-    const items = viewForRole(toUiSnapshot(refused(), live), "b").items;
+  it("says nothing about it on Mochi's side", async () => {
+    const store = await freshStore();
+    await startFollowUp(store, { target: "riley" });
+    const items = viewForRole(await ui(store), "b").items;
     expect(items.some((item) => item.kind === "bubble" && item.id === "contact-refused")).toBe(false);
   });
+});
 
-  it("a plan that starts afterwards supersedes the refusal on the phone, while the timeline keeps it", () => {
-    const state = recordedSnapshot();
-    state.events.unshift({ id: "evt_refused", at: state.clock.now, kind: "message_rejected", actor: "system", text: "Sprout did not start a thread with Pax: you do not follow each other" });
-    const snapshot = toUiSnapshot(state, live);
+describe("a mutual acquaintance: the run starts, with a smaller footprint", () => {
+  it("names the contact in place of the persona, with an initial disc, and keeps the Muse a Muse", async () => {
+    const store = await freshStore();
+    expect(await startFollowUp(store, { target: "jules" })).toMatchObject({ ok: true, started: true });
+    const snapshot = await ui(store);
+    expect(snapshot.plan).toMatchObject({ refused: false, state: "detected", target: { id: "jules", name: "Jules" } });
+    expect(snapshot.standIn).toEqual({ person: "Jules", muse: "Jules's Muse" });
+    expect(namesFor(snapshot).human.lisa).toBe("Jules");
+    expect(namesFor(snapshot).muse.lisa).toBe("Jules's Muse");
+    expect(discInitials(snapshot)).toEqual({ aaron: null, lisa: "J" });
+    expect(viewForRole(snapshot, "a").friendHumanName).toBe("Jules");
+  });
+
+  it("never talks about a reel: no reel in the card, the status, the goal, or phone b's chat", async () => {
+    const store = await freshStore();
+    await startFollowUp(store, { target: "jules" });
+    const snapshot = await ui(store);
+    expect(snapshot.plan?.target?.name).toBe("Jules");
+    const a = viewForRole(snapshot, "a");
+    expect(a.status).toBe("💬 reaching out to Jules");
+    expect(a.items.find((item) => item.kind === "bubble" && item.id === "contact-chosen")).toMatchObject({ from: "user", text: "Follow up with Jules" });
+    const b = viewForRole(snapshot, "b");
+    expect(b.items.some((item) => item.kind === "bubble" && item.id === "reel-sent")).toBe(false);
+    expect(b.status).toBeNull();
+    expect(goalSteps(snapshot.plan!, { friend: "Jules", reelOwner: "Jules's", muses: ["Sprout", "Jules's Muse"] })[0].detail).toBe("You asked to follow up with Jules");
+  });
+
+  it("shows the contact chosen and the sharing level on the timeline, and no entry while it runs", async () => {
+    const store = await freshStore();
+    await startFollowUp(store, { target: "jules" });
+    const snapshot = await ui(store);
+    expect(snapshot.notes.map((note) => note.kind)).toEqual(["contact_chosen", "policy_changed"]);
+    expect(snapshot.notes[1].text).toContain("never location");
+    expect(snapshot.sharing.lisa.tier).toBe("acquaintance");
+    expect(snapshot.sharing.lisa.categories.location).toBe(false);
+    expect(viewForRole(snapshot, "a").items.some((item) => item.kind === "contact-entry")).toBe(false);
+  });
+
+  it("a plan that starts after a refusal supersedes it on the phone, while the timeline keeps it", async () => {
+    const store = await freshStore();
+    await startFollowUp(store, { target: "riley" });
+    await startFollowUp(store, { target: "jules" });
+    const snapshot = await ui(store);
     expect(snapshot.refusal).toBeNull();
     expect(snapshot.notes.some((note) => note.kind === "contact_refused")).toBe(true);
   });
 
-  it("a rejected message in a thread is not a refusal", () => {
-    const state = recordedSnapshot();
-    state.events.push({ id: "evt_rej", at: state.clock.now, kind: "message_rejected", actor: "system", contextId: state.threads[0].contextId, messageId: state.messages[0].message.id, text: "Blocked at the inbox" });
-    expect(toUiSnapshot(state, live).notes.some((note) => note.kind === "contact_refused")).toBe(false);
+  it("renames the persona in human-facing text, and leaves the raw record alone", async () => {
+    const store = await freshStore();
+    await startFollowUp(store, { target: "jules" });
+    const plan = (await store.listPlans())[0];
+    await store.putPlan({ ...plan, draft: "Hey Mochi, want to get food again?" });
+    const snapshot = await ui(store);
+    expect(snapshot.plan?.draft).toBe("Hey Jules, want to get food again?");
+    expect((await store.listPlans())[0].draft).toContain("Mochi");
   });
 });

@@ -1,20 +1,11 @@
-import type { UiContact } from "./types";
+import type { ShareTier, UiContact } from "./types";
 
-/*
- * The people on the "Follow up with someone you met" list. PLACEHOLDER: until
- * Lane A's seed names the real contacts, this fixture stands in (fictional
- * names, no real people). The snapshot adapter is the only reader, so swapping
- * in the seed is a one-function change.
- */
-export const fixtureContacts: UiContact[] = [
-  { id: "lisa", name: "Mochi", tier: "friend", mutualFollow: true, note: "Your usual shawarma partner" },
-  { id: "juno", name: "Juno", tier: "acquaintance", mutualFollow: true, note: "Met at a concert last month" },
-  { id: "pax", name: "Pax", tier: "acquaintance", mutualFollow: false, note: "Chatted once at a meetup" },
-];
+export const tierLabel: Record<ShareTier, string> = { close: "close friend", friend: "friend", acquaintance: "acquaintance", off: "off" };
 
-export const tierLabel: Record<UiContact["tier"], string> = { friend: "friend", acquaintance: "acquaintance" };
-
-/** The mutual-follow mark: the one fact the gate checks, said in words. */
-export function followMark(contact: UiContact): string {
-  return contact.mutualFollow ? "Follows each other" : "Doesn't follow back";
+/** The follow graph in words: the one fact the start gate checks, and which side of it is missing. */
+export function followMark(contact: Pick<UiContact, "youFollow" | "followsYou">): string {
+  if (contact.youFollow && contact.followsYou) return "Follows each other";
+  if (contact.followsYou) return "Follows you, you don't follow back";
+  if (contact.youFollow) return "You follow, doesn't follow back";
+  return "Not connected";
 }

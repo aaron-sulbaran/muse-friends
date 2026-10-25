@@ -2,7 +2,7 @@
 
 import { UserCheck, UserMinus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { postSignal } from "@/lib/ui/actions";
+import { postFollowUp } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
 import { followMark, tierLabel } from "@/lib/ui/contacts";
 import type { UiContact } from "@/lib/ui/types";
@@ -32,10 +32,11 @@ export function ContactSheet({ contacts, museName, onChanged, onClose }: Props) 
   async function pick(contact: UiContact) {
     setPending(contact.id);
     setError(null);
-    const result = await postSignal(contact.id);
+    const result = await postFollowUp(contact.id);
     setPending(null);
     onChanged();
-    if (result.ok) onClose();
+    // A refusal is the gate working, not a failure: the timeline and the phone show it, so the sheet just closes.
+    if (result.ok || result.refused) onClose();
     else setError(result.message);
   }
 

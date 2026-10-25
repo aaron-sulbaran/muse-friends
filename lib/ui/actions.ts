@@ -1,8 +1,8 @@
 import type { Category, Role, ShareTier } from "./types";
 
-export type Result = { ok: true } | { ok: false; message: string };
+export type Result = { ok: true } | { ok: false; message: string; refused?: boolean };
 
-type ErrorBody = { error?: string | { message?: string } | null };
+type ErrorBody = { error?: string | { message?: string } | null; refused?: boolean; text?: string };
 
 async function post(url: string, body: unknown): Promise<Result> {
   try {
@@ -15,7 +15,7 @@ async function post(url: string, body: unknown): Promise<Result> {
     const payload = (await response.json().catch(() => null)) as ErrorBody | null;
     const error = payload?.error;
     const message = typeof error === "string" ? error : error?.message;
-    return { ok: false, message: message ?? `Request failed with ${response.status}` };
+    return { ok: false, message: message ?? payload?.text ?? `Request failed with ${response.status}`, refused: payload?.refused === true };
   } catch {
     return { ok: false, message: "Could not reach the server" };
   }
@@ -30,8 +30,16 @@ export function postHandoff(planId: string, role: Role, via: "whatsapp" | "copy"
 }
 
 /** "The friend sent a reel": starts a real run. The agents take it from here and the Activity timeline fills as they talk. */
-export function postSignal(contact?: string) {
-  return post("/api/signals", { scenario: "shawarma", ...(contact ? { contact } : {}) });
+export function postSignal() {
+  return post("/api/signals", { scenario: "shawarma" });
+}
+
+/**
+ * The person named someone they met. The gate decides whether Sprout may reach out: a refusal comes back as
+ * `refused`, with nothing started, and is shown on the timeline and the phone rather than as an error.
+ */
+export function postFollowUp(target: string) {
+  return post("/api/signals", { scenario: "follow_up", target });
 }
 
 /**

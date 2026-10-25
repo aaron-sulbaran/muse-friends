@@ -42,7 +42,7 @@ function dayAndTime(iso: string): string {
 export function stepDetail(state: PlanState, plan: UiPlan, at: string, context: GoalContext): string {
   switch (state) {
     case "detected":
-      return `From ${context.reelOwner} reel`;
+      return plan.target ? `You asked to follow up with ${context.friend}` : `From ${context.reelOwner} reel`;
     case "negotiating":
       return `${context.muses[0]} and ${context.muses[1]} are comparing times`;
     case "awaiting_humans":

@@ -1,4 +1,4 @@
-import { categoryLabel, simulatedFriend } from "./tokens";
+import { categoryLabel } from "./tokens";
 import type { AgentId, Category, TimeWindow, UiMessage, UiSnapshot } from "./types";
 
 /** Every time the UI shows is Central, matching the event schedule. */
@@ -139,12 +139,17 @@ export type Names = {
 };
 
 /** Every visible name comes from the snapshot's persona display names, never from the internal ids. */
-export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "simulatedFriend">): Names {
-  const simulated = snapshot.simulatedFriend;
+export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "standIn">): Names {
+  const { standIn } = snapshot;
   return {
-    muse: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.muse : snapshot.sides.lisa },
-    human: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.human : snapshot.sides.lisa },
+    muse: { aaron: snapshot.sides.aaron, lisa: standIn ? standIn.muse : snapshot.sides.lisa },
+    human: { aaron: snapshot.sides.aaron, lisa: standIn ? standIn.person : snapshot.sides.lisa },
   };
+}
+
+/** The letter for a grey initial disc, for the side whose person is not the Muse's own persona; null means the character art. */
+export function discInitials(snapshot: Pick<UiSnapshot, "standIn">): Record<AgentId, string | null> {
+  return { aaron: null, lisa: snapshot.standIn ? snapshot.standIn.person.charAt(0) : null };
 }
 
 function listOf(items: string[]): string {

@@ -62,6 +62,10 @@ export type UiPlan = {
   initiator: AgentId;
   state: PlanState;
   activityTitle: string;
+  /** The contact this plan is a follow-up with, when the person named one instead of a reel arriving. */
+  target: { id: string; name: string } | null;
+  /** True when the start gate refused this follow-up: nothing started, and the phone and timeline say so. */
+  refused: boolean;
   /** Where, when the caption or a message named a place that adds to the title and policy has not withheld it. */
   place: string | null;
   /** True once a redaction removed location from this plan's thread: the card says so instead of showing a place. */
@@ -84,7 +88,9 @@ export type FollowThroughEvent = {
 export type UiContact = {
   id: string;
   name: string;
-  tier: "friend" | "acquaintance";
+  tier: ShareTier;
+  youFollow: boolean;
+  followsYou: boolean;
   /** True when the two follow each other; Sprout only reaches out to people who do. */
   mutualFollow: boolean;
   /** One line on how they know each other. */
@@ -97,7 +103,7 @@ export type UiRefusal = { id: string; at: string; contactName: string; text: str
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "contact_refused";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "contact_chosen" | "contact_refused";
   at: string;
   text: string;
 };
@@ -119,6 +125,11 @@ export type UiSnapshot = {
   mode: "live" | "replay";
   /** True when side b is played by the model instead of a second human. */
   simulatedFriend: boolean;
+  /**
+   * Who side b's person is when it is not the Muse's own persona: the simulated friend, or the contact the
+   * person chose to follow up with. Their name replaces the persona's in sentences, and they get an initial disc.
+   */
+  standIn: { person: string; muse: string } | null;
   /** What people see for each side: the Muse characters' names, never the internal ids. */
   sides: Record<AgentId, string>;
   messages: UiMessage[];

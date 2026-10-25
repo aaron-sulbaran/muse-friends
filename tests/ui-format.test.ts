@@ -78,8 +78,8 @@ describe("activity titles", () => {
 
 });
 
-const sprout = { sides: { aaron: "Sprout", lisa: "Mochi" }, simulatedFriend: false } as const;
-const withMichelle = { ...sprout, simulatedFriend: true } as const;
+const sprout = { sides: { aaron: "Sprout", lisa: "Mochi" }, standIn: null } as const;
+const withMichelle = { ...sprout, standIn: { person: "Michelle", muse: "Michelle's Muse" } } as const;
 
 describe("names", () => {
   it("come from the persona display names, and swap in the simulated friend", () => {

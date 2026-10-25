@@ -4,7 +4,7 @@ import { BatteryFull, Shield, Signal, Users, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
-import { formatStatusBarTime, namesFor } from "@/lib/ui/format";
+import { discInitials, formatStatusBarTime, namesFor } from "@/lib/ui/format";
 import { postDecision, postHandoff } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import type { Role, UiSnapshot } from "@/lib/ui/types";
@@ -62,6 +62,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const thinking = snapshot.inFlight?.agent === view.agent;
   const simulated = snapshot.simulatedFriend;
   const names = namesFor(snapshot);
+  const initials = discInitials(snapshot);
   const goalContext: GoalContext = {
     friend: view.friendHumanName,
     reelOwner: role === "a" ? `${view.friendHumanName}'s` : "your",
@@ -105,7 +106,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             plan={item.plan}
             role={role}
             view={view}
-            simulatedFriend={simulated}
+            friendInitial={initials[view.friend]}
             pending={pending || readOnly}
             onDecide={(choice) => decide(item.plan.id, choice)}
           />
@@ -147,10 +148,10 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={`Open ${view.museName} settings`}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
+                <MuseAvatar agent={view.agent} initial={initials[view.agent]} name={view.museName} size={44} />
               </button>
             ) : (
-              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
+              <MuseAvatar agent={view.agent} initial={initials[view.agent]} name={view.museName} size={44} />
             )}
             <StatusPill name={view.museName} status={view.status} />
             {role === "b" && !readOnly ? (
@@ -200,7 +201,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       ) : null}
       {sheetOpen && role === "b" ? (
         <AvatarSheet
-          simulated={simulated}
+          initial={initials.lisa}
           museName={view.museName}
           friendMuseName={view.friendMuseName}
           sharing={snapshot.sharing.lisa}

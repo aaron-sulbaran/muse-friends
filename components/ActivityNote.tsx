@@ -1,4 +1,4 @@
-import { Film, MessageCircle, Shield, UserMinus, type LucideIcon } from "lucide-react";
+import { Film, MessageCircle, Shield, UserMinus, Users, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
 
@@ -6,6 +6,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
   caption_extracted: { icon: Film, title: "Read the reel caption" },
   thread_opened: { icon: MessageCircle, title: "Opened a thread" },
   policy_changed: { icon: Shield, title: "Changed sharing" },
+  contact_chosen: { icon: Users, title: "Asked to follow up" },
   contact_refused: { icon: UserMinus, title: "Did not reach out", plain: true },
 };
 

@@ -42,7 +42,8 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   const theirs = { muse: names.muse[friend], human: names.human[friend] };
 
   const items: ChatItem[] = [];
-  const plan = snapshot.plan;
+  // A refused follow-up is a dropped plan on the record, but on the phone nothing started: the person can try again.
+  const plan = snapshot.plan && !snapshot.plan.refused ? snapshot.plan : null;
 
   items.push({ kind: "separator", id: "sep-old", day: "Sep 28", time: "6:14 PM" });
   if (role === "a") {
@@ -72,7 +73,10 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
 
   const today = daySeparatorFor(plan.history[0]?.at ?? snapshot.now, plan.history[0]?.at ?? snapshot.now);
   items.push({ kind: "separator", id: "sep-today", day: "Today", time: today.time });
-  if (role === "b") {
+  // The person's choice, in their own words, when the plan began with them naming someone.
+  if (role === "a" && plan.target) items.push({ kind: "bubble", id: "contact-chosen", from: "user", text: copy.contactChosen(plan.target.name) });
+  // A follow-up has no reel: only a shared reel is "sent" from side b.
+  if (role === "b" && !plan.target) {
     items.push({ kind: "bubble", id: "reel-sent", from: "user", text: `Send this to ${theirs.human} 🎞️` });
     items.push({ kind: "bubble", id: "reel-sent-ack", from: "muse", text: `Sent it to ${theirs.human}.` });
   }
@@ -84,7 +88,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
 
   switch (plan.state) {
     case "detected":
-      status = role === "a" ? copy.statusReading(theirs.human) : null;
+      status = role === "a" ? (plan.target ? copy.statusReachingOut(theirs.human) : copy.statusReading(theirs.human)) : null;
       break;
     case "negotiating":
       status = copy.statusTalking(theirs.muse);

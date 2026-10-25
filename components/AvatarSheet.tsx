@@ -8,8 +8,8 @@ import type { Category, ShareTier, SharingSettings } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
 
 type Props = {
-  /** True when this Muse's person is the simulated friend: the avatar is the grey initial disc. */
-  simulated: boolean;
+  /** The grey-disc letter when this Muse person is a stand-in; null for the character art. */
+  initial: string | null;
   /** The Muse whose sharing this is, and the friend it is shared with. */
   museName: string;
   friendMuseName: string;
@@ -22,6 +22,7 @@ type Props = {
 const tiers: ReadonlyArray<{ value: ShareTier; label: string }> = [
   { value: "close", label: "Close friend" },
   { value: "friend", label: "Friend" },
+  { value: "acquaintance", label: "Acquaintance" },
   { value: "off", label: "Off" },
 ];
 
@@ -38,7 +39,7 @@ const categories: ReadonlyArray<{ value: Category; label: string; fixedOn?: stri
  * switch is checked in code on the next message and replays the propose, so
  * the withheld stamp shows up in Activity.
  */
-export function AvatarSheet({ simulated, museName, friendMuseName, sharing, onChanged, onClose }: Props) {
+export function AvatarSheet({ initial, museName, friendMuseName, sharing, onChanged, onClose }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -80,7 +81,7 @@ export function AvatarSheet({ simulated, museName, friendMuseName, sharing, onCh
               <img src="/wordmark/muse-friends-wordmark.svg" alt="Muse Friends" className="h-[22px] w-auto" />
             </h2>
             <div className="mt-3 flex items-center gap-3">
-              <MuseAvatar agent="lisa" simulated={simulated} name={museName} size={40} />
+              <MuseAvatar agent="lisa" initial={initial} name={museName} size={40} />
               <div>
                 <p className="text-[15px] font-semibold leading-5">{museName}</p>
                 <p className="text-[13px] leading-[18px] text-muted">Sharing with {friendMuseName}</p>
@@ -101,14 +102,14 @@ export function AvatarSheet({ simulated, museName, friendMuseName, sharing, onCh
         <fieldset className="mt-5">
           <legend className="sr-only">Who {friendMuseName} is to {museName}</legend>
           <div className="flex gap-1 rounded-full bg-group p-1">
-            {tiers.map(({ value, label }) => (
+            {tiers.filter(({ value }) => value !== "acquaintance" || sharing.tier === "acquaintance").map(({ value, label }) => (
               <label key={value} className="flex-1">
                 <input
                   type="radio"
                   name="tier"
                   value={value}
                   checked={sharing.tier === value}
-                  disabled={pending || value === "off"}
+                  disabled={pending || value === "off" || value === "acquaintance"}
                   onChange={() => change({ tier: value })}
                   className="peer sr-only"
                 />

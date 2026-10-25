@@ -42,7 +42,7 @@ export function Stage() {
         </div>
         <div className="h-[640px] min-h-0 min-[600px]:order-2 min-[900px]:order-3 min-[900px]:h-full">
           {snapshot ? (
-            <FitPhone label={snapshot.simulatedFriend ? `${names?.muse.lisa}, a simulated friend` : `${names?.muse.lisa}'s side`}>
+            <FitPhone label={snapshot.simulatedFriend ? `${names?.muse.lisa}, a simulated friend` : snapshot.standIn ? `${names?.muse.lisa}` : `${names?.muse.lisa}'s side`}>
               <MuseScreen snapshot={snapshot} role="b" framed onChanged={refresh} readOnly={replay.active} />
             </FitPhone>
           ) : null}

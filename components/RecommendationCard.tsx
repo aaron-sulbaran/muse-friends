@@ -9,7 +9,8 @@ type Props = {
   plan: UiPlan;
   role: Role;
   view: PhoneView;
-  simulatedFriend: boolean;
+  /** The grey-disc letter for the friend avatar, when the friend is a stand-in. */
+  friendInitial: string | null;
   /** True while a decision is on its way to the server. */
   pending: boolean;
   onDecide: (choice: "accept" | "decline") => void;
@@ -28,7 +29,7 @@ function Row({ icon, title, detail }: { icon: React.ReactNode; title: string; de
 }
 
 /** The one approval card per plan, in the checkout-card pattern: a title, a grey reason, grouped rows, two pills. */
-export function RecommendationCard({ plan, role, view, simulatedFriend, pending, onDecide }: Props) {
+export function RecommendationCard({ plan, role, view, friendInitial, pending, onDecide }: Props) {
   const reelOwner = role === "a" ? `${view.friendHumanName}'s` : "your";
   return (
     <section
@@ -39,18 +40,18 @@ export function RecommendationCard({ plan, role, view, simulatedFriend, pending,
         <CalendarClock className="mt-0.5 size-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
         <h3 className="text-[17px] font-semibold leading-[22px]">{copy.cardTitle(view.museName, view.friendHumanName)}</h3>
       </div>
-      <p className="mt-1 text-[13px] leading-[18px] text-muted">{copy.cardReason(reelOwner)}</p>
+      <p className="mt-1 text-[13px] leading-[18px] text-muted">{plan.target ? copy.cardReasonFollowUp : copy.cardReason(reelOwner)}</p>
       <div className="mt-3 rounded-group bg-group px-3">
         <Row
           icon={<Film className="size-5" strokeWidth={1.75} aria-hidden="true" />}
-          title={`${plan.activityTitle} from ${reelOwner} reel`}
+          title={plan.target ? plan.activityTitle : `${plan.activityTitle} from ${reelOwner} reel`}
           detail={plan.place ?? (plan.placeWithheld ? copy.placeKeptPrivate : undefined)}
         />
         {plan.window ? (
           <Row icon={<Clock className="size-5" strokeWidth={1.75} aria-hidden="true" />} title={formatWindowFull(plan.window)} />
         ) : null}
         <div className="flex items-center gap-3 py-2">
-          <MuseAvatar agent={view.friend} simulated={simulatedFriend && view.friend === "lisa"} name={view.friendMuseName} size={36} />
+          <MuseAvatar agent={view.friend} initial={friendInitial} name={view.friendMuseName} size={36} />
           <p className="text-[15px] font-semibold leading-5">{copy.friendSaidYes(view.friendMuseName, view.friendHumanName)}</p>
         </div>
       </div>

@@ -17,6 +17,9 @@ export const copy = {
   cardTitle: (muse: string, friend: string) => `${muse} wants to make a plan with ${friend}`,
   /** `reelOwner` is already possessive: "Lisa's" or "your". */
   cardReason: (reelOwner: string) => `Based on ${reelOwner} reel and both calendars.`,
+  cardReasonFollowUp: "Based on both calendars.",
+  statusReachingOut: (friend: string) => `💬 reaching out to ${friend}`,
+  goalFollowUpStart: (friend: string) => `You asked to follow up with ${friend}`,
   placeKeptPrivate: "Place kept private",
   declineA: "Not now",
   acceptA: "Reach out",

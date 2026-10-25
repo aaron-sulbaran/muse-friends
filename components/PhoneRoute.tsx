@@ -22,7 +22,7 @@ export function PhoneRoute({ role }: { role: Role }) {
 
   const screen = <MuseScreen snapshot={snapshot} role={role} framed={framed} onChanged={refresh} />;
   const names = namesFor(snapshot);
-  const label = role === "a" ? `${names.muse.aaron}'s side` : snapshot.simulatedFriend ? `${names.muse.lisa}, a simulated friend` : `${names.muse.lisa}'s side`;
+  const label = role === "a" ? `${names.muse.aaron}'s side` : snapshot.simulatedFriend ? `${names.muse.lisa}, a simulated friend` : snapshot.standIn ? names.muse.lisa : `${names.muse.lisa}'s side`;
 
   if (!framed) {
     return (
