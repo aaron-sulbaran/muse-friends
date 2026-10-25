@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
 import { discInitials, formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
-import { modelLabel } from "@/lib/ui/model-name";
 import { postChat, postDecision, postHandoff, postPrivacy, postReplan, postSignal, postSimulatedFriendSwitch, type Result } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import { runInProgress } from "@/lib/ui/entry";
@@ -35,7 +34,7 @@ import { MemberCard } from "./MemberCard";
 import { MuseAvatar } from "./MuseAvatar";
 import { PaymentCard } from "./PaymentCard";
 import { OutcomeReplies } from "./OutcomeReplies";
-import { SimulatedFriendDisc } from "./PersonDisc";
+import { SimulatedFriendBanner } from "./SimulatedFriendBanner";
 import { SenderChip, SenderPicture } from "./SenderChip";
 import { ReelCard } from "./ReelCard";
 import { RecommendationCard } from "./RecommendationCard";
@@ -320,12 +319,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   return (
     <div className="relative flex h-full flex-col bg-screen">
       {framed ? <StatusBar time={formatStatusBarTime(snapshot.now)} /> : <div className="h-[env(safe-area-inset-top)] shrink-0" />}
-      {simulated && role === "b" ? (
-        <p className="flex shrink-0 items-center justify-center gap-2 bg-group px-4 py-2 text-center text-[13px] font-semibold">
-          <SimulatedFriendDisc size={20} />
-          {snapshot.simulatedFriendModel ? copy.simulatedFriendBannerModel(modelLabel(snapshot.simulatedFriendModel)) : copy.simulatedFriendBanner}
-        </p>
-      ) : null}
+      {simulated && role === "b" ? <SimulatedFriendBanner model={snapshot.simulatedFriendModel} /> : null}
       {tab === "chat" ? (
         <>
           <header className="relative flex shrink-0 flex-col items-center pb-3 pt-2">
