@@ -29,7 +29,10 @@ export type AvatarMood = "idle" | "thinking" | "talking";
 export type UiToolCall = { name: string; args: string; result: string };
 
 export type ModelProof = {
+  /** The model that answered. */
   model: string;
+  /** Present when a fallback answered: the configured model that did not (it answered 404 model not found). */
+  fallbackFrom?: string;
   responseId: string;
   latencyMs: number;
   inputTokens: number;
