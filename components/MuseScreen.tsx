@@ -1,6 +1,6 @@
 "use client";
 
-import { BatteryFull, Signal, Wifi } from "lucide-react";
+import { BatteryFull, Shield, Signal, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
@@ -8,6 +8,7 @@ import { formatStatusBarTime } from "@/lib/ui/format";
 import { postDecision, postHandoff } from "@/lib/ui/actions";
 import type { Role, UiSnapshot } from "@/lib/ui/types";
 import { ChatBubble, DaySeparator, TypingDots } from "./ChatBubble";
+import { AvatarSheet } from "./AvatarSheet";
 import { DraftCard } from "./DraftCard";
 import { HoldRow } from "./HoldRow";
 import { MuseAvatar } from "./MuseAvatar";
@@ -47,6 +48,7 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
 export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const thinking = snapshot.inFlight?.agent === view.agent;
   const simulated = snapshot.simulatedFriend;
@@ -100,9 +102,19 @@ export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
   return (
     <div className="relative flex h-full flex-col bg-screen">
       {framed ? <StatusBar time={formatStatusBarTime(snapshot.now)} /> : <div className="h-[env(safe-area-inset-top)] shrink-0" />}
-      <header className="flex shrink-0 flex-col items-center gap-1.5 pb-3 pt-2">
-        <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} size={44} />
+      <header className="relative flex shrink-0 flex-col items-center gap-1.5 pb-3 pt-2">
+        <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
         <StatusPill name={view.museName} status={view.status} />
+        {role === "b" ? (
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            aria-label={`${view.museName} sharing with ${view.friendMuseName}`}
+            className="absolute right-4 top-2 grid size-9 place-items-center rounded-full bg-group transition-colors hover:bg-bubble-muse"
+          >
+            <Shield className="size-5" strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        ) : null}
       </header>
       {simulated && role === "b" ? (
         <p className="mx-4 mb-2 rounded-tile bg-group px-3 py-2 text-center text-[13px] font-semibold">{copy.simulatedFriendBanner}</p>
@@ -122,6 +134,15 @@ export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
         </div>
       </div>
       <TabBar />
+      {sheetOpen && role === "b" ? (
+        <AvatarSheet
+          museName={view.museName}
+          friendMuseName={view.friendMuseName}
+          sharing={snapshot.sharing.lisa}
+          onChanged={onChanged}
+          onClose={() => setSheetOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
