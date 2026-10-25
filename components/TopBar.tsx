@@ -15,9 +15,9 @@ export function TopBar({ snapshot }: { snapshot: UiSnapshot | null }) {
     <header className="flex h-[72px] shrink-0 items-center justify-between px-12">
       <Link href="/" className="flex flex-col gap-1 text-ink no-underline">
         <h1 aria-label={copy.brand} className="inline-flex items-baseline whitespace-nowrap text-[22px] font-semibold leading-none tracking-[-0.01em]">
-          {/* Meta's script "Muse" in its own blue gradient, traced brand art (kb/design/wordmark/final), then "Friends" in sans. */}
+          {/* Meta's script "Muse" in its own blue gradient, traced brand art (kb/design/wordmark/final), then "Friends" in sans. The file is cut to its ink, so the box is the ink and `top` centers it on the capitals beside it. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/muse-script-blue.svg" alt="" height={26} width={68} className="mb-[-2.6px] mr-[4.5px] h-[26px] w-auto" />
+          <img src="/brand/muse-script-blue.svg" alt="" height={23} width={66} className="relative top-[3.95px] mr-[5px] h-[23.4px] w-[65.8px]" />
           Friends
         </h1>
         <Subline />
