@@ -1,4 +1,4 @@
-import { copy } from "./copy";
+import { copy, onboardingCopy } from "./copy";
 import { googleCalendarUrl } from "./gcal";
 import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, namesFor } from "./format";
 import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib/seed/past-signals";
@@ -294,14 +294,14 @@ function dayWordFor(iso: string): string {
  * Pure like the rest of this file. `friendName` is the room's friend (Michelle in the demo).
  */
 export function onboardingItems(state: OnboardingState, friendName: string): ChatItem[] {
-  const greeting: ChatItem = { kind: "bubble", id: "onboarding-greeting", from: "muse", text: copy.onboarding.greeting };
+  const greeting: ChatItem = { kind: "bubble", id: "onboarding-greeting", from: "muse", text: onboardingCopy.greeting };
   if (state.step === "name") return [greeting, { kind: "onboarding-friends", id: "onboarding-friends" }];
-  if (state.friendsOn) return [greeting, { kind: "bubble", id: "onboarding-answer", from: "user", text: copy.onboarding.turnOn }];
+  if (state.friendsOn) return [greeting, { kind: "bubble", id: "onboarding-answer", from: "user", text: onboardingCopy.turnOn }];
   return [
     greeting,
-    { kind: "bubble", id: "onboarding-answer", from: "user", text: copy.onboarding.notNow },
+    { kind: "bubble", id: "onboarding-answer", from: "user", text: onboardingCopy.notNow },
     { kind: "onboarding-optout", id: "onboarding-optout" },
-    { kind: "bubble", id: "onboarding-needs-friends", from: "muse", text: copy.onboarding.needsFriends(friendName) },
+    { kind: "bubble", id: "onboarding-needs-friends", from: "muse", text: onboardingCopy.needsFriends(friendName) },
     { kind: "onboarding-turn-on", id: "onboarding-turn-on" },
   ];
 }

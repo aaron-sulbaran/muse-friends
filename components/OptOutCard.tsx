@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { copy } from "@/lib/ui/copy";
+import { onboardingCopy } from "@/lib/ui/copy";
 import { ChatBubble } from "./ChatBubble";
 import { CardShell, Pill } from "./CardShell";
 
@@ -11,16 +11,16 @@ import { CardShell, Pill } from "./CardShell";
  */
 export function OptOutCard() {
   const [acknowledged, setAcknowledged] = useState(false);
-  if (acknowledged) return <ChatBubble from="user">{copy.onboarding.gotIt}</ChatBubble>;
+  if (acknowledged) return <ChatBubble from="user">{onboardingCopy.gotIt}</ChatBubble>;
   return (
-    <CardShell label={copy.onboarding.optOutTitle}>
-      <h3 className="text-[17px] font-semibold leading-[22px]">{copy.onboarding.optOutTitle}</h3>
-      <p className="mt-3 text-[15px] leading-[21px]">{copy.onboarding.optOutOff}</p>
-      <p className="mt-2 text-[15px] leading-[21px]">{copy.onboarding.optOutNothingShared}</p>
+    <CardShell label={onboardingCopy.optOutTitle}>
+      <h3 className="text-[17px] font-semibold leading-[22px]">{onboardingCopy.optOutTitle}</h3>
+      <p className="mt-3 text-[15px] leading-[21px]">{onboardingCopy.optOutOff}</p>
+      <p className="mt-2 text-[15px] leading-[21px]">{onboardingCopy.optOutNothingShared}</p>
       <Pill tone="grey" onClick={() => setAcknowledged(true)} className="mt-4 w-full">
-        {copy.onboarding.gotIt}
+        {onboardingCopy.gotIt}
       </Pill>
-      <p className="mt-3 text-center text-[13px] leading-[18px] text-muted">{copy.onboarding.turnOnAnytime}</p>
+      <p className="mt-3 text-center text-[13px] leading-[18px] text-muted">{onboardingCopy.turnOnAnytime}</p>
     </CardShell>
   );
 }
@@ -29,7 +29,7 @@ export function OptOutCard() {
 export function TurnOnFriendsPill({ onTurnOn }: { onTurnOn: () => void }) {
   return (
     <Pill tone="accent" onClick={onTurnOn}>
-      {copy.onboarding.turnOn}
+      {onboardingCopy.turnOn}
     </Pill>
   );
 }

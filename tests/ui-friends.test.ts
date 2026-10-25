@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AvatarSheet } from "@/components/AvatarSheet";
 import { FriendPickerSheet } from "@/components/FriendPickerSheet";
 import { SEEDED_FRIENDS } from "@/lib/seed/friends";
-import { copy } from "@/lib/ui/copy";
+import { onboardingCopy } from "@/lib/ui/copy";
 import { initialOnboarding, reduceOnboarding, type OnboardingAction } from "@/lib/ui/onboarding";
 
 const noop = () => undefined;
@@ -59,9 +59,9 @@ describe("2b: the synced Close Friends list", () => {
   const html = render("synced", stateAfter({ type: "friendsOn" }, { type: "sync" }));
 
   it("says where the list came from, with the seeded chip", () => {
-    expect(html).toContain(copy.onboarding.seededChip);
-    expect(html).toContain(escaped(copy.onboarding.syncedTitle));
-    expect(html).toContain(escaped(copy.onboarding.syncedLine));
+    expect(html).toContain(onboardingCopy.seededChip);
+    expect(html).toContain(escaped(onboardingCopy.syncedTitle));
+    expect(html).toContain(escaped(onboardingCopy.syncedLine));
   });
 
   it("shows every friend at Close friend, with all three tiers still choosable", () => {
@@ -80,9 +80,9 @@ describe("2b: the synced Close Friends list", () => {
   });
 
   it("ends with the not-told line and Back and Continue at the same size", () => {
-    expect(html).toContain(copy.onboarding.notTold);
+    expect(html).toContain(onboardingCopy.notTold);
     const pills = [...html.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map(([, label]) => label);
-    expect(pills).toEqual([copy.onboarding.back, copy.onboarding.continue]);
+    expect(pills).toEqual([onboardingCopy.back, onboardingCopy.continue]);
   });
 });
 
@@ -98,13 +98,13 @@ describe("2c: pick friends", () => {
   it("lists Michelle first with the fact that orders the list, and has no seeded chip", () => {
     expect(html.indexOf("Michelle")).toBeLessThan(html.indexOf("Priya"));
     expect(html).toContain("Sent you a reel today");
-    expect(html).not.toContain(copy.onboarding.seededChip);
+    expect(html).not.toContain(onboardingCopy.seededChip);
   });
 
   it("ends with the footer and Not now beside Continue", () => {
     expect(html).toContain("They are not told which group they are in.");
     const pills = [...html.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map(([, label]) => label);
-    expect(pills).toEqual([copy.onboarding.notNow, copy.onboarding.continue]);
+    expect(pills).toEqual([onboardingCopy.notNow, onboardingCopy.continue]);
   });
 
   it("follows the state: a friend moved to Friend shows Friend", () => {
@@ -126,5 +126,5 @@ describe("the avatar sheet keeps working on the extracted tier control", () => {
 });
 
 function text(key: "whoTitle" | "whoLine" | "syncTitle" | "syncLine" | "pickTitle" | "pickLine" | "notTold" | "notNow"): string {
-  return copy.onboarding[key];
+  return onboardingCopy[key];
 }

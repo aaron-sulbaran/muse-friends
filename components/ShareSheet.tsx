@@ -4,7 +4,7 @@ import { Clock, Lock } from "lucide-react";
 import type { SeededFriend } from "@/lib/seed/friends";
 import type { PrivacyChange } from "@/lib/ui/actions";
 import { EVENT_NAMES_LINE, FREE_TIMES_LINE, SWITCH_ROWS, TIER_LABELS } from "@/lib/ui/categories";
-import { copy } from "@/lib/ui/copy";
+import { onboardingCopy } from "@/lib/ui/copy";
 import type { ShareTier, SharingSettings } from "@/lib/ui/types";
 import { Pill } from "./CardShell";
 import { FriendDiscWithMuse } from "./FriendDiscWithMuse";
@@ -24,7 +24,7 @@ type Props = {
 
 /** Screen 3: what one friend's Muse can see. Four switches from the tier, any of them changeable, two fixed lines. */
 export function ShareSheet({ friend, tier, sharing, onChange, onBack, onDone }: Props) {
-  const text = copy.onboarding;
+  const text = onboardingCopy;
   return (
     <SheetShell label={text.shareTitle(friend.name)} onClose={onBack}>
       <FriendDiscWithMuse initial={friend.initial} museModel={friend.museModel} />

@@ -1,4 +1,4 @@
-import { copy } from "@/lib/ui/copy";
+import { onboardingCopy } from "@/lib/ui/copy";
 
 type Props = {
   name: string;
@@ -9,13 +9,13 @@ type Props = {
 export function NameCard({ name, onName }: Props) {
   return (
     <div>
-      <h3 className="text-[17px] font-semibold leading-[22px]">{copy.onboarding.nameTitle}</h3>
+      <h3 className="text-[17px] font-semibold leading-[22px]">{onboardingCopy.nameTitle}</h3>
       <input
         type="text"
         value={name}
         onChange={(event) => onName(event.target.value)}
-        aria-label={copy.onboarding.nameLabel}
-        placeholder={copy.onboarding.namePlaceholder}
+        aria-label={onboardingCopy.nameLabel}
+        placeholder={onboardingCopy.namePlaceholder}
         autoComplete="given-name"
         enterKeyHint="done"
         maxLength={24}

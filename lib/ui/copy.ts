@@ -134,46 +134,47 @@ export const copy = {
   pausedFallback: "Live runs paused, playing a recording",
   drawerNoModelCall: "No model call for this message",
 
-  // The onboarding in the chat (D26), word for word from kb/design/onboarding.md. `friend` is the room's friend.
-  onboarding: {
-    greeting: "Hi, I'm Sprout, your Muse.",
-    nameTitle: "What should friends call you?",
-    nameLabel: "Your first name",
-    namePlaceholder: "First name",
-    friendsLine: "Friends lets your Muse and a friend's Muse find a time together.",
-    friendsPoints: ["Only people you pick are included.", "You choose what it can mention.", "It never guesses closeness from how often you text."],
-    notNow: "Not now",
-    turnOn: "Turn on Friends",
-    changeAnytime: "Change this anytime in Sharing.",
-    optOutTitle: "Here is what we consider when you opt out",
-    optOutOff:
-      "Friends is off. Your Muse will not talk to friends' Muses, and theirs will not talk to yours. It still helps with what you tell it directly.",
-    optOutNothingShared:
-      "If a friend tells their own Muse about plans with you, that stays in their Muse. We do not guess who is close to you, and nothing about you is shared.",
-    gotIt: "Got it",
-    turnOnAnytime: "Turn it on anytime in Sharing.",
-    needsFriends: (friend: string) => `Want to plan this with ${friend}? That needs Friends.`,
+} as const;
 
-    // Screen 2: who can the Muse talk to.
-    whoTitle: "Who can your Muse talk to?",
-    whoLine: "Close friends share more. Friends share less. Nobody is added unless you add them.",
-    syncTitle: "Sync your close friends from Instagram",
-    syncLine: "Brings in the Close Friends list you made there. Seeded for this demo.",
-    pickTitle: "Pick friends",
-    pickLine: "Choose people one by one.",
-    notTold: "They are not told which group they are in.",
-    syncedTitle: "Your close friends",
-    seededChip: "Seeded for this demo",
-    syncedLine: "From the Close Friends list you made on Instagram. Change anyone.",
-    onCloseFriends: "On your Instagram Close Friends",
-    back: "Back",
-    continue: "Continue",
-    whoOf: (friend: string) => `Who ${friend} is to you`,
+/** The onboarding in the chat (D26), word for word from kb/design/onboarding.md. `friend` is the room's friend. A separate object so `copy` stays flat. */
+export const onboardingCopy = {
+  greeting: "Hi, I'm Sprout, your Muse.",
+  nameTitle: "What should friends call you?",
+  nameLabel: "Your first name",
+  namePlaceholder: "First name",
+  friendsLine: "Friends lets your Muse and a friend's Muse find a time together.",
+  friendsPoints: ["Only people you pick are included.", "You choose what it can mention.", "It never guesses closeness from how often you text."],
+  notNow: "Not now",
+  turnOn: "Turn on Friends",
+  changeAnytime: "Change this anytime in Sharing.",
+  optOutTitle: "Here is what we consider when you opt out",
+  optOutOff:
+    "Friends is off. Your Muse will not talk to friends' Muses, and theirs will not talk to yours. It still helps with what you tell it directly.",
+  optOutNothingShared:
+    "If a friend tells their own Muse about plans with you, that stays in their Muse. We do not guess who is close to you, and nothing about you is shared.",
+  gotIt: "Got it",
+  turnOnAnytime: "Turn it on anytime in Sharing.",
+  needsFriends: (friend: string) => `Want to plan this with ${friend}? That needs Friends.`,
 
-    // Screen 3: what to share with one friend. `tier` is the tier's own label ("Close friend", "Friend").
-    shareTitle: (friend: string) => `What can ${friend}'s Muse see?`,
-    shareLine: (friend: string, tier: string) =>
-      `Set from ${friend}'s group, ${tier}. Change any of them. Off means Muse leaves it out and says so in Activity.`,
-    done: "Done",
-  },
+  // Screen 2: who can the Muse talk to.
+  whoTitle: "Who can your Muse talk to?",
+  whoLine: "Close friends share more. Friends share less. Nobody is added unless you add them.",
+  syncTitle: "Sync your close friends from Instagram",
+  syncLine: "Brings in the Close Friends list you made there. Seeded for this demo.",
+  pickTitle: "Pick friends",
+  pickLine: "Choose people one by one.",
+  notTold: "They are not told which group they are in.",
+  syncedTitle: "Your close friends",
+  seededChip: "Seeded for this demo",
+  syncedLine: "From the Close Friends list you made on Instagram. Change anyone.",
+  onCloseFriends: "On your Instagram Close Friends",
+  back: "Back",
+  continue: "Continue",
+  whoOf: (friend: string) => `Who ${friend} is to you`,
+
+  // Screen 3: what to share with one friend. `tier` is the tier's own label ("Close friend", "Friend").
+  shareTitle: (friend: string) => `What can ${friend}'s Muse see?`,
+  shareLine: (friend: string, tier: string) =>
+    `Set from ${friend}'s group, ${tier}. Change any of them. Off means Muse leaves it out and says so in Activity.`,
+  done: "Done",
 } as const;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copy } from "@/lib/ui/copy";
+import { onboardingCopy } from "@/lib/ui/copy";
 
 /** Every string in the onboarding copy, with the functions called on a friend's name. */
 function strings(value: unknown): string[] {
@@ -11,7 +11,7 @@ function strings(value: unknown): string[] {
 }
 
 describe("the onboarding copy is the spec's, word for word", () => {
-  const text = copy.onboarding;
+  const text = onboardingCopy;
 
   it("greets and asks for a name", () => {
     expect(text.greeting).toBe("Hi, I'm Sprout, your Muse.");

@@ -2,7 +2,7 @@
 
 import { ChevronRight, Users } from "lucide-react";
 import { SEEDED_FRIENDS, type SeededFriend } from "@/lib/seed/friends";
-import { copy } from "@/lib/ui/copy";
+import { onboardingCopy } from "@/lib/ui/copy";
 import type { OnboardingAction, OnboardingState } from "@/lib/ui/onboarding";
 import type { ShareTier } from "@/lib/ui/types";
 import { Pill } from "./CardShell";
@@ -19,7 +19,7 @@ type Props = {
   onClose: () => void;
 };
 
-const text = copy.onboarding;
+const text = onboardingCopy;
 
 /** Instagram's glyph, drawn here because the icon set has no brand marks. */
 function InstagramGlyph() {

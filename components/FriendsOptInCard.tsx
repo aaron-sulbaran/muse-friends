@@ -1,6 +1,6 @@
 "use client";
 
-import { copy } from "@/lib/ui/copy";
+import { onboardingCopy } from "@/lib/ui/copy";
 import type { OnboardingAction, OnboardingState } from "@/lib/ui/onboarding";
 import { CardShell, Pill } from "./CardShell";
 import { NameCard } from "./NameCard";
@@ -12,7 +12,7 @@ type Props = {
 
 /** Screen 1: the name, what Friends is in a line and three points, and two equal choices. Return takes the fast path. */
 export function FriendsOptInCard({ state, dispatch }: Props) {
-  const text = copy.onboarding;
+  const text = onboardingCopy;
   return (
     <CardShell label={text.nameTitle}>
       <form
