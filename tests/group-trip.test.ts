@@ -25,6 +25,8 @@ function players(overrides: Partial<TripPlayers> = {}): TripPlayers {
   return {
     answers: async (member) => (member === "kai" ? { answer: "limit", limit: 900 } : { answer: "yes" }),
     joins: async () => ({ choice: "in" }),
+    seats: async () => ({ flight: "FL-1" }),
+    hotel: async () => ({ choice: "yes" }),
     ...overrides,
   };
 }

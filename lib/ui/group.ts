@@ -23,6 +23,38 @@ export type GroupLine = ThreadLine & {
   last: boolean;
 };
 
+/**
+ * What the booking cards render, built on the server from Plan.trip.booking and the ledger (lib/ui/booking.ts). Every
+ * number is the record's or the ledger's; nothing here is typed by hand.
+ */
+export type UiBooking = {
+  datesHeld: boolean;
+  /** The seeded flights, cheapest first; `withinLimit` says, for each person, whether it is within their own limit. */
+  flights: Array<{ id: string; label: string; cost: number; withinCap: boolean; recommended: boolean; withinLimit: Partial<Record<MemberId, boolean>> }>;
+  seats: Array<{ member: MemberId; flightId: string; label: string; amount: number; fromPot: number; fromWallet: number; by: "person" | "person_model" | "seed" }>;
+  hotel: {
+    option: { id: string; label: string; cost: number };
+    /** Why Sprout put this one on the table, in a sentence. */
+    why: string;
+    /** For each person whose own limit this stay breaks, the reason; Pebble says it for Kai. */
+    misfits: Partial<Record<MemberId, string>>;
+    approvals: Array<{ member: MemberId; answer: "yes" | "no"; by: "person" | "person_model" | "seed" | null }>;
+    refusals: Array<{ stayId: string; stayLabel: string; member: MemberId; reason: string }>;
+    /** The stays not offered yet, in Sprout's order, and why each ranks lower. */
+    lower: Array<{ id: string; label: string; cost: number; reason: string }>;
+    booked: Array<{ member: MemberId; amount: number; by: "person" | "person_model" | "seed" }>;
+    state: "proposed" | "booked" | "none_fit";
+  } | null;
+  daysHeld: boolean;
+  days: Array<{ id: string; label: string }>;
+  done: boolean;
+  /** Each person's trip wallet now, read from the ledger, and what it started with. */
+  wallets: Array<{ member: MemberId; balance: number | null }>;
+  walletStart: number;
+  /** What the simulated vendor holds: the prices that were booked. */
+  vendor: number | null;
+};
+
 /** The words of the trip thread. Plain, whole dollars, no emoji, no em dashes. */
 export const tripCopy = {
   seededDay: "Group chat, seeded for the demo",

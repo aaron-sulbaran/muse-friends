@@ -2,6 +2,7 @@ import { z } from "zod";
 import { runAgentTurn } from "@/lib/model";
 import type { Plan } from "@/lib/protocol";
 import type { TripPlayers } from "@/lib/agent/trip";
+import type { FlightChoice } from "@/lib/agent/trip-booking";
 import { TRIP_PEOPLE, type SimulatedMember } from "@/lib/seed/trip";
 import { friendCard } from "./friend";
 
@@ -138,5 +139,66 @@ export async function memberJoins(member: SimulatedMember, summary: string): Pro
   return { choice };
 }
 
+const SeatAnswer = z.strictObject({ flight: z.string().min(1).max(10) });
+const HotelAnswer = z.strictObject({ choice: z.enum(["yes", "no"]) });
+
+/** One real model call: which seat does the person book, from the seeded flights? The caller checks it against their own limit. */
+export async function memberBooksSeat(member: SimulatedMember, summary: string, choices: FlightChoice[]): Promise<{ flight: string }> {
+  let flight: string | null = null;
+  const result = await runAgentTurn({
+    instructions: tripPersonInstructions(member),
+    input: summary,
+    tools: [
+      {
+        name: "book_seat",
+        description: "Book your own seat on one of the seeded flights by its id. Pick one within your own limit.",
+        parameters: { type: "object", properties: { flight: { type: "string", enum: choices.map((choice) => choice.id) } }, required: ["flight"], additionalProperties: false },
+      },
+    ],
+    handlers: {
+      book_seat: async (args) => {
+        const parsed = SeatAnswer.safeParse(args);
+        const choice = parsed.success ? choices.find((entry) => entry.id === parsed.data.flight) : undefined;
+        if (!choice) throw new Error("flight must be one of the listed ids");
+        if (!choice.withinLimit) throw new Error(`${choice.id} is over your limit; pick a flight within it`);
+        flight = choice.id;
+        return { recorded: true };
+      },
+    },
+    requiredTools: ["book_seat"],
+    maxToolCalls: 3,
+  });
+  if (result.status !== "completed" || flight === null) throw new Error(result.failure?.message ?? `${TRIP_PEOPLE[member].name} did not choose a seat`);
+  return { flight };
+}
+
+/** One real model call: does the person say yes to the stay Sprout put on the table? */
+export async function memberApprovesHotel(member: SimulatedMember, summary: string): Promise<{ choice: "yes" | "no" }> {
+  let choice: "yes" | "no" | null = null;
+  const result = await runAgentTurn({
+    instructions: tripPersonInstructions(member),
+    input: summary,
+    tools: [
+      {
+        name: "answer_stay",
+        description: "Say yes to the stay, or no if it does not work for you.",
+        parameters: { type: "object", properties: { choice: { type: "string", enum: ["yes", "no"] } }, required: ["choice"], additionalProperties: false },
+      },
+    ],
+    handlers: {
+      answer_stay: async (args) => {
+        const parsed = HotelAnswer.safeParse(args);
+        if (!parsed.success) throw new Error("choice must be yes or no");
+        choice = parsed.data.choice;
+        return { recorded: true };
+      },
+    },
+    requiredTools: ["answer_stay"],
+    maxToolCalls: 2,
+  });
+  if (result.status !== "completed" || choice === null) throw new Error(result.failure?.message ?? `${TRIP_PEOPLE[member].name} did not answer`);
+  return { choice };
+}
+
 /** The players the app runs with: a real model plays each simulated person. */
-export const modelPlayers: TripPlayers = { answers: memberAnswersQuestion, joins: memberJoins };
+export const modelPlayers: TripPlayers = { answers: memberAnswersQuestion, joins: memberJoins, seats: memberBooksSeat, hotel: memberApprovesHotel };

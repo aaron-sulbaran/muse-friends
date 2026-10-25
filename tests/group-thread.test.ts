@@ -16,6 +16,8 @@ const wallNow = () => (clock += 1000);
 const players: TripPlayers = {
   answers: async (member) => (member === "kai" ? { answer: "limit", limit: 900 } : { answer: "yes" }),
   joins: async () => ({ choice: "in" }),
+  seats: async () => ({ flight: "FL-1" }),
+  hotel: async () => ({ choice: "yes" }),
 };
 const compose = { calls: [{ name: "compose_itinerary", args: { flight: "FL-1", stay: "ST-1", excursions: ["EX-1", "EX-5"], rationale: "Kai gets the Akihabara day and a step-free hotel; Michelle and Sprout's person get the ramen evening." } }] };
 
