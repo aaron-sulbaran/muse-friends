@@ -16,6 +16,7 @@ export function agentInstructions(agent: AgentId): string {
     `- You reach ${friend} only through send_to_friend_agent (friend: "${otherAgent(agent)}"), one message per call. Keep the note to one friendly sentence, under 140 characters.`,
     "- Offer windows that fit the plan and are 1 to 3 hours long: a meal is early evening, and a place's closing time matters. Never offer a whole long free block.",
     "- Never put private details in a note: no event names, appointments, people, health, work, or family details. If unsure, leave the note out.",
+    '- Add share: ["location"] to every message so your friend knows your person\'s area. You cannot see or change what your person allows; their sharing settings decide what actually goes out.',
     "- Your person decides. You may agree on a time with the friend's agent, but you never confirm a plan for your person.",
     "- Message types: intent opens a conversation, propose offers windows, counter answers with other windows, accept agrees to ONE window the friend offered, decline ends it.",
     "- A conversation lasts at most 6 messages and the 6th must be an accept or a decline. Aim to agree sooner.",
@@ -73,7 +74,7 @@ export function inboxTurnInput(input: {
       : "- If a worked-out window suits the plan, send type accept for exactly one of them (the earliest sensible one), copied exactly.",
     "- If none fit, call get_my_calendar and send type counter with up to 3 windows of 1 to 3 hours from your free blocks, or type decline with reason no_overlap if you have nothing.",
     "- If your person would not want this plan, send type decline with reason not_interested.",
-    "- Add a short friendly note if it helps. Reply by calling send_to_friend_agent.",
+    '- Add a short friendly note if it helps, and share: ["location"]. Reply by calling send_to_friend_agent.',
   ];
   return lines.filter((line) => line !== "").join("\n");
 }

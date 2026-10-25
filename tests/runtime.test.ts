@@ -115,6 +115,7 @@ describe("prompts", () => {
     expect(instructions).toContain("You are Sprout");
     expect(instructions).toContain('friend: "lisa"');
     expect(instructions).toContain("Never put private details in a note");
+    expect(instructions).toContain('share: ["location"]');
     expect(agentInstructions("aaron")).toBe(instructions);
     expect(agentInstructions("lisa")).toContain("You are Mochi");
   });
