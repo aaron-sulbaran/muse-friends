@@ -3,17 +3,25 @@
 import { BatteryFull, Shield, Signal, Wallet, Wifi } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import { viewForRole, type ChatItem } from "@/lib/ui/chat";
+import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
 import { formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
-import { postChat, postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
+import { postChat, postDecision, postHandoff, postPrivacy, postReplan, postSignal, postSimulatedFriendSwitch, type Result } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
+import { runInProgress } from "@/lib/ui/entry";
+import { friendsIndicator, pickerMode, ROOM_FRIEND, roomFriendTier, shareFriend, startRequest } from "@/lib/ui/onboarding-flow";
+import { getRoom } from "@/lib/ui/room";
 import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
+import { useOnboarding } from "@/lib/ui/use-onboarding";
 import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
 import { DaySeparator, TypingDots } from "./ChatBubble";
 import { AgreedLine } from "./AgreedLine";
 import { AvatarSheet } from "./AvatarSheet";
 import { Composer } from "./Composer";
+import { FriendPickerSheet } from "./FriendPickerSheet";
+import { FriendsOptInCard } from "./FriendsOptInCard";
+import { OptOutCard, TurnOnFriendsPill } from "./OptOutCard";
+import { ShareSheet } from "./ShareSheet";
 import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
@@ -56,6 +64,8 @@ type Props = {
    * it): adds a row to switch sides and open Activity as a sheet, whose content the page supplies.
    */
   standalone?: { activity: (close: () => void) => React.ReactNode };
+  /** A judge's own phone, side a: the chat opens with the onboarding (D26) until it is done. The stage and tests leave it off. */
+  onboarding?: boolean;
 };
 
 function StatusBar({ time }: { time: string }) {
@@ -71,7 +81,7 @@ function StatusBar({ time }: { time: string }) {
   );
 }
 
-const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card", "trip-question", "trip-budget", "trip-itinerary", "trip-open", "trip-pot"]);
+const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card", "trip-question", "trip-budget", "trip-itinerary", "trip-open", "trip-pot", "onboarding-friends", "onboarding-optout"]);
 
 /** 4px between bubbles of one run, 14px between runs, 16px around a card. */
 function spacingBefore(previous: ChatItem | undefined, item: ChatItem, lineOf: (item: ChatItem | undefined) => ThreadLine | undefined): string {
@@ -84,7 +94,7 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem, lineOf: (
 }
 
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
-export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, onOpenPayment, standalone }: Props) {
+export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, onOpenPayment, standalone, onboarding = false }: Props) {
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
   const [replanError, setReplanError] = useState<string | null>(null);
@@ -107,7 +117,17 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const lineOf = (item: ChatItem | undefined): ThreadLine | undefined =>
     item?.kind === "thread-line" ? item.line : item?.kind === "bubble" ? lineOfBubble(item, voices) : undefined;
   const friendSender: Sender = { kind: "friend", name: view.friendHumanName, simulated };
-  const composerOn = standalone !== undefined && role === "a" && !readOnly;
+  // Onboarding (D26): a judge's own phone opens with Sprout's greeting, a name, and the choice of Friends. Until it is done
+  // it is the whole chat, with no tab bar and no composer; after an opt-out the chat is still there, but nothing starts.
+  const [onboardingState, dispatchOnboarding] = useOnboarding(getRoom());
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const onboardingOn = onboarding && role === "a" && !readOnly;
+  const onboardingActive = onboardingOn && onboardingState.step !== "done";
+  const friendsOff = onboardingOn && onboardingState.step === "done" && !onboardingState.friendsOn;
+  const chatItems: ChatItem[] = onboardingOn
+    ? [...onboardingItems(onboardingState, view.friendHumanName), ...(onboardingActive ? [] : friendsOff ? view.items.filter((item) => item.kind !== "start-card") : view.items)]
+    : view.items;
+  const composerOn = standalone !== undefined && role === "a" && !readOnly && !onboardingActive;
   const goalContext: GoalContext = {
     friend: view.group ? listOf(view.group.others.map((other) => other.name)) : view.friendHumanName,
     reelOwner: role === "a" ? `${view.friendHumanName}'s` : "your",
@@ -123,7 +143,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     }
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: scrolledOnce.current ? "smooth" : "auto" });
     scrolledOnce.current = true;
-  }, [view.items.length, thinking, tab]);
+  }, [chatItems.length, thinking, tab]);
 
   // Something in the chat grew after it was laid out (a reel's embed arriving): a reader who was at the end stays there.
   useEffect(() => {
@@ -162,11 +182,42 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     onChanged();
   }
 
+  function reportOnboarding(result: Result) {
+    if (!result.ok) {
+      if (result.paused) onPaused?.(result.message);
+      else setOnboardingError(result.message);
+    }
+    onChanged();
+    return result.ok;
+  }
+
+  /**
+   * Continue on the who step: the judge's tier for the room's friend is written for their own Muse and the plan starts
+   * through the simulated friend. Michelle comes on first (switching her on resets the room, so it never follows the
+   * tier), and a run already going is left alone. Nobody who can take part above Off is the opt-out: nothing starts.
+   */
+  async function continueFromWho() {
+    const request = startRequest(onboardingState);
+    dispatchOnboarding({ type: "continue" });
+    if (!request) return;
+    setOnboardingError(null);
+    if (!snapshot.simulatedFriend && !reportOnboarding(await postSimulatedFriendSwitch(true))) return;
+    if (!reportOnboarding(await postPrivacy({ tier: request.tier }, "a"))) return;
+    if (runInProgress(snapshot.plan)) return;
+    reportOnboarding(await postSignal());
+  }
+
   function renderItem(item: ChatItem) {
     if (isGroupItem(item)) return <GroupItem item={item} readOnly={readOnly} onChanged={onChanged} />;
     switch (item.kind) {
       case "separator":
         return <DaySeparator day={item.day} time={item.time} />;
+      case "onboarding-friends":
+        return <FriendsOptInCard state={onboardingState} dispatch={dispatchOnboarding} />;
+      case "onboarding-optout":
+        return <OptOutCard />;
+      case "onboarding-turn-on":
+        return <TurnOnFriendsPill onTurnOn={() => dispatchOnboarding({ type: "friendsOn" })} />;
       case "bubble":
       case "thread-line":
         return null; // drawn as a thread bubble in the list below, where its neighbors are known
@@ -276,12 +327,15 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             )}
             <StatusPill name={tripPlan ? tripPlan.title : view.museName} status={view.status} />
             {tripPlan ? <p className="mt-1.5 px-6 text-center text-[12px] leading-4 text-muted">{tripOwners(tripPlan)}</p> : <WalletChip snapshot={snapshot} agent={view.agent} />}
+            {onboardingOn && friendsIndicator(onboardingState) ? (
+              <p className="mt-0.5 text-[11px] font-semibold leading-4 text-muted">{friendsIndicator(onboardingState)}</p>
+            ) : null}
             {standalone && snapshot.mode === "replay" ? (
               <div className="absolute left-4 top-2">
                 <ReplayBadge mode="replay" compact recording={snapshot.recording} />
               </div>
             ) : null}
-            {role === "a" && !readOnly && (paymentsOnA || standalone) ? (
+            {role === "a" && !readOnly && !onboardingActive && (paymentsOnA || standalone) ? (
               <div className="absolute right-4 top-2 flex items-center gap-2">
                 {paymentsOnA ? (
                   <button
@@ -324,13 +378,13 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             className={`quiet-scroll flex-1 overflow-y-auto px-4 [mask-image:linear-gradient(to_bottom,transparent,black_14px)] ${composerOn ? "pb-3" : "pb-20"}`}>
             {/* Anchored to the bottom like any messaging app: a short chat sits just above the tab bar, empty space at the top. */}
             <div ref={chatContent} className="flex min-h-full flex-col justify-end">
-              {view.items.map((item, index) => {
-                const previous = view.items[index - 1];
+              {chatItems.map((item, index) => {
+                const previous = chatItems[index - 1];
                 const line = lineOf(item);
                 return (
                   <div key={item.id} className={spacingBefore(previous, item, lineOf)}>
                     {line ? (
-                      <ThreadBubble line={line} showSender={startsRun(lineOf(previous), line)} showPicture={endsRun(line, lineOf(view.items[index + 1]))} />
+                      <ThreadBubble line={line} showSender={startsRun(lineOf(previous), line)} showPicture={endsRun(line, lineOf(chatItems[index + 1]))} />
                     ) : (
                       renderItem(item)
                     )}
@@ -341,6 +395,11 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 <div className="mt-3.5">
                   <TypingDots />
                 </div>
+              ) : null}
+              {onboardingError ? (
+                <p role="alert" className="mt-3 text-[13px] leading-[18px] text-withheld">
+                  {onboardingError}
+                </p>
               ) : null}
             </div>
           </div>
@@ -370,13 +429,36 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
           )}
         </div>
       )}
-      <TabBar
-        tab={tab}
-        onSelect={(next) => {
-          setTab(next);
-          setGoalOpen(false);
-        }}
-      />
+      {onboardingActive ? null : (
+        <TabBar
+          tab={tab}
+          onSelect={(next) => {
+            setTab(next);
+            setGoalOpen(false);
+          }}
+        />
+      )}
+      {onboardingOn && pickerMode(onboardingState) ? (
+        <FriendPickerSheet
+          mode={pickerMode(onboardingState) ?? "choose"}
+          state={onboardingState}
+          dispatch={(action) => (action.type === "continue" ? void continueFromWho() : dispatchOnboarding(action))}
+          onClose={() => dispatchOnboarding({ type: "notNow" })}
+        />
+      ) : null}
+      {onboardingOn && shareFriend(onboardingState) ? (
+        <ShareSheet
+          friend={ROOM_FRIEND}
+          tier={roomFriendTier(onboardingState)}
+          sharing={snapshot.sharing.aaron}
+          onChange={async (change) => {
+            await postPrivacy(change, "a");
+            onChanged();
+          }}
+          onBack={() => dispatchOnboarding({ type: "back" })}
+          onDone={() => dispatchOnboarding({ type: "done" })}
+        />
+      ) : null}
       {activityOpen && standalone ? (
         <div
           className="absolute inset-0 z-30 flex items-end bg-black/10"
