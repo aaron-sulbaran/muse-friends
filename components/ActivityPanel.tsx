@@ -1,9 +1,9 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { copy } from "@/lib/ui/copy";
-import { discInitials, listOf, namesFor } from "@/lib/ui/format";
+import { discInitials, namesFor } from "@/lib/ui/format";
 import { timelineOf } from "@/lib/ui/timeline";
 import type { UiMessage, UiSnapshot } from "@/lib/ui/types";
 import { ActivityNote } from "./ActivityNote";
@@ -11,6 +11,7 @@ import { ActivityRow } from "./ActivityRow";
 import { MuseAvatar } from "./MuseAvatar";
 import { ReplayBadge } from "./ReplayBadge";
 import { StateStepper } from "./StateStepper";
+import { WorkingRow } from "./WorkingRow";
 
 type Props = {
   snapshot: UiSnapshot | null;
@@ -21,36 +22,6 @@ type Props = {
   /** Below the timeline: on a phone, the one control the presenter's keyboard would otherwise hold. */
   footer?: React.ReactNode;
 };
-
-/** Counts seconds from when this row first appeared; the parent re-keys it per turn so each model call starts at 0. */
-function ThinkingRow({ snapshot }: { snapshot: UiSnapshot }) {
-  const [startedAt] = useState(() => Date.now());
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 500);
-    return () => clearInterval(timer);
-  }, [startedAt]);
-
-  if (!snapshot.inFlight) return null;
-  const { agent, agents } = snapshot.inFlight;
-  const names = namesFor(snapshot);
-  const initial = discInitials(snapshot)[agent];
-  return (
-    <li className="animate-row-in">
-      <div className="flex items-center gap-3 rounded-group bg-group px-3 py-2.5">
-        <MuseAvatar agent={agent} initial={initial} name={names.muse[agent]} size={36} />
-        <span className="text-[15px] leading-5">{copy.thinking(listOf(agents.map((member) => names.muse[member])), agents.length)}</span>
-        <span className="flex gap-1" aria-hidden="true">
-          {[0, 1, 2].map((dot) => (
-            <span key={dot} className="size-1.5 animate-typing rounded-full bg-muted" style={{ animationDelay: `${dot * 150}ms` }} />
-          ))}
-        </span>
-        <span className="ml-auto text-[12px] tabular-nums text-muted">{elapsed}s</span>
-      </div>
-    </li>
-  );
-}
 
 function FailureRow({ snapshot }: { snapshot: UiSnapshot }) {
   if (!snapshot.failure) return null;
@@ -126,12 +97,14 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage, onClose, foo
                 entry.kind === "message" ? (
                   <ActivityRow key={`${entry.message.id}-${entry.message.at}`} message={entry.message} initials={discInitials(snapshot)} names={namesFor(snapshot)} onOpen={onOpenMessage} />
                 ) : (
-                  <ActivityNote key={entry.note.id} note={entry.note} />
+                  <ActivityNote key={entry.note.id} note={entry.note} names={namesFor(snapshot)} />
                 ),
               )
             : null}
           {snapshot ? <FailureRow snapshot={snapshot} /> : null}
-          {snapshot?.inFlight ? <ThinkingRow key={`${snapshot.inFlight.agent}-${snapshot.messages.length}`} snapshot={snapshot} /> : null}
+          {snapshot?.inFlight ? (
+            <WorkingRow key={`${snapshot.inFlight.agent}-${snapshot.messages.length}`} snapshot={snapshot} names={namesFor(snapshot)} initials={discInitials(snapshot)} />
+          ) : null}
         </ul>
       </div>
       {footer ? <div className="mt-3 shrink-0">{footer}</div> : null}

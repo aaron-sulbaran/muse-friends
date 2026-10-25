@@ -1,5 +1,6 @@
 "use client";
 
+import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { postConfirmPayment } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
@@ -7,6 +8,7 @@ import { confirmFacts, roleOfAgent } from "@/lib/ui/payment-card";
 import { formatDollars } from "@/lib/ui/payments";
 import type { UiPayment, UiSnapshot } from "@/lib/ui/types";
 import { useSnapshot } from "@/lib/ui/use-snapshot";
+import { Elapsed } from "../Elapsed";
 import { PersonDisc } from "../PersonDisc";
 import { HoldToConfirm } from "./HoldToConfirm";
 import { Sheet } from "./Sheet";
@@ -72,8 +74,11 @@ export function ConfirmSheet({ payment, friendName, onClose }: Props) {
       <p className="mt-3 text-center text-[12px] leading-4 text-muted">{payment.source === "nessie" ? copy.paymentPaperSandbox : copy.paymentPaperLocal}</p>
       <div className="mt-4">
         {pending ? (
-          <p role="status" className="rounded-full bg-group px-4 py-3.5 text-center text-[16px] font-semibold">
-            {copy.confirmSending}
+          <p role="status" className="flex items-center justify-center gap-2 rounded-full bg-group px-4 py-3.5 text-[16px] font-semibold">
+            <LoaderCircle className="size-[18px] animate-spin" strokeWidth={2} aria-hidden="true" />
+            <span>
+              {copy.confirmSending}, <Elapsed />
+            </span>
           </p>
         ) : (
           <HoldToConfirm amount={amount} friend={friendName} onConfirm={send} />

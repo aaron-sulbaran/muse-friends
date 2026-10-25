@@ -1,11 +1,12 @@
 "use client";
 
-import { HandCoins } from "lucide-react";
+import { HandCoins, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { postSettle } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
 import { settleDetailFor, type SettleOffer } from "@/lib/ui/payments";
 import type { Role } from "@/lib/ui/types";
+import { Elapsed } from "./Elapsed";
 
 type Props = {
   planId: string;
@@ -24,6 +25,9 @@ type Props = {
   onPaused?: (text: string) => void;
   /** Opens this seat's payments settings, for the off state. */
   onOpenSettings: () => void;
+  /** Draw the card already waiting on the Muse, or already timed out, for a card drawn after the fact. */
+  initiallyWorking?: boolean;
+  initiallyStalled?: boolean;
 };
 
 /**
@@ -32,9 +36,10 @@ type Props = {
  * is the friend's Muse asking for her half after the event, in the receipt's own words. The Muse prepares an amount and
  * the person confirms it on the payment card (D28); nothing moves before that.
  */
-export function SettleCard({ planId, role, offer, friendName, friendMuse, museName, paymentCount, readOnly, onChanged, onPaused, onOpenSettings }: Props) {
+export function SettleCard({ planId, role, offer, friendName, friendMuse, museName, paymentCount, readOnly, onChanged, onPaused, onOpenSettings, initiallyWorking = false, initiallyStalled = false }: Props) {
   const [note, setNote] = useState("");
-  const [working, setWorking] = useState(false);
+  const [working, setWorking] = useState(initiallyWorking);
+  const [stalled, setStalled] = useState(initiallyStalled);
   const [error, setError] = useState<string | null>(null);
   const [countAtStart, setCountAtStart] = useState(paymentCount);
 
@@ -42,13 +47,17 @@ export function SettleCard({ planId, role, offer, friendName, friendMuse, museNa
   const waiting = working && paymentCount <= countAtStart;
   useEffect(() => {
     if (!waiting) return;
-    const timer = setTimeout(() => setWorking(false), 60_000);
+    const timer = setTimeout(() => {
+      setWorking(false);
+      setStalled(true);
+    }, 60_000);
     return () => clearTimeout(timer);
   }, [waiting]);
 
   async function settle() {
     if (readOnly) return;
     setError(null);
+    setStalled(false);
     setCountAtStart(paymentCount);
     setWorking(true);
     const result = await postSettle(planId, role, note.trim() || undefined);
@@ -101,6 +110,19 @@ export function SettleCard({ planId, role, offer, friendName, friendMuse, museNa
           >
             {waiting ? copy.settleWorking : copy.settleAction}
           </button>
+          {waiting ? (
+            // The Muse is working: say with whom and for how long, so the card never looks frozen.
+            <p role="status" className="mt-2.5 flex items-center justify-center gap-2 text-[13px] leading-[18px] text-muted">
+              <LoaderCircle className="size-4 animate-spin" strokeWidth={2} aria-hidden="true" />
+              <span>
+                {copy.settleWorkingWith(friendMuse)}, <Elapsed />
+              </span>
+            </p>
+          ) : stalled ? (
+            <p role="status" className="mt-2.5 text-center text-[13px] leading-[18px] text-muted">
+              {copy.settleStalled}
+            </p>
+          ) : null}
         </>
       )}
       {error ? (

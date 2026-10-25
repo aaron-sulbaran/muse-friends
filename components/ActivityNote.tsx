@@ -1,7 +1,7 @@
 import { BookmarkCheck, CalendarX, Film, MessageCircle, Receipt, Shield, ShieldCheck, TriangleAlert, Undo2, UserMinus, Users, Wallet, type LucideIcon } from "lucide-react";
-import { formatTimeWithSeconds } from "@/lib/ui/format";
+import { formatTimeWithSeconds, type Names } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
-import { chatLineContext, withSearchSources } from "@/lib/ui/tools";
+import { noteLineContext, withSearchSources } from "@/lib/ui/tools";
 import { ToolLines } from "./ToolLines";
 
 const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: boolean }> = {
@@ -27,7 +27,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */
-export function ActivityNote({ note }: { note: UiNote }) {
+export function ActivityNote({ note, names }: { note: UiNote; names?: Names }) {
   const { icon: Icon, title, plain } = kinds[note.kind];
   return (
     <li className="animate-row-in" title={note.detail}>
@@ -41,7 +41,7 @@ export function ActivityNote({ note }: { note: UiNote }) {
             <span className="shrink-0 text-[12px] leading-4 text-muted">{formatTimeWithSeconds(note.at)}</span>
           </span>
           <span className="mt-0.5 block text-[13px] leading-[18px] text-muted">{note.text}</span>
-          <ToolLines calls={withSearchSources(note.toolCalls, note.sources)} context={chatLineContext} inline />
+          <ToolLines calls={withSearchSources(note.toolCalls, note.sources)} context={noteLineContext(note.payer, names)} inline />
         </span>
       </div>
     </li>

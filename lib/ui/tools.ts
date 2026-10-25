@@ -6,8 +6,8 @@
  */
 
 import { categoryLabel } from "./tokens";
-import { formatWindowList, listOf } from "./format";
-import type { Category, UiMessage, UiSource } from "./types";
+import { formatDuration, formatWindowList, listOf, type Names } from "./format";
+import type { Category, MemberId, UiMessage, UiSource } from "./types";
 
 export type UiToolCall = { name: string; args: string; result: string; /** Milliseconds the tool took, when it was measured. */ ms?: number; /** Pages a search found, https only; absent when there are none. */ sources?: UiSource[] };
 
@@ -76,6 +76,20 @@ export type ToolLineContext = {
   /** What an agent id in a call's arguments is called in a sentence; anything unknown means the person it went to. */
   person: (agentId: string) => string;
 };
+
+/**
+ * Who a note's tool lines are about: a payment's rows know whose Muse prepared it, so "waiting for Aaron to confirm" and
+ * "for Michelle" name the right people; a note with no names reads in the chat's neutral words.
+ */
+export function noteLineContext(payer: MemberId | undefined, names: Names | undefined): ToolLineContext {
+  if (!payer || !names) return chatLineContext;
+  const payee = (Object.keys(names.human) as MemberId[]).find((member) => member !== payer && member !== "kai") ?? payer;
+  return {
+    to: names.muse[payee],
+    owner: names.human[payer],
+    person: (agentId) => (Object.hasOwn(names.human, agentId) ? names.human[agentId as MemberId] : names.human[payee]),
+  };
+}
 
 /** What a chat answer's tool lines are said about: the chat's read tools send nothing, so only the wording of a name is needed. */
 export const chatLineContext: ToolLineContext = { to: "your friend's Muse", owner: "you", person: () => "your friend" };
@@ -242,11 +256,11 @@ export function toolLine(call: UiToolCall, context: ToolLineContext): string {
   }
 }
 
-export type ToolLineItem = { text: string; sources: UiSource[] };
+export type ToolLineItem = { text: string; sources: UiSource[]; /** How long the call took ("0.4 s"), when the store recorded it. */ time?: string };
 
 /** The lines for a message's calls, in the order they ran. */
 export function toolLines(calls: UiToolCall[] | undefined, context: ToolLineContext): ToolLineItem[] {
-  return (calls ?? []).map((call) => ({ text: toolLine(call, context), sources: call.sources ?? [] }));
+  return (calls ?? []).map((call) => ({ text: toolLine(call, context), sources: call.sources ?? [], ...(call.ms === undefined ? {} : { time: formatDuration(call.ms) }) }));
 }
 
 /**

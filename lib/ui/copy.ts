@@ -31,6 +31,8 @@ export const copy = {
   activityEmpty: (first: string, second: string) => `Nothing yet. When ${first} and ${second} talk, every message shows up here.`,
   reconnecting: "Reconnecting...",
   thinking: (who: string, count: number) => `${who} ${count === 1 ? "is" : "are"} thinking`,
+  /** The Activity row for a call that is running; the seconds are counted beside it. */
+  working: (who: string, count: number) => `${who} ${count === 1 ? "is" : "are"} working`,
 
   // Status lines are words only; the state's animated glyph (public/status) comes from the phone view.
   statusReading: (friend: string) => `reading ${friend}'s reel`,
@@ -161,7 +163,7 @@ export const copy = {
   confirmAsk: (amount: string, friend: string) => `Send ${amount} to ${friend}?`,
   confirmCancel: "Cancel",
   confirmSend: "Send",
-  confirmSending: "Sending...",
+  confirmSending: "Sending",
   confirmHint: "Press and hold until it fills. Letting go early sends nothing.",
   paymentDrawerTitle: "Payment",
   paymentDrawerRecord: "The ledger's record, as stored",
@@ -170,6 +172,10 @@ export const copy = {
   settleNoteLabel: "Optional note for your Muse about how to settle up",
   settleAction: "Settle up",
   settleWorking: "Your Muse is settling up...",
+  /** The line under the settle button while it works; the seconds are counted after it. */
+  settleWorkingWith: (friendMuse: string) => `Settling up with ${friendMuse}`,
+  /** A minute passed and no payment came back: the card is ready to ask again. */
+  settleStalled: "No payment came back. Try Settle up again.",
   settleOffAction: "Turn on payments",
   paymentsSection: "Payments",
   paymentsTabSettings: "Settings",

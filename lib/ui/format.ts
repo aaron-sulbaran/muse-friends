@@ -131,6 +131,18 @@ export function formatLatency(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** "7 s", "2 min 5 s": a call that is still running, counted in whole seconds. */
+export function formatElapsed(seconds: number): string {
+  const whole = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  return whole < 60 ? `${whole} s` : `${Math.floor(whole / 60)} min ${whole % 60} s`;
+}
+
+/** "4.8 s": how long a finished call took, to a tenth of a second ("2 min 5 s" past a minute). */
+export function formatDuration(ms: number): string {
+  const safe = Number.isFinite(ms) ? Math.max(0, ms) : 0;
+  return safe < 60_000 ? `${(safe / 1000).toFixed(1)} s` : formatElapsed(safe / 1000);
+}
+
 export type Names = {
   /** The Muse's name as shown on a row or a pill: "Sprout", "Mochi", or "Michelle's Muse". */
   muse: Record<MemberId, string>;

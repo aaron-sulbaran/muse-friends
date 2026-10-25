@@ -1,4 +1,5 @@
 import {
+  formatDuration,
   formatLatency,
   formatTimeWithSeconds,
   messageAccessibleName,
@@ -66,8 +67,11 @@ export function ActivityRow({ message, initials, names, onOpen }: Props) {
           )}
           <PolicyStamp stamp={stamp} animateWithheld />
           {message.proof ? (
-            <span className="mt-1.5 block text-[12px] leading-4 text-faint">
-              {message.proof.fallbackFrom ? `answered by ${message.proof.model} (${message.proof.fallbackFrom} was not found)` : message.proof.model}, {formatLatency(message.proof.latencyMs)}, {message.proof.inputTokens + message.proof.outputTokens} tokens
+            <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-4 text-faint">
+              {message.proof.latencyMs > 0 ? <span className="rounded-full bg-group px-2 py-0.5 font-medium tabular-nums text-ink">took {formatDuration(message.proof.latencyMs)}</span> : null}
+              <span>
+                {message.proof.fallbackFrom ? `answered by ${message.proof.model} (${message.proof.fallbackFrom} was not found)` : message.proof.model}, {formatLatency(message.proof.latencyMs)}, {message.proof.inputTokens + message.proof.outputTokens} tokens
+              </span>
             </span>
           ) : null}
         </span>

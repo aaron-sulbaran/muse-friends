@@ -35,6 +35,7 @@ export function ToolLines({ calls, why, context, initiallyOpen = false, inline =
       {shown.map((item, index) => (
         <li key={index} data-line>
           {item.text}
+          {item.time ? <span className="tabular-nums">, {item.time}</span> : null}
           <SourceChips sources={item.sources} />
         </li>
       ))}

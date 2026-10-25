@@ -204,6 +204,8 @@ export type UiNote = {
     | "remembered";
   at: string;
   text: string;
+  /** On a payment_proposed or payment_sent row: whose Muse prepared the payment, so its tool lines can name who confirms. */
+  payer?: MemberId;
   /** On a "You asked" row: the pages the answer's web search found, up to 3, to show as "Source" chips (SourceChips). */
   sources?: UiSource[];
   /** On a "You asked" row (chat_asked): the read tools the Muse used to answer, from the proof on its answer. */

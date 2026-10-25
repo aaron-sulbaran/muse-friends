@@ -347,6 +347,11 @@ function paymentToolCalls(event: StateSnapshot["events"][number], state: StateSn
   }
 }
 
+/** Whose Muse prepared a plan's payment, so a payment row's tool lines name who confirms. */
+function paymentPayer(payments: UiPayment[], planId: string | undefined): MemberId | undefined {
+  return planId ? payments.filter((entry) => entry.planId === planId).at(-1)?.from : undefined;
+}
+
 function toNotes(state: StateSnapshot, rename: (text: string) => string, payments: UiPayment[], muse: (agent: AgentId) => string = displayName): UiNote[] {
   const chat = state.room.chat ?? [];
   const followUps = new Map(state.plans.filter((plan) => plan.target !== undefined).map((plan) => [plan.id, plan]));
@@ -362,7 +367,8 @@ function toNotes(state: StateSnapshot, rename: (text: string) => string, payment
     const base = { id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text };
     if (event.kind !== "chat_asked" || !event.messageId) {
       const paymentCalls = paymentToolCalls(event, state);
-      return [paymentCalls ? { ...base, toolCalls: paymentCalls } : base];
+      const payer = event.kind.startsWith("payment_") ? paymentPayer(payments, event.planId) : undefined;
+      return [{ ...base, ...(paymentCalls ? { toolCalls: paymentCalls } : {}), ...(payer ? { payer } : {}) }];
     }
     // A "You asked" row carries the tools the Muse used, read from the proof on its answer.
     const answer = chat.find((entry) => entry.id === event.messageId);

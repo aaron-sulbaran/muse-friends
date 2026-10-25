@@ -61,6 +61,13 @@
   /* The time skip: the card pops in, and what it skips to rises in under it a beat later. */
   --animate-skip-in: pop-in 320ms var(--ease-pop) both;
   --animate-after-skip: card-in 280ms var(--ease-out-soft) 900ms both;
+  --animate-working-pulse: working-pulse 1.6s ease-in-out infinite;
+}
+
+/* A soft ring that breathes around a Muse's chip while its call runs. */
+@keyframes working-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(0 100 224 / 0.22); }
+  50% { box-shadow: 0 0 0 5px rgb(0 100 224 / 0); }
 }
 
 html {
