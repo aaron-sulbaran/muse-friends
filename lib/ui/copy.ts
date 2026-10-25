@@ -75,5 +75,8 @@ export const copy = {
   drawerRemoved: "Removed by policy",
   drawerRemovedNone: "Nothing removed",
   drawerModelCall: "Model call",
+  drawerBudget: "Live run budget",
+  pausedBack: "Back to live",
+  pausedFallback: "Live runs paused, playing a recording",
   drawerNoModelCall: "No model call for this message",
 } as const;
