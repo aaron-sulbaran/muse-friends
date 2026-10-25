@@ -4,7 +4,7 @@ import { HandCoins } from "lucide-react";
 import { useEffect, useState } from "react";
 import { postSettle } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import { proposalSentence, settleDetailFor, type SettleOffer, type SplitFacts } from "@/lib/ui/payments";
+import { settleDetailFor, type SettleOffer } from "@/lib/ui/payments";
 import type { Role } from "@/lib/ui/types";
 
 type Props = {
@@ -22,16 +22,15 @@ type Props = {
   onPaused?: (text: string) => void;
   /** Opens this seat's payments settings, for the off state. */
   onOpenSettings: () => void;
-  /** An amount the friend's Muse is asking for, once the agents propose one: the card then names it, the reason and the split. */
-  proposal?: { amount: number; reason: string; breakdown?: SplitFacts };
 };
 
 /**
  * After a confirmed plan: ask your Muse to settle up. The Muse decides whether money moves and how much, within
  * the cap you set; the friend's Muse accepts it or sends it back. Off until the person turns payments on. The card
- * says what is being settled (the plan's event and day) and the cap; once an amount is proposed it names that too.
+ * says what is being settled (the plan's event and day) and the cap. The Muse prepares an amount and the person
+ * confirms it on the payment card (D28); nothing moves before that.
  */
-export function SettleCard({ planId, role, offer, friendName, friendMuse, paymentCount, readOnly, onChanged, onPaused, onOpenSettings, proposal }: Props) {
+export function SettleCard({ planId, role, offer, friendName, friendMuse, paymentCount, readOnly, onChanged, onPaused, onOpenSettings }: Props) {
   const [note, setNote] = useState("");
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,11 +68,7 @@ export function SettleCard({ planId, role, offer, friendName, friendMuse, paymen
         <div className="min-w-0">
           <h3 className="text-[17px] font-semibold leading-[22px]">{off ? copy.settleOffTitle : copy.settleTitle(friendName)}</h3>
           <p className="mt-0.5 text-[13px] leading-[18px] text-muted">
-            {off
-              ? copy.settleOffDetail
-              : proposal
-                ? proposalSentence({ friend: friendName, cap: offer.cap, ...proposal })
-                : settleDetailFor({ cap: offer.cap, event: offer.event, friendMuse })}
+            {off ? copy.settleOffDetail : settleDetailFor({ cap: offer.cap, event: offer.event, friendMuse })}
           </p>
         </div>
       </div>

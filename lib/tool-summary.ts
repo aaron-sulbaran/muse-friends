@@ -48,7 +48,10 @@ function argsLine(name: string, args: unknown): string {
       return `$${typeof a.amount === "number" ? a.amount : "?"} to ${text(a.to) || "friend"}${count(a.breakdown) > 0 ? `, ${plural(count(a.breakdown), "line")}` : ""}`;
     case "accept_payment":
     case "decline_payment":
+    case "explain_payment":
       return text(a.paymentId);
+    case "where_to_do_that":
+      return text(a.action);
     default:
       return "";
   }
@@ -81,6 +84,19 @@ function resultLine(name: string, output: unknown, ok: boolean): string {
       return typeof o.amount === "number" ? `deposited $${o.amount}` : "accepted";
     case "decline_payment":
       return typeof o.amount === "number" ? `refunded $${o.amount}` : "declined";
+    // The read tools of the chat (D31): counts and states only, never the caption, the balance or a payment's reason.
+    case "get_plan":
+      return o.none === true ? "no plan yet" : `plan ${text(o.state) || "read"}`;
+    case "get_reel":
+      return o.none === true ? "no reel yet" : text(o.from) ? `reel from ${text(o.from)}` : "reel read";
+    case "get_wallet_and_history":
+      return o.paymentsEnabled === false ? "payments off" : `wallet read, ${plural(count(o.payments), "payment")}`;
+    case "get_sharing":
+      return "sharing read";
+    case "explain_payment":
+      return count(o.lines) > 0 ? `${plural(count(o.lines), "line")} explained` : "no breakdown recorded";
+    case "where_to_do_that":
+      return "pointed to the card";
     default:
       return "ok";
   }

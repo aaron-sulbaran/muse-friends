@@ -83,6 +83,14 @@ export async function postReplan(planId: string, role: Role, followUpTarget?: st
   return followUpTarget ? postFollowUp(followUpTarget) : postSignal();
 }
 
+/**
+ * The person asks their own Muse a question (D31). The answer is not read from this response: it arrives in the next
+ * snapshot's `chat`, where the thread and the Activity row pick it up. Only side a has a chat.
+ */
+export function postChat(text: string) {
+  return post("/api/chat", { role: "a", text });
+}
+
 export type LeakAttempt = { id: string; label: string; status: number; error: string; rejected: boolean };
 
 /** "Try to leak": asks the server to forge two sends to Mochi's inbox and report what the inbox answered, verbatim. */
@@ -100,6 +108,16 @@ export async function postLeakAttempt(): Promise<{ ok: true; attempts: LeakAttem
 /** Asks the person's Muse to settle up for a confirmed plan. The Muse decides whether money moves and how much, within the cap. */
 export function postSettle(planId: string, role: Role, note?: string) {
   return post(`/api/plans/${planId}/settle`, note ? { role, note } : { role });
+}
+
+/** The person confirms a payment their Muse prepared (D28), at the URL the snapshot gave: the one step that moves money. */
+export function postConfirmPayment(confirmUrl: string, role: Role) {
+  return post(confirmUrl, { role });
+}
+
+/** The person says not now to a payment their Muse prepared: nothing moves, and the friend's Muse is told. */
+export function postDeclinePayment(declineUrl: string, role: Role) {
+  return post(declineUrl, { role });
 }
 
 /** What a seat lets its Muse send: on or off, and a cap per plan in whole dollars (0 to 500; left out keeps the last one). */

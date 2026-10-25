@@ -7,7 +7,7 @@ import { CONTACTS, getContact, isMutual } from "@/lib/seed/contacts";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiRefusal, UiSnapshot, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiRefusal, UiSnapshot, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -188,7 +188,7 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<string>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed"]);
+const noteKinds = new Set<string>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed", "chat_asked"]);
 
 /**
  * An inbox that refuses a message for what it carries (422) or who sent it (403) is the code saying no, which is
@@ -214,14 +214,19 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
 }
 
 function toNotes(state: StateSnapshot, rename: (text: string) => string, payments: UiPayment[]): UiNote[] {
+  const chat = state.room.chat ?? [];
   const followUps = new Map(state.plans.filter((plan) => plan.target !== undefined).map((plan) => [plan.id, plan]));
   return state.events.flatMap((event): UiNote[] => {
     const text = rename(describeNote(event.text, payments));
     const followUp = event.planId ? followUps.get(event.planId) : undefined;
     if (followUp && event.kind === "signal_received") return [{ id: event.id, kind: "contact_chosen", at: event.at, text }];
     if (followUp && isRefused(followUp) && event.kind === "plan_state") return [{ id: event.id, kind: "contact_refused", at: event.at, text }];
-    if (noteKinds.has(event.kind) && isWorthARow(event)) return [{ id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text }];
-    return [];
+    if (!noteKinds.has(event.kind) || !isWorthARow(event)) return [];
+    const base = { id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text };
+    if (event.kind !== "chat_asked" || !event.messageId) return [base];
+    // A "You asked" row carries the tools the Muse used, read from the proof on its answer.
+    const toolCalls = toolCallsOf(chat.find((entry) => entry.id === event.messageId)?.proof);
+    return [{ ...base, answerId: event.messageId, ...(toolCalls ? { toolCalls } : {}) }];
   });
 }
 
@@ -235,6 +240,17 @@ function refusalOf(state: StateSnapshot, plan: Plan | null, rename: (text: strin
     contactName: getContact(plan.target)?.displayName ?? plan.target,
     text: shown ? rename(shown.text) : "Nothing was started",
   };
+}
+
+function toChat(state: StateSnapshot, rename: (text: string) => string): UiChatMessage[] {
+  return (state.room.chat ?? []).map((entry) => ({
+    id: entry.id,
+    from: entry.from,
+    text: rename(entry.text),
+    at: entry.at,
+    ...(entry.replyTo ? { replyTo: entry.replyTo } : {}),
+    ...(entry.proof ? { proof: withToolCalls(entry.proof) } : {}),
+  }));
 }
 
 /** The message's proof, with its recorded tool calls tidied for display when there are any. */
@@ -311,6 +327,13 @@ function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null 
   return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null };
 }
 
+/** The latest caption read: what the model found, not the sentence the timeline says about it. */
+function reelReadFor(state: StateSnapshot): UiReelRead | null {
+  const extracted = state.signals.findLast((signal) => signal.extracted !== undefined)?.extracted;
+  if (!extracted || (!extracted.place && !extracted.area && !extracted.hours)) return null;
+  return { place: extracted.place ?? null, area: extracted.area ?? null, hours: extracted.hours ?? null };
+}
+
 export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnapshot {
   const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
@@ -347,10 +370,12 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     inFlight: deriveInFlight(state, plan),
     budget: overlay.budget ?? null,
     reel: reelFor(state, overlay.liveReel ?? null),
+    reelRead: reelReadFor(state),
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
     wallets: { aaron: walletFor("aaron", state, rename), lisa: walletFor("lisa", state, rename) },
     payments,
+    chat: toChat(state, rename),
     paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
     sandbox: sandboxFor(state),
   };
