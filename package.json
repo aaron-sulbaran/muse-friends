@@ -11,6 +11,7 @@
     "demo:run": "vitest run --config vitest.live.config.mts tests/live/demo.live.ts --reporter=verbose"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
     "lucide-react": "^1.61.0",
     "next": "16.4.3",
     "openai": "^7.43.0",

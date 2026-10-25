@@ -39,6 +39,14 @@ Check it by pointing a phone camera at the file opened on screen; it must open t
 
 ## Human steps
 
+**H1 and H3 in one sitting (Aaron, 5 minutes).** Everything production needs from your keys, in order:
+
+1. Add two lines to `code/.env` (values from the Supabase dashboard, see H3 step 2): `SUPABASE_URL=https://egzeidhihiimurkinzyb.supabase.co` and `SUPABASE_SERVICE_ROLE_KEY=<the secret key>`. `MODEL_API_KEY` is already there.
+2. From the `code` folder: `./scripts/push-env-to-vercel.sh --dry-run`. Expect four names with character counts: `MODEL_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`, and `STORE` (set to `supabase` in Vercel only), and `dry run only; nothing was changed.` If it complains that only one Supabase variable is set, fix `.env` first.
+3. `./scripts/push-env-to-vercel.sh`, then Redeploy the production deployment (H1 step 4).
+4. Tell the platform lane; it runs the live round trip and reports latency.
+
+
 ### H1. Push the secrets into Vercel (Aaron, 3 minutes)
 
 Production needs `MODEL_API_KEY` for the agents (and, later, the Supabase variables, see H3). One script copies what is set in `code/.env` to the Vercel project for Production and Preview, stored as Sensitive, and never prints a value. Do this before the P1 checkpoint (Sun 12:00am).
@@ -61,14 +69,19 @@ Dashboard fallback if the script fails: https://vercel.com/aaron-sulbaran-projec
 
 DNS records Vercel showed for this project: _not added yet; filled in after step 2._
 
-### H3. Supabase project for the production store (Aaron, 5 minutes)
+### H3. Supabase: hand over the server key (Aaron, 3 minutes; the schema is applied)
 
-Needed for the production store, which has to survive across stateless function calls. Local development keeps using the JSON file.
+The production store has to survive across stateless function calls; local development keeps the JSON file. The project exists: `muse-friends`, ref `egzeidhihiimurkinzyb`, us-east-1 (next to Vercel's `iad1`). The ref and the URL are not secrets.
 
-1. Open https://supabase.com/dashboard, **New project**. Name: `muse-friends`. Region: the closest to Austin (US East or US Central, whichever the list offers). Plan: Free. Set a database password and store it in your password manager; nobody else needs it. Click **Create new project**; it takes about two minutes.
-2. Send the **project ref** (the part of the dashboard URL after `/project/`) to the orchestrator. The ref is not a secret.
-3. Open **Project Settings**, **API Keys**. Copy the **service role** key. Do not put it in chat or in git. Paste it as `SUPABASE_SERVICE_ROLE_KEY` in Vercel (same screen and steps as H1, Production and Preview, **Sensitive** on) and in `code/.env`. Also add `SUPABASE_URL` (Project Settings, **Data API**, the project URL) the same way; that one is not sensitive.
-4. Expect the platform lane to apply the schema through the Supabase tooling once it has the ref, then report round trip latency.
+0. Create the project: **done by Aaron at 8:35pm** (nothing else was set up inside it).
+1. Apply the schema: **done** (applied by the platform lane on Sat Oct 24, about 8:55pm, with Aaron's approval). Checked: 14 tables, each with RLS on and no policies; the `anon` and `authenticated` roles are denied on every table and function; `store_snapshot` and `store_replace_all` round-trip real fixture data inside a transaction that was rolled back, and the database was verified empty afterwards. To reapply on a fresh project, paste the whole of `supabase/migrations/20261025010000_store.sql` into https://supabase.com/dashboard/project/egzeidhihiimurkinzyb/sql/new and click **Run**.
+2. Hand over the server key. Open https://supabase.com/dashboard/project/egzeidhihiimurkinzyb/settings/api-keys and copy the **secret** key (starts `sb_secret_`; the legacy **service_role** key works the same). Never paste it into chat, a doc, or git. Add these two lines to `code/.env`:
+   ```
+   SUPABASE_URL=https://egzeidhihiimurkinzyb.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=<the secret key>
+   ```
+3. Push them to Vercel with H1's script (`./scripts/push-env-to-vercel.sh`); when both Supabase lines are present it also sets `STORE=supabase` in Vercel, and only there. Then redeploy as in H1 step 4. Do not put `STORE` in `.env`: local development leaves it unset and uses the JSON file.
+4. Check the real project from your machine: `SUPABASE_LIVE_TEST=1 pnpm test tests/supabase-store.live.test.ts`. It round trips a thread, messages, a plan, cards, events, the rejected-window ledger, signals and a recorded run under throwaway ids, deletes them, and prints the latency of each call. It never touches live demo rows.
 
 ### H4. Connect Muse to the endpoint (Lisa, 30 minutes)
 
@@ -78,10 +91,11 @@ Added when the MCP front door is deployed; see the next section of this runbook 
 
 Who: anyone with a phone. Time: 5 minutes. Run it on venue Wi-Fi and again on mobile data, in a private tab.
 
-0. Optional first pass from a laptop on the same network: `./scripts/smoke-production.sh`. Expect seven `PASS` lines (health, home, both phones, the QR file, the stylesheet, the state JSON), none over 3 seconds, none redirected to a Vercel login. It does not run the negotiation; that is step 2 on a phone.
+0. Optional first pass from a laptop on the same network: `./scripts/smoke-production.sh`. Expect seven `PASS` lines (health, home, both phones, the QR file, the stylesheet, the state JSON), none over 3 seconds, none redirected to a Vercel login. It does not run the negotiation; the negotiation itself is step 3, on a phone.
 1. Scan `/qr.svg` (open https://muse-friends.vercel.app/qr.svg on another screen) or type the URL.
-2. Pass: the page loads with no Vercel login, `/api/health` shows `ok: true`, and once the agents are merged, one negotiation runs end to end inside 300 seconds with the timeline updating live.
-3. Fail: write down which network, what you saw, and the time, and send it to the orchestrator.
+2. Use the public alias only: `https://muse-friends.vercel.app` (or `https://musefriends.tech` once it is live). The agents post to each other at the origin of the request that started them, so a preview or the team-scoped alias, which sit behind a Vercel login, would put a login wall in front of the second hop and the negotiation would stall.
+3. Pass: the page loads with no Vercel login, `/api/health` shows `ok: true`, and once the agents are merged, one negotiation runs end to end inside 300 seconds with the timeline updating live.
+4. Fail: write down which network, what you saw, and the time, and send it to the orchestrator.
 
 ## If production shows old styles after a deploy
 
@@ -97,6 +111,8 @@ curl -s https://muse-friends.vercel.app/<the path printed above> | grep -c -- '-
 ```
 
 Expect a count of 1 or more. `./scripts/smoke-production.sh` runs the same check ("stylesheet carries the brand tokens").
+
+Confirmed fixed (Sat Oct 24, about 8:56pm): the first production deploy after the change, commit `4326251`, served a 25,645 byte stylesheet containing `--color-screen` and no Geist, and `./scripts/smoke-production.sh` passed all seven checks. The build log still says "Restored build cache from previous deployment", then runs `rm -rf .next && pnpm run build`, so the restored cache is thrown away before the compiler sees it.
 
 Fix: `vercel.json` now builds with `rm -rf .next && pnpm run build`, so no restored cache can reach the compiler and every deploy is a clean build (it adds a few seconds). If it ever happens anyway, open the Vercel project, **Deployments**, the latest production deployment, **...**, **Redeploy**, untick **Use existing Build Cache**, **Redeploy**, then rerun the check. Also confirm you opened `https://muse-friends.vercel.app` and not a preview or a team-scoped alias, which sit behind a login and can lag.
 

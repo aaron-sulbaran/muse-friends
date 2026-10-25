@@ -49,13 +49,8 @@ ensure_token() {
   echo "generated $1 into $env_file"
 }
 
-push() {
-  local name="$1" kind="$2" value flag
-  value="$(read_value "$name")"
-  if [ -z "$value" ]; then
-    echo "skipped $name (not set in $env_file)"
-    return
-  fi
+send() {
+  local name="$1" kind="$2" value="$3" flag
   if $dry_run; then
     echo "would push $name (${#value} characters, $kind)"
     return
@@ -65,9 +60,29 @@ push() {
   echo "pushed $name (${#value} characters, $kind)"
 }
 
+push() {
+  local name="$1" kind="$2" value
+  value="$(read_value "$name")"
+  if [ -z "$value" ]; then
+    echo "skipped $name (not set in $env_file)"
+    return
+  fi
+  send "$name" "$kind" "$value"
+}
+
 if [ -z "$(read_value MODEL_API_KEY)" ]; then
   echo "MODEL_API_KEY is not set in $env_file; set it first." >&2
   exit 1
+fi
+
+# The store switch needs both halves; pushing only one would leave production half configured.
+supabase_url_set=false
+supabase_key_set=false
+[ -n "$(read_value SUPABASE_URL)" ] && supabase_url_set=true
+[ -n "$(read_value SUPABASE_SERVICE_ROLE_KEY)" ] && supabase_key_set=true
+if [ "$supabase_url_set" != "$supabase_key_set" ]; then
+  echo "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be set in $env_file, and only one is." >&2
+  $dry_run || exit 1
 fi
 
 if ! $dry_run && [ ! -f .vercel/project.json ]; then
@@ -84,7 +99,12 @@ push MCP_TOKEN_A secret
 push MCP_TOKEN_B secret
 push SUPABASE_SERVICE_ROLE_KEY secret
 push SUPABASE_URL config
-push STORE config
+
+# Production reads the Supabase store; local development leaves STORE unset and uses the JSON file.
+# So STORE is set here, in Vercel only, and never read from .env.
+if [ -n "$(read_value SUPABASE_URL)" ] && [ -n "$(read_value SUPABASE_SERVICE_ROLE_KEY)" ]; then
+  send STORE config supabase
+fi
 
 if $dry_run; then
   echo "dry run only; nothing was changed."
