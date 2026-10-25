@@ -128,6 +128,7 @@ export function PaymentsSection({ role, settings, onChanged, initialTab = "setti
           </li>
         ) : null}
       </ul>
+      <p className="mt-2 text-[12px] leading-4 text-muted">{copy.paymentsAsksFirst}</p>
       {error ? (
         <p role="alert" className="mt-2 text-[13px] leading-[18px] text-withheld">
           {error}

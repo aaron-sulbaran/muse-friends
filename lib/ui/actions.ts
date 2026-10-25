@@ -93,6 +93,16 @@ export function postSettle(planId: string, role: Role, note?: string) {
   return post(`/api/plans/${planId}/settle`, note ? { role, note } : { role });
 }
 
+/** The person confirms a payment their Muse prepared (D28), at the URL the snapshot gave: the one step that moves money. */
+export function postConfirmPayment(confirmUrl: string, role: Role) {
+  return post(confirmUrl, { role });
+}
+
+/** The person says not now to a payment their Muse prepared: nothing moves, and the friend's Muse is told. */
+export function postDeclinePayment(declineUrl: string, role: Role) {
+  return post(declineUrl, { role });
+}
+
 /** What a seat lets its Muse send: on or off, and a cap per plan in whole dollars (0 to 500; left out keeps the last one). */
 export function postPaymentsScope(role: Role, enabled: boolean, cap?: number) {
   return post("/api/controls", { type: "payments", side: role, enabled, ...(cap === undefined ? {} : { cap }) });
