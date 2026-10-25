@@ -9,7 +9,6 @@ type Props = {
   plan: UiPlan;
   role: Role;
   view: PhoneView;
-  simulatedFriend: boolean;
   /** True while a decision is on its way to the server. */
   pending: boolean;
   onDecide: (choice: "accept" | "decline") => void;
@@ -31,7 +30,7 @@ function Row({ icon, title, detail }: { icon: React.ReactNode; title: string; de
 }
 
 /** The one approval card per plan, in the checkout-card pattern: a title, a grey reason, grouped rows, two pills. */
-export function RecommendationCard({ plan, role, view, simulatedFriend, pending, onDecide, onReplan, error }: Props) {
+export function RecommendationCard({ plan, role, view, pending, onDecide, onReplan, error }: Props) {
   const reelOwner = role === "a" ? `${view.friendHumanName}'s` : "your";
   return (
     <section
@@ -53,7 +52,7 @@ export function RecommendationCard({ plan, role, view, simulatedFriend, pending,
           <Row icon={<Clock className="size-5" strokeWidth={1.75} aria-hidden="true" />} title={formatWindowFull(plan.window)} />
         ) : null}
         <div className="flex items-center gap-3 py-2">
-          <MuseAvatar agent={view.friend} simulated={simulatedFriend && view.friend === "lisa"} name={view.friendMuseName} size={36} />
+          <MuseAvatar agent={view.friend} name={view.friendMuseName} size={36} />
           <p className="text-[15px] leading-5">{copy.friendIsIn(view.friendMuseName)}</p>
         </div>
       </div>

@@ -23,7 +23,7 @@ export function authenticateJudge(request: Request): Response | null {
 }
 
 export function failureBody(failure: Failure) {
-  return { code: failure.code, message: failure.message, ...(failure.hint === undefined ? {} : { hint: failure.hint }) };
+  return { code: failure.code, message: failure.message };
 }
 
 export function toResponse<T>(outcome: Outcome<T>, successStatus = 200): Response {

@@ -143,6 +143,15 @@ export function enforceSharePolicy({ message, policy, sender, windowsDropped = 0
     }
   }
 
+  // What a payment says it is for is text the model wrote, scanned like a note.
+  if (out.payment) {
+    const hits = scanText(out.payment.reason, policy, sender, { place: originalPlace, topic: out.activity?.title });
+    if (hits.length > 0) {
+      out.payment.reason = "Settling up";
+      for (const hit of hits) removed.add(hit);
+    }
+  }
+
   if (out.activity) {
     const hits = scanText(out.activity.title, policy, sender, { eventsOnly: true });
     if (hits.length > 0) {
@@ -188,6 +197,21 @@ export type StartGate = { ok: true } | { ok: false; reason: RefusalReason };
 // only if both people follow each other; the contact is named by the person, never picked by the agent.
 export function startGate(contact: { youFollow: boolean; followsYou: boolean }): StartGate {
   return contact.youFollow && contact.followsYou ? { ok: true } : { ok: false, reason: "not_mutual" };
+}
+
+// ---------------------------------------------------------------------------
+// Payments scope
+// ---------------------------------------------------------------------------
+
+// Whether this sender may send `amount` dollars for a plan that has already had `spent` dollars sent for it. Runs
+// where the money is sent, and again in the receiver's inbox: both ends validate, neither trusts a model.
+export function paymentsCheck(policy: SharePolicy | null, amount: number, spent: number): string | null {
+  const scope = policy?.payments;
+  if (!scope || !scope.enabled || scope.capPerPlan <= 0) return "Payments are off for this friend: your person has not allowed your Muse to send money.";
+  if (!Number.isInteger(amount) || amount < 1) return "The amount must be a whole number of dollars, at least 1.";
+  const left = scope.capPerPlan - spent;
+  if (amount > left) return `That is over your person's cap of $${scope.capPerPlan} per plan: $${spent} is already sent for this plan, so at most $${Math.max(0, left)} more.`;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
