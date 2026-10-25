@@ -89,13 +89,13 @@ describe("the simulated friend's own lines", () => {
     expect(threadLines(withMichelle(agreed(), "pending"), "a").some((line) => line.sender.kind === "friend")).toBe(false);
     const accepted = threadLines(withMichelle(agreed(), "accepted"), "a");
     const hers = accepted.filter((line) => line.sender.kind === "friend");
-    expect(hers).toEqual([expect.objectContaining({ text: copy.thread.friendYes, sender: { kind: "friend", name: "Michelle", simulated: true } })]);
+    expect(hers).toEqual([expect.objectContaining({ text: copy.threadFriendYes, sender: { kind: "friend", name: "Michelle", simulated: true } })]);
     expect(accepted.at(-1)).toBe(hers[0]);
   });
 
   it("says no when she declines", () => {
     const declined = threadLines(withMichelle(agreed(), "declined"), "a");
-    expect(declined.at(-1)?.text).toBe(copy.thread.friendNo);
+    expect(declined.at(-1)?.text).toBe(copy.threadFriendNo);
   });
 
   it("is her phone's own voice on side b, so it is you there", () => {

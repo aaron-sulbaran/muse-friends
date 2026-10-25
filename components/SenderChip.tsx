@@ -7,12 +7,12 @@ import { PersonDisc } from "./PersonDisc";
 export function senderTag(sender: Sender): string | null {
   switch (sender.kind) {
     case "your-muse":
-      return copy.thread.tagYourMuse;
+      return copy.threadTagYourMuse;
     case "friend-muse":
-      return sender.owner ? copy.thread.tagFriendMuse(sender.owner) : null;
+      return sender.owner ? copy.threadTagFriendMuse(sender.owner) : null;
     case "friend":
     case "you":
-      return sender.simulated ? copy.thread.tagSimulated : null;
+      return sender.simulated ? copy.threadTagSimulated : null;
   }
 }
 

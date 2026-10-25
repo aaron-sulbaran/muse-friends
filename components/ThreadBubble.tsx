@@ -23,7 +23,7 @@ export function ThreadBubble({ line, showSender }: Props) {
       {line.onlyYou ? (
         <span className="mt-1 flex items-center gap-1 pl-1 text-[11px] leading-4 text-muted">
           <Lock className="size-3" strokeWidth={1.75} aria-hidden="true" />
-          {copy.thread.tagOnlyYou}
+          {copy.threadTagOnlyYou}
         </span>
       ) : null}
     </div>

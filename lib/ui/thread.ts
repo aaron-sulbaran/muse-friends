@@ -35,7 +35,7 @@ const roleAgent: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
 const PLAN_CHANGING: ReadonlySet<MessageType> = new Set(["propose", "counter", "accept", "decline"]);
 
 /** A friend who is played by a model says one thing, once she has decided; a real friend's lines are their own. */
-const decisionLine = { accepted: copy.thread.friendYes, declined: copy.thread.friendNo } as const;
+const decisionLine = { accepted: copy.threadFriendYes, declined: copy.threadFriendNo } as const;
 
 export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
   const plan = snapshot.plan;
@@ -52,7 +52,7 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
     if (PLAN_CHANGING.has(message.type)) lines.push({ id: `thread-${message.id}`, sender, text: messageTitle(message), at: message.at });
     const { withheld } = policyStampFor(message);
     if (message.from === me && withheld) {
-      lines.push({ id: `thread-${message.id}-aside`, sender, text: copy.thread.keptOut(withheld, names.muse[message.to]), onlyYou: true, at: message.at });
+      lines.push({ id: `thread-${message.id}-aside`, sender, text: copy.threadKeptOut(withheld, names.muse[message.to]), onlyYou: true, at: message.at });
     }
   }
 

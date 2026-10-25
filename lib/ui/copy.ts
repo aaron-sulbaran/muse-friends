@@ -145,17 +145,15 @@ export const copy = {
   simulatedFriendBanner: "Simulated friend, fictional, played by a model",
 
   // The thread with the friend (D32): who said what, and which Muse belongs to which person.
-  thread: {
-    tagYourMuse: "your Muse",
-    tagFriendMuse: (owner: string) => `${owner}'s Muse`,
-    tagSimulated: "simulated",
-    tagOnlyYou: "only you",
-    /** A Muse's note to its own person when policy kept something out of a message. `withheld` is already a list: "location and interests". */
-    keptOut: (withheld: string, friendMuse: string) => `I kept ${withheld} out of what I sent ${friendMuse}.`,
-    /** What the simulated friend says once she has decided, scripted to the plan's state. */
-    friendYes: "Yes, I'm in.",
-    friendNo: "Not this time, sorry.",
-  },
+  threadTagYourMuse: "your Muse",
+  threadTagFriendMuse: (owner: string) => `${owner}'s Muse`,
+  threadTagSimulated: "simulated",
+  threadTagOnlyYou: "only you",
+  /** A Muse's note to its own person when policy kept something out of a message. `withheld` is already a list: "location and interests". */
+  threadKeptOut: (withheld: string, friendMuse: string) => `I kept ${withheld} out of what I sent ${friendMuse}.`,
+  /** What the simulated friend says once she has decided, scripted to the plan's state. */
+  threadFriendYes: "Yes, I'm in.",
+  threadFriendNo: "Not this time, sorry.",
 
   drawerClose: "Close",
   drawerCopy: "Copy JSON",
