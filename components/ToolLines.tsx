@@ -50,7 +50,7 @@ export function ToolLines({ calls, why, context, initiallyOpen = false }: Props)
       ))}
       {hidden > 0 ? (
         <li>
-          <button type="button" onClick={() => setOpen(true)} className="font-medium underline underline-offset-2 [@media(hover:hover)]:hover:text-ink">
+          <button type="button" onClick={() => setOpen(true)} className="-my-1 py-1 font-medium underline underline-offset-2 [@media(hover:hover)]:hover:text-ink">
             +{hidden} more
           </button>
         </li>
