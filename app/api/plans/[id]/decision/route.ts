@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { dispatch, readSnapshot } from "@/lib/ui/source";
+import { decide } from "@/lib/agent/lifecycle";
+import { ROLE_TO_AGENT } from "@/lib/seed/fixtures";
+import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -9,19 +11,14 @@ const bodySchema = z.object({
   choice: z.enum(["accept", "decline"]),
 });
 
+/** A person taps their card. The lifecycle decides what the answer does to the plan and answers with a status. */
 export async function POST(request: Request, ctx: RouteContext<"/api/plans/[id]/decision">) {
   const { id } = await ctx.params;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ data: null, error: { message: "Expected { role: a or b, choice: accept or decline }" } }, { status: 400 });
   }
-  const current = readSnapshot().plan;
-  if (!current || current.id !== id) {
-    return NextResponse.json({ data: null, error: { message: "No such plan" } }, { status: 404 });
-  }
-  if (current.state !== "awaiting_humans") {
-    return NextResponse.json({ data: null, error: { message: `Plan is ${current.state}, not waiting for a decision` } }, { status: 409 });
-  }
-  const snapshot = dispatch({ type: "decide", ...parsed.data });
-  return NextResponse.json({ data: snapshot.plan, error: null });
+  const result = await decide(await getStore(), { planId: id, agent: ROLE_TO_AGENT[parsed.data.role], choice: parsed.data.choice });
+  if (!result.ok) return NextResponse.json({ data: null, error: { message: result.error } }, { status: result.status });
+  return NextResponse.json({ data: { plan: result.value.plan }, error: null });
 }

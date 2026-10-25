@@ -25,7 +25,9 @@ export type ModelProof = {
   model: string;
   responseId: string;
   latencyMs: number;
-  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
 };
 
 export type UiMessage = {
@@ -45,9 +47,7 @@ export type UiMessage = {
   /** Categories policy removed from this message. */
   removed: Category[];
   at: string;
-  /** True when this message id was already shown earlier: the same message sent again after a policy change. */
-  replayed: boolean;
-  /** Present on messages produced by a model call; absent on scripted or replayed ones. */
+  /** Present on messages a model call produced; absent on scripted fixtures. */
   proof?: ModelProof;
   /** Present when the receiving inbox rejected the message. */
   blockedRule?: string;
@@ -62,8 +62,10 @@ export type UiPlan = {
   initiator: AgentId;
   state: PlanState;
   activityTitle: string;
-  /** Null when the place was withheld by policy. */
+  /** Where, when the caption or a message named a place that adds to the title and policy has not withheld it. */
   place: string | null;
+  /** True once a redaction removed location from this plan's thread: the card says so instead of showing a place. */
+  placeWithheld: boolean;
   window: TimeWindow | null;
   decisions: Record<Role, Decision>;
   draft: string | null;
@@ -76,6 +78,14 @@ export type FollowThroughEvent = {
   id: string;
   label: string;
   at: string;
+};
+
+/** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
+export type UiNote = {
+  id: string;
+  kind: "caption_extracted" | "thread_opened" | "policy_changed";
+  at: string;
+  text: string;
 };
 
 export type InFlight = {
@@ -98,6 +108,8 @@ export type UiSnapshot = {
   /** What people see for each side: the Muse characters' names, never the internal ids. */
   sides: Record<AgentId, string>;
   messages: UiMessage[];
+  /** Non-message timeline rows, merged with the messages by time. */
+  notes: UiNote[];
   plan: UiPlan | null;
   followThrough: {
     /** Plans that happened: the only thing the counter counts. */
@@ -107,6 +119,8 @@ export type UiSnapshot = {
     humanTapCount: number;
   };
   inFlight: InFlight | null;
+  /** Set when an agent's turn ended without a message: the thread stopped and the presenter decides on Replay. */
+  failure: { agent: AgentId } | null;
   /** What each side currently lets the other see. */
   sharing: Record<AgentId, SharingSettings>;
 };

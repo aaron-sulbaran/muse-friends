@@ -1,34 +1,23 @@
-import { createHash } from "node:crypto";
-import { buildStateSnapshot, initialScriptState, reduceScript, type ScriptAction, type ScriptState } from "./script";
+import { getStore } from "@/lib/store";
 import { toUiSnapshot } from "./snapshot";
 import type { UiSnapshot } from "./types";
 
 /*
- * Where the UI's snapshot comes from. Today it is Lane A's recorded run played
- * stage by stage (lib/ui/script.ts), held in module state so two browser tabs
- * (the two phones) see the same plan. When getStore() lands this reads
- * `store.snapshot()` and `store.cursor()` instead; everything downstream already
- * consumes a StateSnapshot through toUiSnapshot.
+ * Where the UI's snapshot comes from: the store the agents write to, through
+ * the one Store interface (JSON locally, Supabase in production). `cursor`
+ * changes whenever any state changes, so a poll with nothing new is answered
+ * with a 304 without reading the snapshot.
  */
 
-const holder = globalThis as unknown as { __museScriptState?: ScriptState };
+/** Replay mode is Lane B's own overlay; until the player exists everything the store holds is live. */
+const mode = "live" as const;
 
-function currentState(): ScriptState {
-  holder.__museScriptState ??= initialScriptState();
-  return holder.__museScriptState;
+export async function readCursor(): Promise<string> {
+  const store = await getStore();
+  return `${mode}-${await store.cursor()}`;
 }
 
-export function readSnapshot(): UiSnapshot {
-  const state = currentState();
-  return toUiSnapshot(buildStateSnapshot(state), { mode: state.mode });
-}
-
-/** Changes whenever anything the UI shows changes, so a poll can be answered with 304. */
-export function readCursor(snapshot: UiSnapshot): string {
-  return createHash("sha1").update(JSON.stringify(snapshot)).digest("hex").slice(0, 16);
-}
-
-export function dispatch(action: ScriptAction): UiSnapshot {
-  holder.__museScriptState = reduceScript(currentState(), action);
-  return readSnapshot();
+export async function readSnapshot(): Promise<UiSnapshot> {
+  const store = await getStore();
+  return toUiSnapshot(await store.snapshot(), { mode });
 }

@@ -159,10 +159,8 @@ export function messageTitle(message: UiMessage): string {
   switch (message.type) {
     case "intent":
       return `Asked about ${place}`;
-    case "propose": {
-      const verb = message.replayed ? "Proposed again" : "Proposed";
-      return message.windows?.length ? `${verb} ${formatWindowList(message.windows)}` : `${verb} a plan`;
-    }
+    case "propose":
+      return message.windows?.length ? `Proposed ${formatWindowList(message.windows)}` : "Proposed a plan";
     case "counter":
       return message.windows?.length ? `Countered with ${formatWindowList(message.windows)}` : "Countered";
     case "accept":

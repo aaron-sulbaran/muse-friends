@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { resetDemo, setSharePolicy } from "@/lib/agent/controls";
 import { Category, ShareTier } from "@/lib/protocol";
-import { dispatch } from "@/lib/ui/source";
+import { getStore } from "@/lib/store";
+import { readSnapshot } from "@/lib/ui/source";
 
 export const dynamic = "force-dynamic";
 
@@ -29,14 +31,22 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return refuse("Expected a privacy change or a reset", 400);
   const body = parsed.data;
+  const store = await getStore();
 
   if (body.type === "reset") {
-    return NextResponse.json({ data: { reset: true, snapshot: dispatch({ type: "reset" }) }, error: null });
+    const { resetCount } = await resetDemo(store);
+    return NextResponse.json({ data: { reset: true, resetCount }, error: null });
   }
   if (body.tier === "off") return refuse("Turning sharing off ends the plan, so it stays on in this demo", 409);
   if (body.category === "availability" && body.on === false) {
     return refuse("Free times are how the Muses find a day, so they stay on in this demo", 409);
   }
-  const snapshot = dispatch({ type: "set_policy", tier: body.tier, category: body.category, on: body.on });
-  return NextResponse.json({ data: { sharing: snapshot.sharing.lisa }, error: null });
+  const result = await setSharePolicy(store, {
+    owner: "lisa",
+    friend: "aaron",
+    tier: body.tier,
+    categories: body.category !== undefined && body.on !== undefined ? { [body.category]: body.on } : undefined,
+  });
+  if (!result.ok) return refuse(result.error, result.status);
+  return NextResponse.json({ data: { sharing: (await readSnapshot()).sharing.lisa, replayed: result.value.replayed.length }, error: null });
 }

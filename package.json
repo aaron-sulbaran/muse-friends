@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "demo:run": "vitest run --config vitest.live.config.mts tests/live/demo.live.ts --reporter=verbose"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

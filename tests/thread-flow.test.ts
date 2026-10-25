@@ -98,6 +98,17 @@ describe("two agents talk", () => {
     ]);
   });
 
+  it("keeps the proof that a model call wrote each message, on both sides of the wire", async () => {
+    await opening();
+    await reply("lisa", [toFriend("lisa", { type: "accept", reason: "both_free", windows: [TUE] })]);
+    const records = await store.listMessages();
+    expect(records).toHaveLength(2);
+    for (const record of records) {
+      expect(record.proof).toMatchObject({ model: "muse-spark-1.3", responseId: expect.stringMatching(/^resp_/), inputTokens: 10, outputTokens: 5, reasoningTokens: 2 });
+      expect(record.proof?.latencyMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
   it("negotiates through a counter in four messages", async () => {
     await opening();
     await reply("lisa", [toFriend("lisa", { type: "counter", reason: "both_free", windows: [TUE] })]);

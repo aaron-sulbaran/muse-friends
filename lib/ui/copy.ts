@@ -44,6 +44,7 @@ export const copy = {
 
   modelErrorFirst: (muse: string) => `${muse} didn't answer in time. Trying again.`,
   modelErrorSecond: (muse: string) => `Still no answer from ${muse}. Use Replay to keep going.`,
+  failedPlan: (muse: string) => `${muse} didn't answer, so this plan stopped.`,
 
   followThrough: "Follow-through",
   agentMessagesNotCounted: (count: number) => `Agent messages: ${count} (not counted)`,

@@ -65,7 +65,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
   }
 
   async function handoff(planId: string, via: "whatsapp" | "copy") {
-    await postHandoff(planId, via);
+    await postHandoff(planId, role, via);
     onChanged();
   }
 

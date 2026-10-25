@@ -47,9 +47,12 @@ export type ToolDefinition = {
   parameters: Record<string, unknown>;
 };
 
+// What a handler may know about the model call that asked for it.
+export type ToolMeta = { responseId: string; model: string; call: ModelCallTrace };
+
 // Receives the parsed JSON arguments, or the raw string when the model sent invalid JSON.
 // Handlers zod-parse their own input; whatever they return (or throw) goes back to the model.
-export type ToolHandler = (args: unknown) => Promise<unknown>;
+export type ToolHandler = (args: unknown, meta?: ToolMeta) => Promise<unknown>;
 
 export type TurnFailure = {
   reason: "cap_reached";
@@ -59,6 +62,8 @@ export type TurnFailure = {
 };
 
 export type ModelCallTrace = {
+  responseId: string;
+  model: string;
   ms: number;
   chained: boolean;
   chainRetries: number;
@@ -242,7 +247,9 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
     }
 
     const functionCalls = response.output.filter((item) => item.type === "function_call");
-    calls.push({
+    const trace: ModelCallTrace = {
+      responseId: response.id,
+      model: response.model ?? modelId(),
       ms: Date.now() - callStarted,
       chained: mode === "chain" && previousResponseId !== undefined,
       chainRetries,
@@ -251,7 +258,8 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
       outputTokens: response.usage?.output_tokens ?? 0,
       reasoningTokens: response.usage?.output_tokens_details?.reasoning_tokens ?? 0,
       cachedTokens: response.usage?.input_tokens_details?.cached_tokens ?? 0,
-    });
+    };
+    calls.push(trace);
     finalText = response.output_text ?? "";
 
     if (response.status !== "completed") {
@@ -288,7 +296,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
         ok = false;
       } else {
         try {
-          output = await handler(parseArguments(call.arguments));
+          output = await handler(parseArguments(call.arguments), { responseId: trace.responseId, model: trace.model, call: trace });
           if (typeof output === "object" && output !== null && "error" in output) ok = false;
         } catch (error) {
           output = { error: describeError(error) };

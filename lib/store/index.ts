@@ -32,6 +32,9 @@ export interface Store {
   // which keeps inbox retries idempotent.
   appendMessage(record: MessageRecord): Promise<void>;
   listMessages(contextId?: string): Promise<MessageRecord[]>;
+  // Rewrites an already stored message in place, matched on (contextId, seq). Used when a privacy
+  // toggle replays a message under the new policy; the message keeps its id and position.
+  replaceMessage(record: MessageRecord): Promise<void>;
 
   // Plans, keyed by id. One plan per thread.
   getPlan(id: string): Promise<Plan | null>;

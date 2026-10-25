@@ -86,6 +86,7 @@ describe("tools", () => {
     expect((await store.getSignal(SIGNAL_ID))?.extracted).toMatchObject({ source: "caption_model", model: "muse-spark-1.3", place: "Shawarma Point" });
     const event = (await store.listEvents()).find((row) => row.kind === "caption_extracted");
     expect(event?.text).toContain("Shawarma Point");
+    expect(event?.text).toContain("(extracted from caption)");
     expect(await handlers.record_reel_details({})).toMatchObject({ error: expect.stringContaining("Invalid arguments") });
   });
 

@@ -140,7 +140,9 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
       break;
     }
     case "dropped": {
-      if (myDecision === "declined") {
+      if (snapshot.failure) {
+        items.push({ kind: "bubble", id: "dropped", from: "muse", text: copy.failedPlan(names.muse[snapshot.failure.agent]) });
+      } else if (myDecision === "declined") {
         items.push({ kind: "bubble", id: "dropped", from: "muse", text: copy.youPassed });
       } else if (theirDecision === "declined") {
         items.push({ kind: "bubble", id: "dropped", from: "muse", text: copy.friendPassed(theirs.human) });
@@ -153,6 +155,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
       break;
   }
 
+  if (snapshot.failure) status = copy.statusTrouble(names.muse[snapshot.failure.agent]);
   return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status, items };
 }
 
