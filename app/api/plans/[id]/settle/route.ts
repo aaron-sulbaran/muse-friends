@@ -4,8 +4,9 @@ import { z } from "zod";
 import { refundRun, reserveRun } from "@/lib/agent/caps";
 import { runSettlePreflight, runSettleTurn } from "@/lib/agent/payment-runtime";
 import { httpDeliver } from "@/lib/agent/wire";
-import { ROLE_TO_AGENT } from "@/lib/seed/fixtures";
+import { displayName, ROLE_TO_AGENT } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
+import { simulatedFriend } from "@/lib/ui/tokens";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -44,7 +45,9 @@ export async function POST(request: Request, ctx: RouteContext<"/api/plans/[id]/
   const refusal = await runSettlePreflight(store, agent, id);
   if (refusal) {
     refundRun();
-    return refuse(refusal.error, refusal.status);
+    // Say the friend the way the Activity feed does: Michelle's Muse, not Mochi's, when the simulated friend plays side b.
+    const simulated = agent === "lisa" && (await store.getRoom()).simulatedFriend;
+    return refuse(simulated ? refusal.error.replace(`${displayName(agent)}'s Muse`, simulatedFriend.muse) : refusal.error, refusal.status);
   }
   after(async () => {
     try {

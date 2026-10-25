@@ -144,6 +144,10 @@ export type UiPayment = {
   to: AgentId;
   amount: number;
   reason: string;
+  /** The reason with the plan's event and day in front ("Shawarma Point, Tue Oct 27, dinner share"); the cards show this when set. */
+  description?: string;
+  /** The plan it belonged to, named by its event and day ("Shawarma Point, Tue Oct 27"); unset when the plan is not known. */
+  planLabel?: string;
   note?: string;
   status: "proposed" | "declined" | "failed" | "sent" | "received" | "refunded";
   source: "nessie" | "local";
@@ -216,5 +220,11 @@ export type UiSnapshot = {
   /** What each side lets its Muse send. */
   paymentsScope: Record<AgentId, PaymentsSettings>;
   /** `connected` is true only when the wallets live on the real Nessie sandbox; otherwise a local ledger stands in. */
-  sandbox: { enabled: boolean; connected: boolean; text: string };
+  sandbox: {
+    enabled: boolean;
+    connected: boolean;
+    text: string;
+    /** Present only on the real sandbox, which keeps the transaction records but never moves an account's balance field (checked live); print it near the wallet chip. */
+    balanceNote?: string;
+  };
 };
