@@ -11,6 +11,7 @@ import {
 import { enforceSharePolicy, projectShared, startGate } from "@/lib/policy";
 import { getContact } from "@/lib/seed/contacts";
 import { getPersona } from "@/lib/seed/fixtures";
+import type { Store } from "@/lib/store";
 import type { ToolMeta } from "@/lib/model";
 import type { AgentRuntimeContext } from "./context";
 import { ownFreeBlocks } from "./calendar";
@@ -53,6 +54,19 @@ function normalizeArgs(ctx: AgentRuntimeContext, rawArgs: unknown): unknown {
   return match ? { ...rawArgs, friend: match } : rawArgs;
 }
 
+const PLAN_GONE = "This plan is no longer there (the room was reset). Stop here and do not send anything else.";
+// The pauses (in milliseconds) between looks for a plan that is only late; scaled like the model's retries, so tests can shrink them.
+const PLAN_VISIBLE_PAUSES_MS = [150, 300, 500, 800];
+
+async function planIsThere(store: Store, contextId: string): Promise<boolean> {
+  const scale = Number(process.env.MODEL_RETRY_SCALE ?? 1);
+  for (let attempt = 0; ; attempt += 1) {
+    if (await planForContext(store, contextId)) return true;
+    if (attempt >= PLAN_VISIBLE_PAUSES_MS.length) return false;
+    await new Promise((resolve) => setTimeout(resolve, PLAN_VISIBLE_PAUSES_MS[attempt] * (Number.isFinite(scale) && scale >= 0 ? scale : 1)));
+  }
+}
+
 export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, meta?: ToolMeta): Promise<SendResult> {
   const parsed = SendToFriendArgs.safeParse(normalizeArgs(ctx, rawArgs));
   if (!parsed.success) return fail(`Invalid message. ${z.prettifyError(parsed.error)}`);
@@ -78,6 +92,11 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
 
   const thread = await store.getThread(contextId);
   const prior = (await store.listMessages(contextId)).map((record) => record.message);
+  // A turn only writes into a room that still holds the plan it is working for. If the room was reset under a running turn,
+  // or the group plan is not visible yet, a send would open a thread with no plan and the inbox would invent a pair plan
+  // for it (the 9:08 and 9:11 group drops: dropped, no members, one lone decline). Wait briefly for a plan that is only late.
+  if (ctx.group && !(await planIsThere(store, contextId))) return fail(PLAN_GONE);
+  if (!thread && ctx.signalId && !(await store.getSignal(ctx.signalId))) return fail(PLAN_GONE);
   if (!thread && !ctx.signalId && !ctx.target) return fail("There is no open conversation to send into.");
   if (thread && ENDED.has(thread.state)) return fail("This conversation has already ended. Do not send anything else.");
 
