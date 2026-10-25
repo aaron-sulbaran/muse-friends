@@ -53,7 +53,7 @@ export function JsonDrawer({ message, names, onClose }: Props) {
         if (event.target === dialog.current) onClose();
       }}
       aria-label="Message details"
-      className="ml-auto mr-0 h-dvh max-h-dvh w-[min(520px,100vw)] max-w-none animate-drawer-in overflow-y-auto rounded-l-card bg-surface p-6 text-ink backdrop:bg-black/10"
+      className="ml-auto mr-0 h-dvh max-h-dvh w-full max-w-none min-[900px]:w-[520px] animate-drawer-in overflow-y-auto rounded-l-card bg-surface p-6 text-ink backdrop:bg-black/10"
     >
       {message ? (
         <>

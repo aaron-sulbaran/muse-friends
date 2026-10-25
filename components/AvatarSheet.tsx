@@ -8,6 +8,8 @@ import type { Category, ShareTier, SharingSettings } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
 
 type Props = {
+  /** True when this Muse's person is the simulated friend: the avatar is the grey initial disc. */
+  simulated: boolean;
   /** The Muse whose sharing this is, and the friend it is shared with. */
   museName: string;
   friendMuseName: string;
@@ -36,7 +38,7 @@ const categories: ReadonlyArray<{ value: Category; label: string; fixedOn?: stri
  * switch is checked in code on the next message and replays the propose, so
  * the withheld stamp shows up in Activity.
  */
-export function AvatarSheet({ museName, friendMuseName, sharing, onChanged, onClose }: Props) {
+export function AvatarSheet({ simulated, museName, friendMuseName, sharing, onChanged, onClose }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -71,11 +73,18 @@ export function AvatarSheet({ museName, friendMuseName, sharing, onChanged, onCl
         className="max-h-[88%] w-full animate-card-in overflow-y-auto rounded-t-card bg-surface px-5 pb-8 pt-5 shadow-float"
       >
         <header className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <MuseAvatar agent="lisa" name={museName} size={48} />
-            <div>
-              <h2 className="text-[17px] font-semibold leading-[22px]">{museName}</h2>
-              <p className="text-[13px] leading-[18px] text-muted">Sharing with {friendMuseName}</p>
+          <div>
+            <h2>
+              {/* The wordmark names the feature where its settings live. A fixed vector asset from the brand kit. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/wordmark/muse-friends-wordmark.svg" alt="Muse Friends" className="h-[22px] w-auto" />
+            </h2>
+            <div className="mt-3 flex items-center gap-3">
+              <MuseAvatar agent="lisa" simulated={simulated} name={museName} size={40} />
+              <div>
+                <p className="text-[15px] font-semibold leading-5">{museName}</p>
+                <p className="text-[13px] leading-[18px] text-muted">Sharing with {friendMuseName}</p>
+              </div>
             </div>
           </div>
           <button
