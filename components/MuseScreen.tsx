@@ -26,7 +26,7 @@ import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
 import { GroupAvatars, GroupItem, isGroupItem } from "./GroupThread";
-import { tripOwners } from "@/lib/ui/group";
+import { tripOwners, tripWithNames } from "@/lib/ui/group";
 import { MemberCard } from "./MemberCard";
 import { MuseAvatar } from "./MuseAvatar";
 import { PaymentCard } from "./PaymentCard";
@@ -263,7 +263,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         // On the stage, Activity already sits between the phones; a phone on its own opens it as a sheet.
         return standalone ? <AgreedLine names={item.names} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
       case "member-card":
-        return <MemberCard planId={item.planId} member={item.member} name={item.name} simulated={item.simulated} readOnly={readOnly} onChanged={onChanged} />;
+        return <MemberCard planId={item.planId} member={item.member} name={item.name} />;
       case "outcome-replies":
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
@@ -326,7 +326,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
               avatar
             )}
             <StatusPill name={tripPlan ? tripPlan.title : view.museName} status={view.status} />
-            {tripPlan ? <p className="mt-1.5 px-6 text-center text-[12px] leading-4 text-muted">{tripOwners(tripPlan)}</p> : <WalletChip snapshot={snapshot} agent={view.agent} />}
+            {tripPlan ? <p className="mt-1.5 px-6 text-center text-[12px] leading-4 text-muted">{tripOwners(tripWithNames(snapshot, tripPlan), view.agent)}</p> : <WalletChip snapshot={snapshot} agent={view.agent} />}
             {onboardingOn && friendsIndicator(onboardingState) ? (
               <p className="mt-0.5 text-[11px] font-semibold leading-4 text-muted">{friendsIndicator(onboardingState)}</p>
             ) : null}

@@ -22,7 +22,7 @@ export type ChatItem =
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
   | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; names: string[]; count: number }
-  | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string; simulated: boolean }
+  | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string }
   // A trip's group thread (lib/ui/group.ts): lines from people and their Muses, and the cards a person decides on.
   | { kind: "group-line"; id: string; line: GroupLine }
   | { kind: "trip-question"; id: string; planId: string; member: MemberId; forName: string | null; range: { low: number; high: number }; route: string }
@@ -190,7 +190,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
       // Kai (Pebble's person) has no phone: the coordinator's phone carries Kai's card until they answer, and when one judge plays
       // alone a model answers it (the card says so).
       const phoneless = groupView?.coordinator ? pendingOthers.find((other) => other.id === "kai") : undefined;
-      if (phoneless) items.push({ kind: "member-card", id: `member-card-${phoneless.id}`, planId: plan.id, member: phoneless.id, name: phoneless.name, simulated: snapshot.simulatedFriend });
+      if (phoneless) items.push({ kind: "member-card", id: `member-card-${phoneless.id}`, planId: plan.id, member: phoneless.id, name: phoneless.name });
       if (agreedCount > 0) items.push(agreedLine);
       break;
     case "confirmed":

@@ -2,8 +2,8 @@
 
 import { Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { postClockAdvance, postGroupSignal, postLeakAttempt, postReset, postSignal, postTripSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
-import { controlInfo, jumpLabel as jumpLabelFor, loadReelLabel, SCENARIO_LOCKED_NOTE, scenarios, type ControlKey } from "@/lib/ui/controls";
+import { postClockAdvance, postGroupSignal, postLeakAttempt, postReset, postSignal, postSimulatedFriendSwitch, postTripSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
+import { controlInfo, jumpLabel as jumpLabelFor, loadReelLabel, runningScenario, SCENARIO_LOCKED_NOTE, scenarios, type ControlKey } from "@/lib/ui/controls";
 import { friendLink } from "@/lib/ui/entry";
 import { getRoom } from "@/lib/ui/room";
 import type { ReplayScenario } from "@/lib/ui/use-replay";
@@ -71,8 +71,17 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
     else await replay.start("trip");
   };
   const loadReel = () => run(postSignal);
-  const planForThree = () => run(postGroupSignal);
-  const planTrip = () => run(postTripSignal);
+  // The group demos are one person's to run: Michelle is played by a model (Kai always is), so the room switches to that first.
+  // Starting is only offered with no plan alive, so the switch, which clears the room, never wipes a plan.
+  const startAlone = async (start: () => Promise<Result>): Promise<Result> => {
+    if (!snapshot?.simulatedFriend) {
+      const switched = await postSimulatedFriendSwitch(true);
+      if (!switched.ok) return switched;
+    }
+    return start();
+  };
+  const planForThree = () => run(() => startAlone(postGroupSignal));
+  const planTrip = () => run(() => startAlone(postTripSignal));
   const tryToLeak = async () => {
     setLeak({ running: true });
     const result = await postLeakAttempt();
@@ -108,6 +117,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
   }, []);
 
   const replaying = replay.active;
+  const selectedScenario = runningScenario(plan);
   const items: ReadonlyArray<{ info: ControlKey; label: string; key: string; run: () => void; disabled?: boolean }> = [
     { info: "loadReel", label: loadReelLabel(snapshot?.reel ?? null), key: "S", run: loadReel, disabled: planIsAlive || replaying },
     { info: "jump", label: jumpLabel, key: "F", run: jump, disabled: !canJump || replaying },
@@ -154,13 +164,13 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
                   key={scenario.id}
                   type="button"
                   role="radio"
-                  aria-checked={scenario.available}
+                  aria-checked={selectedScenario === scenario.id}
                   disabled={!scenario.available || (scenario.id !== "one-to-one" && (planIsAlive || replaying))}
                   onClick={scenario.id === "group" ? planForThree : scenario.id === "trip" ? planTrip : undefined}
-                  className="flex w-full items-center justify-between rounded-group px-3 py-1.5 text-left text-[15px] disabled:opacity-40"
+                  className={`flex w-full items-center justify-between rounded-group px-3 py-1.5 text-left text-[15px] ${selectedScenario === scenario.id ? "font-semibold disabled:opacity-100" : "disabled:opacity-40"}`}
                 >
                   <span className="flex items-center gap-2">
-                    <span aria-hidden="true" className={`size-2 rounded-full ${scenario.available ? "bg-accent" : "bg-faint"}`} />
+                    <span aria-hidden="true" className={`size-2 rounded-full ${selectedScenario === scenario.id ? "bg-accent" : "bg-faint"}`} />
                     {scenario.label}
                   </span>
                   {scenario.available ? null : <span className="text-[12px] text-muted">{SCENARIO_LOCKED_NOTE}</span>}

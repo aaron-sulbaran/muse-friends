@@ -195,7 +195,7 @@ export const copy = {
   memberCardTitle: (name: string) => `${name} has no phone`,
   memberCardDetail: (name: string) => `${name} is a fictional friend, so you answer for ${name}.`,
   memberDeciding: (name: string) => `${name} is deciding`,
-  memberPlayedByModel: (name: string) => `${name} is fictional and played by a model. If it stalls, you can answer for ${name}.`,
+  memberPlayedByModel: (name: string) => `${name} is fictional and played by a model. The answer shows up here when it lands.`,
   memberAccept: (name: string) => `${name} says yes`,
   memberDecline: (name: string) => `${name} says not now`,
   planForThree: "Plan for three",

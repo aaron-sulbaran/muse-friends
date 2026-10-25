@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { confirmJoin, driveTrip, recordAnswer, startTrip, type TripPlayers } from "@/lib/agent/trip";
 import { JsonStore } from "@/lib/store/json";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
-import { answerText, cardsOnPhone, tripDates, tripOwners, tripThread } from "@/lib/ui/group";
+import { answerText, cardsOnPhone, tripDates, tripOwners, tripThread, tripWithNames } from "@/lib/ui/group";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 import type { Role, UiSnapshot } from "@/lib/ui/types";
 import { installFakeModel, removeFakeModel } from "./helpers/fakeModel";
@@ -116,24 +116,37 @@ describe("the thread after the proposal", () => {
     expect(pot).toMatchObject({ answerable: [], viewer: "lisa" });
   });
 
-  it("with real people, Kai's card is on the coordinator's phone and Michelle's is on her own", async () => {
+  it("with a real friend, Michelle's card is on her own phone and Kai has none: a model plays Kai, and the thread says Pebble is asking", async () => {
     await store.putRoom({ ...(await store.getRoom()), simulatedFriend: false });
     await driveTrip(store, planId, players, { wallNow });
     const snapshot = await ui();
-    expect(cardsOnPhone(snapshot, "a")).toEqual(["aaron", "kai"]);
+    expect(cardsOnPhone(snapshot, "a")).toEqual(["aaron"]);
     expect(cardsOnPhone(snapshot, "b")).toEqual(["lisa"]);
     const onA = viewForRole(snapshot, "a").items.filter((item) => item.kind === "trip-question");
-    expect(onA.map((item) => (item.kind === "trip-question" ? item.member : ""))).toEqual(["aaron", "kai"]);
-    expect(onA[1]).toMatchObject({ forName: "Kai" });
+    expect(onA.map((item) => (item.kind === "trip-question" ? item.member : ""))).toEqual(["aaron"]);
     const onB = viewForRole(snapshot, "b").items.filter((item) => item.kind === "trip-question");
     expect(onB).toHaveLength(1);
+    // Kai answered through the model, so Pebble relays it and no one is asked for Kai.
+    expect(texts(viewForRole(snapshot, "a").items)).toContain("Kai's limit for a flight is $900. Anime, and low mobility.");
+  });
+
+  it("calls an unnamed person your friend, never a new word, and puts the reader first in the header line", async () => {
+    await runToTheJudge();
+    const snapshot = await ui();
+    const onB = viewForRole(snapshot, "b");
+    const organizer = onB.items.flatMap((item) => (item.kind === "group-line" ? [item.line] : [])).find((line) => line.sender.name === "Your friend");
+    expect(organizer?.sender.kind).toBe("friend");
+    expect(onB.items.flatMap((item) => (item.kind === "group-line" ? [item.line.sender.name] : []))).not.toContain("The organizer");
+    const trip = tripWithNames(snapshot, snapshot.plan!.trip!);
+    expect(tripOwners(trip, "lisa")).toBe("You, your friend, and Kai, with Sprout, Mochi, and Pebble");
+    expect(tripOwners(trip, "aaron")).toBe("You, Michelle, and Kai, with Sprout, Mochi, and Pebble");
   });
 });
 
 describe("the group header words and dates", () => {
   it("names the three people, then their three Muses, and the exact days", async () => {
     const trip = (await ui()).plan!.trip!;
-    expect(tripOwners(trip)).toBe("You, Michelle, and Kai, with Sprout, Mochi, and Pebble");
+    expect(tripOwners(trip, "aaron")).toBe("You, Michelle, and Kai, with Sprout, Mochi, and Pebble");
     expect(tripDates(trip)).toBe("July 10 to 17, 2027");
   });
 

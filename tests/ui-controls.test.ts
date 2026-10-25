@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DemoControls } from "@/components/DemoControls";
-import { controlInfo, jumpLabel, loadReelLabel, SCENARIO_LOCKED_NOTE, scenarios } from "@/lib/ui/controls";
+import { controlInfo, jumpLabel, loadReelLabel, runningScenario, SCENARIO_LOCKED_NOTE, scenarios } from "@/lib/ui/controls";
 import type { UiReel } from "@/lib/ui/types";
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
@@ -53,6 +53,16 @@ describe("the scenarios", () => {
       ["Group trip", true],
     ]);
     expect(SCENARIO_LOCKED_NOTE).toBe("after the gate");
+  });
+});
+
+describe("the running scenario", () => {
+  const group = { coordinator: "aaron" as const, members: [], contextIds: [] };
+  it("is one to one with no plan, a plan for three with a group, and the trip for a trip, so the row shows what is running", () => {
+    expect(runningScenario(null)).toBe("one-to-one");
+    expect(runningScenario({ kind: "hangout", group: null })).toBe("one-to-one");
+    expect(runningScenario({ kind: "hangout", group })).toBe("group");
+    expect(runningScenario({ kind: "trip", group })).toBe("trip");
   });
 });
 

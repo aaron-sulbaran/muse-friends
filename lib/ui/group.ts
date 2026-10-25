@@ -1,6 +1,7 @@
 import type { ChatItem, PhoneStatus } from "./chat";
-import { listOf } from "./format";
+import { listOf, namesFor } from "./format";
 import type { Sender, ThreadLine } from "./thread";
+import { capital } from "./tokens";
 import type { AvatarMood, MemberId, Role, UiSnapshot, UiTrip, UiTripAnswer, UiTripPerson } from "./types";
 
 /*
@@ -61,10 +62,11 @@ export function tripDates(trip: Pick<UiTrip, "horizon">): string {
   return `${month} ${part(start, { day: "numeric" })} to ${through}, ${part(start, { year: "numeric" })}`;
 }
 
-/** The line under the group's name: the three people, then their three Muses. */
-export function tripOwners(trip: UiTrip): string {
-  const people = trip.people.map((person) => (person.member === "aaron" ? "You" : person.name));
-  return `${listOf(people)}, with ${listOf(trip.people.map((person) => person.muse))}`;
+/** The line under the group's name, from the reader's side: you first, then the others, then the three Muses. */
+export function tripOwners(trip: UiTrip, viewer: MemberId): string {
+  const you = trip.people.filter((person) => person.member === viewer).map(() => "You");
+  const others = trip.people.filter((person) => person.member !== viewer).map((person) => person.name);
+  return `${listOf([...you, ...others])}, with ${listOf(trip.people.map((person) => person.muse))}`;
 }
 
 export function money(amount: number): string {
@@ -76,10 +78,22 @@ const cap = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 /** The phone seat each role reads from; the second seat's person is Michelle, played by a model or a real friend. */
 const viewerOf: Record<Role, MemberId> = { a: "aaron", b: "lisa" };
 
-/** Whose cards this phone carries: its own person's, and Kai's on the coordinator's phone when no model plays them. */
+/**
+ * Whose cards this phone carries: only its own person's. Kai is fictional and has no seat, so a model always plays them and
+ * nobody answers for them from another phone; Michelle has a card on the second phone only when a real friend is there.
+ */
 export function cardsOnPhone(snapshot: Pick<UiSnapshot, "simulatedFriend">, role: Role): MemberId[] {
-  if (role === "a") return snapshot.simulatedFriend ? ["aaron"] : ["aaron", "kai"];
+  if (role === "a") return ["aaron"];
   return snapshot.simulatedFriend ? [] : ["lisa"];
+}
+
+/**
+ * The trip with its people named by the names rule (PR 72): a person nobody has named is "your friend", never a Muse's
+ * name and never a new word; Michelle when a model plays her; Kai in every room. The reader's own "You" is the card's job.
+ */
+export function tripWithNames(snapshot: UiSnapshot, trip: UiTrip): UiTrip {
+  const names = namesFor(snapshot);
+  return { ...trip, people: trip.people.map((person) => (person.member === "kai" ? person : { ...person, name: names.human[person.member] })) };
 }
 
 export function personOf(trip: UiTrip, member: MemberId): UiTripPerson {
@@ -112,7 +126,7 @@ export type TripThread = { items: ChatItem[]; status: PhoneStatus | null; mood: 
 
 export function tripThread(snapshot: UiSnapshot, role: Role): TripThread {
   const plan = snapshot.plan!;
-  const trip = plan.trip!;
+  const trip = tripWithNames(snapshot, plan.trip!);
   const viewer = viewerOf[role];
   const mine = cardsOnPhone(snapshot, role);
   const answered = new Map(trip.answers.map((answer) => [answer.member, answer]));
@@ -131,7 +145,7 @@ export function tripThread(snapshot: UiSnapshot, role: Role): TripThread {
     const simulated = member === "kai" || (member !== "aaron" && about.simulated);
     return member === viewer
       ? { kind: "you", name: "You" }
-      : { kind: "friend", name: member === "aaron" ? "The organizer" : about.name, simulated };
+      : { kind: "friend", name: capital(about.name), simulated };
   };
   const muse = (member: MemberId): GroupSender => {
     const about = personOf(trip, member);
