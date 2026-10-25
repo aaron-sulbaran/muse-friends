@@ -65,6 +65,7 @@ DNS records Vercel showed for this project: _not added yet; filled in after step
 
 The production store has to survive across stateless function calls; local development keeps the JSON file. The project exists: `muse-friends`, ref `egzeidhihiimurkinzyb`, us-east-1 (next to Vercel's `iad1`). The ref and the URL are not secrets.
 
+0. Create the project: **done by Aaron at 8:35pm** (nothing else was set up inside it).
 1. Apply the schema, either way:
    - **Through the platform lane's session.** In that session's own chat, say `target egzeidhihiimurkinzyb`, and approve its migration prompt. The session then runs `supabase/migrations/20261025010000_store.sql` through the Supabase tooling.
    - **By hand.** Open https://supabase.com/dashboard/project/egzeidhihiimurkinzyb/sql/new, paste the whole of `supabase/migrations/20261025010000_store.sql`, click **Run**. Expect `Success. No rows returned`, and **Table Editor** listing 14 tables (`threads`, `messages`, `plans`, `cards`, `policies`, `redactions`, `rejected_windows`, `signals`, `events`, `busy`, `room`, `clock`, `recorded_runs`, `cursor`), each marked RLS enabled.
