@@ -51,7 +51,20 @@ export const tripCopy = {
   asking: (muses: string) => `${muses} is asking`,
   composing: "Sprout is putting the plan together",
   allInStatus: "all three are in",
+  bookingIntro: "Everyone's in, so I'm lining it up now: the flight, then the hotel, then the dates and the days.",
+  bookingStatus: "Sprout is booking the trip",
+  bookingFits: (name: string) => `Step-free rooms and a seated route all week. That works for ${name}.`,
+  bookedLine: (dates: string) => `Booked for ${dates}, on all three calendars. This is a simulated booking with seeded prices; nothing real was bought.`,
+  bookedClosing: "Done. Nothing else to do until July.",
+  bookedStatus: "trip booked",
 } as const;
+
+/** How long each booking step takes on screen: finding the flight, the hotel, the dates, the days, then the wrap-up. */
+export const TRIP_BOOKING_STEP_MS = 2_200;
+/** The booking card's rows, in the order Sprout fills them. */
+export const TRIP_BOOKING_ROWS = ["flight", "stay", "dates", "days"] as const;
+/** Steps from the first row to the last line: one to start each row, one to finish the last, then the wrap-up. */
+export const TRIP_BOOKING_STEPS = TRIP_BOOKING_ROWS.length + 2;
 
 /** "July 10 to 17, 2027" from the trip's horizon, read in Central like every time on screen. */
 export function tripDates(trip: Pick<UiTrip, "horizon">): string {
@@ -124,7 +137,12 @@ export function servedBy(trip: UiTrip, serves: string[]): string[] {
 
 export type TripThread = { items: ChatItem[]; status: PhoneStatus | null; mood: AvatarMood };
 
-export function tripThread(snapshot: UiSnapshot, role: Role): TripThread {
+/**
+ * `booking` is how many booking steps this phone shows once all three are in (lib/ui/use-trip-booking.ts paces it): 0 shows
+ * none, 1 starts the card on the flight, each step after fills a row, and TRIP_BOOKING_STEPS adds the wrap-up under the
+ * finished card.
+ */
+export function tripThread(snapshot: UiSnapshot, role: Role, booking = 0): TripThread {
   const plan = snapshot.plan!;
   const trip = tripWithNames(snapshot, plan.trip!);
   const viewer = viewerOf[role];
@@ -223,16 +241,36 @@ export function tripThread(snapshot: UiSnapshot, role: Role): TripThread {
     }
   }
   if (plan.state === "confirmed" && trip.pot) say(muse("aaron"), tripCopy.allIn(trip.pot.target));
+  // Round 4: Sprout books it, one piece at a time, from the itinerary everyone put money in for.
+  const steps = plan.state === "confirmed" && trip.itinerary ? Math.min(Math.max(booking, 0), TRIP_BOOKING_STEPS) : 0;
+  if (steps > 0) {
+    say(muse("aaron"), tripCopy.bookingIntro);
+    card({ kind: "trip-booking", id: "booking", trip, done: Math.min(steps - 1, TRIP_BOOKING_ROWS.length) });
+  }
+  if (steps === TRIP_BOOKING_STEPS) {
+    const stay = trip.itinerary!.lines.find((line) => line.kind === "stay");
+    const kai = trip.people.find((entry) => entry.member === "kai");
+    if (kai && /mobility/i.test(kai.constraint ?? "") && stay?.serves.some((tag) => /mobility/i.test(tag))) say(muse("kai"), tripCopy.bookingFits(kai.name));
+    say(muse("aaron"), tripCopy.bookedLine(tripDates(trip)));
+    items.push({ kind: "collapsed", id: "booked", text: tripCopy.bookedClosing });
+  }
   if (plan.state === "dropped") say(muse("aaron"), trip.pot ? tripCopy.dropped : (trip.unknowns.at(-1) ?? tripCopy.dropped));
 
-  return { items, ...statusOf(snapshot, role, trip, mine, answered) };
+  return { items, ...statusOf(snapshot, role, trip, mine, answered, steps) };
 }
 
 function sameSender(a: GroupSender, b: GroupSender): boolean {
   return a.kind === b.kind && a.name === b.name && a.owner === b.owner;
 }
 
-function statusOf(snapshot: UiSnapshot, role: Role, trip: UiTrip, mine: MemberId[], answered: Map<MemberId, UiTripAnswer>): { status: PhoneStatus | null; mood: AvatarMood } {
+function statusOf(
+  snapshot: UiSnapshot,
+  role: Role,
+  trip: UiTrip,
+  mine: MemberId[],
+  answered: Map<MemberId, UiTripAnswer>,
+  booking: number,
+): { status: PhoneStatus | null; mood: AvatarMood } {
   const plan = snapshot.plan!;
   const viewer = viewerOf[role];
   if (plan.state === "negotiating") {
@@ -248,6 +286,8 @@ function statusOf(snapshot: UiSnapshot, role: Role, trip: UiTrip, mine: MemberId
     const names = pending.filter((deposit) => deposit.member !== viewer).map((deposit) => personOf(trip, deposit.member).name);
     return { status: names.length > 0 ? { glyph: "waiting-friend", text: tripCopy.waitingFor(listOf(names)) } : null, mood: "idle" };
   }
+  if (plan.state === "confirmed" && booking > 0 && booking < TRIP_BOOKING_STEPS) return { status: { glyph: "thinking", text: tripCopy.bookingStatus }, mood: "thinking" };
+  if (plan.state === "confirmed" && booking === TRIP_BOOKING_STEPS) return { status: { glyph: "done", text: tripCopy.bookedStatus }, mood: "idle" };
   if (plan.state === "confirmed") return { status: { glyph: "done", text: tripCopy.allInStatus }, mood: "idle" };
   return { status: null, mood: "idle" };
 }

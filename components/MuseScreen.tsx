@@ -14,6 +14,7 @@ import { getRoom } from "@/lib/ui/room";
 import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
 import { useFriendReplied } from "@/lib/ui/use-friend-reply";
 import { useOnboarding } from "@/lib/ui/use-onboarding";
+import { useTripBooking } from "@/lib/ui/use-trip-booking";
 import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
 import { DaySeparator, TypingDots } from "./ChatBubble";
 import { AgreedLine } from "./AgreedLine";
@@ -99,7 +100,9 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem, lineOf: (
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
 export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, onOpenPayment, standalone, onboarding = false }: Props) {
   const friendReplied = useFriendReplied(snapshot.plan);
-  const view = viewForRole(snapshot, role, { friendReplied });
+  // Once all three are in on a trip, Sprout books it step by step on its own (lib/ui/use-trip-booking.ts).
+  const tripBooking = useTripBooking(snapshot.plan);
+  const view = viewForRole(snapshot, role, { friendReplied, tripBooking });
   const [pending, setPending] = useState(false);
   const [replanError, setReplanError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
