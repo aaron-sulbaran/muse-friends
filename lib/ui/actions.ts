@@ -49,6 +49,16 @@ export function postSimulatedAnswer(planId: string) {
   return post("/api/simulated-friend", { planId });
 }
 
+/**
+ * "That time doesn't work for me": mark the plan's window busy for this person, then start a new run so the
+ * agents plan around it.
+ */
+export async function postReplan(planId: string, role: Role): Promise<Result> {
+  const marked = await post(`/api/plans/${planId}/busy`, { role });
+  if (!marked.ok) return marked;
+  return postSignal();
+}
+
 export function postClockAdvance() {
   return post("/api/clock", { action: "advance" });
 }

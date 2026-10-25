@@ -13,6 +13,9 @@ type Props = {
   /** True while a decision is on its way to the server. */
   pending: boolean;
   onDecide: (choice: "accept" | "decline") => void;
+  /** "That time doesn't work for me": marks the window busy and plans again. */
+  onReplan: () => void;
+  error: string | null;
 };
 
 function Row({ icon, title, detail }: { icon: React.ReactNode; title: string; detail?: string }) {
@@ -28,7 +31,7 @@ function Row({ icon, title, detail }: { icon: React.ReactNode; title: string; de
 }
 
 /** The one approval card per plan, in the checkout-card pattern: a title, a grey reason, grouped rows, two pills. */
-export function RecommendationCard({ plan, role, view, simulatedFriend, pending, onDecide }: Props) {
+export function RecommendationCard({ plan, role, view, simulatedFriend, pending, onDecide, onReplan, error }: Props) {
   const reelOwner = role === "a" ? `${view.friendHumanName}'s` : "your";
   return (
     <section
@@ -72,6 +75,19 @@ export function RecommendationCard({ plan, role, view, simulatedFriend, pending,
           {role === "a" ? copy.acceptA : copy.acceptB}
         </button>
       </div>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={onReplan}
+        className="mt-2 w-full rounded-full px-3 py-2 text-[13px] font-semibold text-muted transition-colors hover:bg-group disabled:opacity-50"
+      >
+        {copy.cardReplan}
+      </button>
+      {error ? (
+        <p role="alert" className="mt-1 text-center text-[13px] leading-[18px] text-withheld">
+          {error}
+        </p>
+      ) : null}
     </section>
   );
 }

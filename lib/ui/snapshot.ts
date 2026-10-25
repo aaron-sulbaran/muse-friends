@@ -92,7 +92,7 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed"]);
+const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed", "busy_added"]);
 
 function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
   return events

@@ -3,11 +3,14 @@ import { GET as getClockless } from "@/app/api/state/route";
 import { POST as postClock } from "@/app/api/clock/route";
 import { POST as postControls } from "@/app/api/controls/route";
 import { GET as getDraft, POST as postDraft } from "@/app/api/plans/[id]/draft/route";
+import { POST as postBusy } from "@/app/api/plans/[id]/busy/route";
 import { POST as postDecision } from "@/app/api/plans/[id]/decision/route";
 import { GET as getHold } from "@/app/api/plans/[id]/hold.ics/route";
 import { POST as postFriend } from "@/app/api/simulated-friend/route";
 import { GET as getReplay } from "@/app/api/replay/route";
+import { ownCalendar } from "@/lib/agent/calendar";
 import { SHAWARMA_PLAN_ID, recordedSnapshot } from "@/lib/seed/fixtures";
+import { toUiSnapshot } from "@/lib/ui/snapshot";
 import { JsonStore } from "@/lib/store/json";
 import { installFakeModel, removeFakeModel } from "./helpers/fakeModel";
 
@@ -139,5 +142,35 @@ describe("replay", () => {
     expect(result.status).toBe(200);
     expect(replay.frames.length).toBeGreaterThan(8);
     expect(replay.frames.every((frame) => frame.snapshot.mode === "replay")).toBe(true);
+  });
+});
+
+describe("that time doesn't work for me", () => {
+  it("marks the plan's window busy for that person, so the agents' calendar includes it", async () => {
+    const plan = (await store.getPlan(SHAWARMA_PLAN_ID))!;
+    const result = await answer(await postBusy(json({ role: "a" }), ctx()));
+    expect(result.status).toBe(200);
+    const aaron = await ownCalendar(store, "aaron");
+    const block = aaron.find((event) => event.title === "Busy");
+    expect(block).toMatchObject({ private: true });
+    expect(Date.parse(block!.start)).toBe(Date.parse(plan.window!.start));
+    expect(Date.parse(block!.end)).toBe(Date.parse(plan.window!.end));
+    expect((await ownCalendar(store, "lisa")).some((event) => event.title === "Busy")).toBe(false);
+  });
+
+  it("shows up on the timeline as a row of its own", async () => {
+    await postBusy(json({ role: "b" }), ctx());
+    const { notes } = toUiSnapshot(await store.snapshot(), { mode: "live" });
+    expect(notes.map((note) => note.kind)).toContain("busy_added");
+    expect(notes.find((note) => note.kind === "busy_added")?.text).toContain("marked");
+  });
+
+  it("only while the plan is waiting on people, and for a plan that exists", async () => {
+    expect((await answer(await postBusy(json({ role: "a" }), ctx("plan_missing")))).status).toBe(404);
+    expect((await answer(await postBusy(json({ role: "x" }), ctx()))).status).toBe(400);
+    await postDecision(json({ role: "a", choice: "accept" }), ctx());
+    await postDecision(json({ role: "b", choice: "accept" }), ctx());
+    expect((await answer(await postBusy(json({ role: "a" }), ctx()))).status).toBe(409);
+    expect((await ownCalendar(store, "aaron")).some((event) => event.title === "Busy")).toBe(false);
   });
 });

@@ -83,7 +83,7 @@ export type FollowThroughEvent = {
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added";
   at: string;
   text: string;
 };

@@ -18,6 +18,7 @@ export const copy = {
   /** `reelOwner` is already possessive: "Lisa's" or "your". */
   cardReason: (reelOwner: string) => `Based on ${reelOwner} reel and both calendars.`,
   placeKeptPrivate: "Place kept private",
+  cardReplan: "That time doesn't work for me",
   declineA: "Not now",
   acceptA: "Reach out",
   declineB: "Not now",
