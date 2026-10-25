@@ -87,6 +87,8 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
   const theirs = { muse: names.muse[friend], human: names.human[friend] };
 
   const items: ChatItem[] = [];
+  // The next idea and the closing line wait until the money is settled, so they always come last.
+  const ending: ChatItem[] = [];
   // A refused follow-up is a dropped plan on the record, but on the phone nothing started: the person can try again.
   const plan = snapshot.plan && !snapshot.plan.refused ? snapshot.plan : null;
   // A plan for three has its own group thread (the trip's lines); only your private chat with your Muse joins it here.
@@ -259,7 +261,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
           const sep = daySeparatorFor(followedUp.at, followedUp.at);
           items.push({ kind: "separator", id: "sep-followup", day: dayWordFor(followedUp.at), time: sep.time });
           items.push({ kind: "bubble", id: "followup", from: "muse", text: copy.followUp });
-          pushOutcome(items, plan, role, theirs.human);
+          pushOutcome(items, ending, plan, role, theirs.human);
         }
       }
       break;
@@ -294,6 +296,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
 
   // What comes after the person decides: the friend's scripted answer, and the person's own private questions to their Muse.
   for (const line of thread) if (line.phase === "after") items.push({ kind: "thread-line", id: line.id, line });
+  items.push(...ending);
 
   if (snapshot.inFlight?.agents.includes(agent)) mood = "thinking";
   // While negotiating, the glyph follows the header loop: thinking while this Muse's own call runs, talking while it waits.
@@ -308,7 +311,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
 }
 
 /** Only a person's answer counts: "We went!" is the hangout that happened; "Didn't happen" counts nothing. */
-function pushOutcome(items: ChatItem[], plan: UiPlan, role: Role, friend: string) {
+function pushOutcome(items: ChatItem[], ending: ChatItem[], plan: UiPlan, role: Role, friend: string) {
   const outcome = plan.outcome;
   if (!outcome) {
     items.push({ kind: "outcome-replies", id: "outcome-replies", planId: plan.id });
@@ -323,8 +326,8 @@ function pushOutcome(items: ChatItem[], plan: UiPlan, role: Role, friend: string
   items.push({ kind: "bubble", id: "outcome-reply", from: "muse", text: copy.outcomeWentReply });
   // The next idea comes from what the two already shared, never a repeat of the same place.
   const next = (outcome.nextIdeaId ? pastSignal(outcome.nextIdeaId) : undefined) ?? mostRecent(OTHER_SIGNALS);
-  if (next) items.push({ kind: "bubble", id: "next-idea", from: "muse", text: role === "a" ? next.nextIdea(friend) : next.nextIdeaMine(friend) });
-  items.push({ kind: "collapsed", id: "closing", text: copy.closingLine, check: true });
+  if (next) ending.push({ kind: "bubble", id: "next-idea", from: "muse", text: role === "a" ? next.nextIdea(friend) : next.nextIdeaMine(friend) });
+  ending.push({ kind: "collapsed", id: "closing", text: copy.closingLine, check: true });
 }
 
 function mostRecent(signals: PastSignal[]): PastSignal | undefined {
