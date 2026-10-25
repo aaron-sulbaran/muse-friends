@@ -14,7 +14,7 @@ export type ChatItem =
   | { kind: "separator"; id: string; day: string; time: string }
   | { kind: "bubble"; id: string; from: "muse" | "user"; text: string }
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
-  | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; align: "left" | "right" }
+  | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; names: string[]; count: number }
   | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string }
   | { kind: "outcome-replies"; id: string; planId: string }
@@ -77,7 +77,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
 
   // The chat before Muse Friends: things the two shared and never turned into a plan, oldest first.
   const base = plan?.history[0]?.at ?? snapshot.now;
-  for (const signal of [...OTHER_SIGNALS, SHAWARMA_REEL]) pushPastSignal(items, signal, role, theirs.human, base);
+  for (const signal of [...OTHER_SIGNALS, demoReel(snapshot)]) pushPastSignal(items, signal, role, theirs.human, base);
 
   if (!plan) {
     // Before any plan: side b can send the reel; a judge on side a can bring in the simulated friend
@@ -250,6 +250,21 @@ function mostRecent(signals: PastSignal[]): PastSignal | undefined {
   return [...signals].sort((first, second) => first.daysAgo - second.daysAgo)[0];
 }
 
+/** The shawarma reel as shared in the chat: the owner's real reel when it was read live from Instagram. */
+function demoReel(snapshot: UiSnapshot): PastSignal {
+  const reel = snapshot.reel;
+  if (!reel) return SHAWARMA_REEL;
+  return {
+    ...SHAWARMA_REEL,
+    poster: reel.username,
+    caption: reel.caption,
+    title: copy.reelLivePlace,
+    image: reel.thumbnailUrl ?? undefined,
+    permalink: reel.permalink,
+    live: true,
+  };
+}
+
 /** One old share: a day separator, the share (a reel card for a reel), and the reply that went nowhere. */
 function pushPastSignal(items: ChatItem[], signal: PastSignal, role: Role, friend: string, baseIso: string) {
   const at = new Date(new Date(baseIso).getTime() - signal.daysAgo * 24 * 60 * 60 * 1000);
@@ -264,6 +279,7 @@ function pushPastSignal(items: ChatItem[], signal: PastSignal, role: Role, frien
       place: signal.title,
       image: signal.image,
       permalink: signal.permalink,
+      live: signal.live,
       align: role === "a" ? "left" : "right",
     });
   }

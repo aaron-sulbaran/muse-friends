@@ -5,11 +5,14 @@ import { startGroup } from "@/lib/agent/group";
 import { injectSignal, runSignalTurn } from "@/lib/agent/runtime";
 import { newId } from "@/lib/agent/ids";
 import { httpDeliver } from "@/lib/agent/wire";
+import { getLiveReel } from "@/lib/instagram";
+import type { Signal } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
 
-// "Lisa sent Aaron a reel": injects the seeded signal and starts the receiving agent's turn after
-// responding. Seeded and fictional; the caption is read by Muse Spark live.
+// "Lisa sent Aaron a reel": injects the signal and starts the receiving agent's turn after responding.
+// The reel is read live from its owner's Instagram (lib/instagram.ts) when a token is set, else the seeded,
+// fictional one; either way the caption is read by Muse Spark live.
 //
 // Live runs spend Muse credits, so each start is counted against a per-room and a global hourly cap
 // (lib/agent/caps.ts). Past either, the answer is 429 { paused: true, text: "Live runs paused, playing a
@@ -40,7 +43,21 @@ export async function POST(request: Request) {
   const budget = reserved.budget;
   const store = await getStore();
 
-  const signal = { ...rawShawarmaSignal(), id: newId("sig") };
+  const seeded = rawShawarmaSignal();
+  const live = await getLiveReel();
+  const signal: Signal = live
+    ? {
+        ...seeded,
+        id: newId("sig"),
+        media: live,
+        provenance: {
+          source: "instagram_graph_api",
+          shapedLike: "Instagram Graph API media fields",
+          fictional: false,
+          note: "Read live through the Instagram Graph API from the reel owner's own account, with their consent.",
+        },
+      }
+    : { ...seeded, id: newId("sig") };
   const origin = new URL(request.url).origin;
 
   if (body.data.scenario === "group") {
