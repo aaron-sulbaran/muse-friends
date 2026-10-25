@@ -30,11 +30,14 @@ export type HistoryGroup = {
 const standingOf = (payment: UiPayment): string =>
   payment.status === "sent" ? copy.historyStandingWaiting : payment.status === "refunded" ? copy.historyStandingBack : copy.historyStandingKept;
 
+/** Money that moved: a proposal still waiting, one declined, and one that failed are not in the wallet's history. */
+const moved = (payment: UiPayment) => payment.status === "sent" || payment.status === "received" || payment.status === "refunded";
+
 const newestFirst = (first: UiPayment, second: UiPayment) => Date.parse(second.at) - Date.parse(first.at);
 
 export function paymentHistory(snapshot: Pick<UiSnapshot, "payments" | "sides" | "simulatedFriend">, agent: AgentId): HistoryGroup[] {
   const names = namesFor(snapshot).human as Partial<Record<string, string>>;
-  const mine = snapshot.payments.filter((payment) => payment.from === agent || payment.to === agent).sort(newestFirst);
+  const mine = snapshot.payments.filter((payment) => moved(payment) && (payment.from === agent || payment.to === agent)).sort(newestFirst);
   const byFriend = new Map<string, UiPayment[]>();
   for (const payment of mine) {
     const friend = payment.from === agent ? payment.to : payment.from;

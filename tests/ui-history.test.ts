@@ -58,6 +58,14 @@ describe("the wallet history", () => {
     expect(group.rows[0].standing).toBe("Sent back");
   });
 
+  it("lists money that moved, not a proposal waiting, declined or failed", () => {
+    const rows = paymentHistory(
+      withPayments([payment({ id: "a", status: "proposed" }), payment({ id: "b", status: "declined" }), payment({ id: "c", status: "failed" }), payment({ id: "d", status: "sent" })]),
+      "aaron",
+    );
+    expect(rows.flatMap((group) => group.rows.map((row) => row.id))).toEqual(["d"]);
+  });
+
   it("leaves out payments between other people", () => {
     expect(paymentHistory(withPayments([payment({ from: "lisa", to: "lisa" })]), "aaron")).toEqual([]);
   });
