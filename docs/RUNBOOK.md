@@ -9,7 +9,7 @@ How Muse Friends is hosted, and every step that needs a human with a dashboard l
 | Production URL (QR code, judges, README) | https://musefriends.tech. The canonical address is **https://www.musefriends.tech**: the bare name answers with a 308 redirect to it, so the browser's address bar ends on `www` |
 | Fallback address | https://muse-friends.vercel.app: public and always live; hand this one out if the domain ever misbehaves |
 | Health check | https://musefriends.tech/api/health (after the redirect, https://www.musefriends.tech/api/health) returns `{"ok":true,"sha":"<7 chars>"}`; `sha` is the deployed commit |
-| Vercel project | `muse-friends`, team "Aaron's Personal Projects" (Hobby), region `iad1` |
+| Vercel project | `muse-friends`, team "Aaron's Personal Projects" (Pro since Sun Oct 25 about 2:15am, Hobby before that), region `iad1` |
 | Git connection | `aaron-sulbaran/muse-friends`; `main` deploys to production, every other branch to a preview |
 | QR code | `public/qr.svg` (served at `/qr.svg`), encodes `https://musefriends.tech` |
 
@@ -17,7 +17,7 @@ How Muse Friends is hosted, and every step that needs a human with a dashboard l
 
 - Push to `main`: production deploy, served on `www.musefriends.tech`, `musefriends.tech`, and `muse-friends.vercel.app` within about a minute.
 - Push to any other branch: a preview deploy with its own URL. **Previews are behind Vercel Authentication** (a Vercel login is required to open them). Only the production addresses (`www.musefriends.tech`, the redirecting `musefriends.tech`, and the primary alias `muse-friends.vercel.app`) are public; the team-scoped alias `muse-friends-aaron-sulbaran-projects.vercel.app` also redirects to a Vercel login. Always hand out and test one of the public addresses.
-- This is a Hobby project, and Hobby limits Git deploys to the account owner's own commits (not yet tested here with a second author). If a push from someone else never produces a deployment, deploy from the owner's machine with `vercel --prod`.
+- This was a Hobby project, and Hobby limits Git deploys to the account owner's own commits; the team is on Pro now and that has not been re-tested with a second author. If a push from someone else never produces a deployment, deploy from the owner's machine with `vercel --prod`.
 - Environment variables apply to new deployments only. After adding or changing one, redeploy (H1 step 4).
 
 CLI, from the repo root of a linked checkout (`vercel link --yes --project muse-friends --scope aaron-sulbaran-projects` once per checkout; the link folder `.vercel/` is gitignored):
@@ -30,7 +30,9 @@ vercel inspect <deployment-url> # build details
 
 ## Deploy quota
 
-The Hobby plan allows **100 deployments per day**, and every push counts: each push to any branch builds a preview, each merge to `main` builds production, and a CLI deploy counts too. On Sun Oct 25 at 12:36am Central the team hit the cap and Vercel started refusing builds.
+**Update, Sun Oct 25 about 2:45am: the team is on Pro, so the cap described below is behind us.** Checked with the CLI: `vercel teams ls` lists "Aaron's Personal Projects" with plan `pro`. Vercel's limits page (https://vercel.com/docs/limits) gives Pro **6000 deployments a day** (`api-deployments-paid-per-day`) and **450 an hour** (`api-deployments-paid-per-hour`); Hobby was 100 a day and 100 an hour (`api-deployments-free-per-day`, `api-deployments-free-per-hour`). 450 an hour is the one to remember if many branches push at once: a refused build would now read as a per-hour limit, not a daily one. I have not counted against the new limits; the count command at the end of this section still works. The Hobby history below stays as the record of what happened and how it looked. Also true now: the cron sweep may run every 15 minutes (see "Scheduled sweep"), the function duration cap is described under "Function duration", and Aaron has about $20 of Vercel AI Gateway credits, which the agents deliberately do **not** use (the Meta track needs Muse Spark called directly through `MODEL_BASE_URL`, so nothing is routed through the gateway; it is only a possible fallback for a non-agent model call, and nothing is wired to it).
+
+The Hobby plan allowed **100 deployments per day**, and every push counts: each push to any branch builds a preview, each merge to `main` builds production, and a CLI deploy counts too. On Sun Oct 25 at 12:36am Central the team hit the cap and Vercel started refusing builds.
 
 **Today's numbers** (counted at 12:48am Central with the command below): this project had 91 deployments in the previous 24 hours, the first at Sat 8:17pm and the last at Sun 12:36am. 32 were production (31 from `main`), 59 were previews (88 ready, 3 canceled). By 12:54am it was 92 and 33 production. The cap is counted per team, so other projects on the "Aaron's Personal Projects" team add to it; I did not count those.
 
@@ -51,6 +53,12 @@ The Hobby plan allows **100 deployments per day**, and every push counts: each p
 vercel api "/v6/deployments?app=muse-friends&since=$(( ($(date +%s) - 86400) * 1000 ))&limit=100" --scope aaron-sulbaran-projects > /tmp/deploys.json
 python3 -c 'import json; d=json.load(open("/tmp/deploys.json"))["deployments"]; print(len(d), "deployments,", sum(1 for x in d if x.get("target")=="production"), "production")'
 ```
+
+## Function duration
+
+The project has Fluid compute on (`resourceConfig.fluid: true`, read with `vercel api /v9/projects/muse-friends`). Vercel's duration page (https://vercel.com/docs/functions/configuring-functions/duration, last updated Aug 24, 2026) gives, with Fluid: **Hobby default 300s and maximum 300s; Pro default 300s, maximum 800s** (30 minutes in a beta that needs per-function config). So the old worry that a Hobby function stops at 60 seconds does not apply here: the default was already 300s and it is the same after the upgrade. Nothing needed raising.
+
+What the routes ask for today (a `maxDuration` export in each route segment): `app/api/agents/[id]/inbox/route.ts` 300, `app/api/signals/route.ts` 300, `app/api/connector/start_plan/route.ts` 300, `app/api/mcp/route.ts` and `app/api/mcp/[transport]/route.ts` 300; `app/api/simulated-friend/route.ts`, `app/api/connector/check_plan/route.ts`, `app/api/connector/respond/route.ts` and `app/api/cron/sweep/route.ts` 60. The keyless `/j/<code>` routes (code PR 49) follow the same rule: `start` 300 (the agents run after the response), the page and `answer` 60. A chained model turn takes 20 to 30 seconds and the model retry budget adds up to about 6 seconds of waiting, so 300 is ten times the need and 60 is twice the need for the single-call routes. I left all of them as they are; raising any toward 800 would only let a stuck model call run longer before it is cut off.
 
 ## C5 and C6 gates
 
@@ -195,7 +203,7 @@ First full run (Sat Oct 24, about 9:50pm, Wi-Fi, 375 px window, production `b5d4
 
 **Closed by default.** It needs `Authorization: Bearer <CRON_SECRET>`, which Vercel Cron sends on its own when the project has a `CRON_SECRET` environment variable. Without a secret (unset or under 16 characters) every request answers **503**; with a wrong or missing bearer it answers **401**. Nothing runs either way.
 
-**Schedule.** `vercel.json` has one entry, `0 14 * * *`: once a day at 14:00 UTC (9:00am Central), which is the most the **Hobby** plan allows (this project is on Hobby; checked with `vercel teams ls`). Hobby runs it any time in that hour, plus or minus up to 59 minutes, and an expression that fires more than daily fails the deploy. On Pro it could be every 15 minutes. Cron jobs run only on **production** deployments.
+**Schedule.** `vercel.json` has one entry, `*/15 * * * *`: every 15 minutes, at minutes 0, 15, 30 and 45 of each hour (UTC, and every quarter hour is the same in Central). That needs the **Pro** plan: the team is on Pro (`vercel teams ls` says `pro`, Sun Oct 25 about 2:45am), and Vercel's cron docs give Pro a minimum interval of once a minute with per-minute precision. On Hobby the same expression fails the deploy ("Hobby accounts are limited to daily cron jobs"), and before the upgrade this entry was `0 14 * * *`, once a day with plus or minus 59 minutes of slack. Each run reads the store and, with no plan due, writes nothing, so 96 runs a day cost 96 short function calls. Cron jobs run only on **production** deployments, so the new schedule starts with the first production deploy that contains it. Not yet checked on production: that the schedule shows in the dashboard (step 5 below) and that a run answers 401 without the secret.
 
 **What you will and will not see.** The seeded plan is Tuesday Oct 27, 6 to 8pm Central, so its first real-time step (the reminder) is due Tuesday at 4:00pm. Before then a run finds nothing due and writes nothing. Do not say the app "reminds people" on Sunday; the true statement is that a scheduled run exists, runs daily, is idempotent, and is covered by tests (unauthorized, closed when unset, idempotent on a second call, the Scheduled stamp).
 
@@ -207,7 +215,7 @@ The secret has to be added from a machine with your Vercel login; the platform l
 2. `./scripts/push-env-to-vercel.sh --with-cron-secret` (add `--with-mcp-tokens` too if you are also doing H4). It generates `CRON_SECRET` (32 random bytes, hex) into `.env`, never prints it, and pushes it to Vercel for Production and Preview.
 3. Redeploy production (H1 step 4).
 4. Check, with no secret needed: `curl -i https://www.musefriends.tech/api/cron/sweep`. Expect `HTTP/2 401` (the secret exists and you did not send it). A `503` means the secret did not reach this deployment; redeploy.
-5. Check the schedule is registered: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/cron-jobs lists `/api/cron/sweep` at `0 14 * * *`. Its **Run** button calls the route with the right header; with no plan due it reads the store and writes nothing.
+5. Check the schedule is registered: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/cron-jobs lists `/api/cron/sweep` at `*/15 * * * *`. Its **Run** button calls the route with the right header; with no plan due it reads the store and writes nothing.
 
 ## Bring your own Muse (judge connector)
 
