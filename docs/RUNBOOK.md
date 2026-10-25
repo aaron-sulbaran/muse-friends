@@ -1,0 +1,90 @@
+# Runbook: platform and deploy
+
+How Muse Friends is hosted, and every step that needs a human with a dashboard login. Each human step has a number (H1, H2, ...), who does it, how long it takes, the exact clicks, and what you should see. Steps are listed in the order they unblock the build.
+
+## Where things live
+
+| Thing | Value |
+|---|---|
+| Production URL (QR code, judges, README) | https://muse-friends.vercel.app |
+| Health check | https://muse-friends.vercel.app/api/health returns `{"ok":true,"sha":"<7 chars>"}`; `sha` is the deployed commit |
+| Vercel project | `muse-friends`, team "Aaron's Personal Projects" (Hobby), region `iad1` |
+| Git connection | `aaron-sulbaran/muse-friends`; `main` deploys to production, every other branch to a preview |
+| QR code | `public/qr.svg` (served at `/qr.svg`), encodes the production URL |
+
+## How deploys work
+
+- Push to `main`: production deploy, served on `muse-friends.vercel.app` within about a minute.
+- Push to any other branch: a preview deploy with its own URL. **Previews are behind Vercel Authentication** (a Vercel login is required to open them). Only the primary production alias `muse-friends.vercel.app` is public; the team-scoped alias `muse-friends-aaron-sulbaran-projects.vercel.app` also redirects to a Vercel login. Always hand out and test the short URL.
+- This is a Hobby project, and Hobby limits Git deploys to the account owner's own commits (not yet tested here with a second author). If a push from someone else never produces a deployment, deploy from the owner's machine with `vercel --prod`.
+- Environment variables apply to new deployments only. After adding or changing one, redeploy (H1 step 4).
+
+CLI, from the repo root of a linked checkout (`vercel link --yes --project muse-friends --scope aaron-sulbaran-projects` once per checkout; the link folder `.vercel/` is gitignored):
+
+```bash
+vercel ls muse-friends          # recent deployments and their state
+vercel logs <deployment-url>    # runtime logs of one deployment
+vercel inspect <deployment-url> # build details
+```
+
+## Regenerating the QR code
+
+Run this whenever the production URL changes (for example when `musefriends.tech` goes live), then commit `public/qr.svg`:
+
+```bash
+pnpm dlx qrcode@1.5.4 -t svg -e M -q 2 -o public/qr.svg "https://muse-friends.vercel.app"
+```
+
+Check it by pointing a phone camera at the file opened on screen; it must open the URL in a private window with no login.
+
+## Human steps
+
+### H1. Put the Muse key into Vercel (Aaron, 3 minutes)
+
+The agents on production need `MODEL_API_KEY`. Nothing else in the app reads it yet, so this can wait until the first agent code merges, but do it before the P1 checkpoint (Sun 12:00am).
+
+1. Open https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables.
+2. Click **Add Environment Variable**. Key: `MODEL_API_KEY`. Value: paste the key from `code/.env` (the line after the `=`, no quotes, no spaces). Environments: tick **Production** and **Preview**. Turn **Sensitive** on. Click **Save**.
+3. Expect the variable listed with two environments and the value hidden.
+4. Click **Deployments**, open the latest production deployment, **...**, **Redeploy**, **Redeploy** again in the dialog. Expect the new deployment to turn Ready in about 30 seconds.
+
+CLI alternative (from a linked checkout, with `.env` in the same folder; the key is piped and never printed):
+
+```bash
+awk '/^MODEL_API_KEY=/{printf "%s", substr($0,index($0,"=")+1)}' .env | vercel env add MODEL_API_KEY --environment production,preview --sensitive --yes
+vercel env ls
+```
+
+Expect `MODEL_API_KEY` listed for Production and Preview.
+
+### H2. Connect musefriends.tech (Aaron, 10 minutes, after claiming the domain)
+
+1. Open https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/domains, click **Add Domain**, type `musefriends.tech`, and choose the option that redirects `www` to the apex.
+2. Vercel shows the DNS records it wants. Expect an **A** record on `@` (usually `76.76.21.21`) and a **CNAME** on `www`; the values on your screen win over these. Send them to the orchestrator so this page can record them.
+3. In the get.tech account for the domain, open **DNS management**, delete any parking A record on `@`, add the two records, save.
+4. Wait up to 30 minutes. On the Vercel Domains page the domain changes from "Invalid Configuration" to a check mark and a certificate is issued on its own.
+5. In a private window on a phone, `https://musefriends.tech` must load the app with a lock icon and `https://www.musefriends.tech` must redirect to it.
+6. Tell the orchestrator. The platform lane then regenerates the QR code for the new URL (section above) and the README links change.
+
+DNS records Vercel showed for this project: _not added yet; filled in after step 2._
+
+### H3. Supabase project for the production store (Aaron, 5 minutes)
+
+Needed for the production store, which has to survive across stateless function calls. Local development keeps using the JSON file.
+
+1. Open https://supabase.com/dashboard, **New project**. Name: `muse-friends`. Region: the closest to Austin (US East or US Central, whichever the list offers). Plan: Free. Set a database password and store it in your password manager; nobody else needs it. Click **Create new project**; it takes about two minutes.
+2. Send the **project ref** (the part of the dashboard URL after `/project/`) to the orchestrator. The ref is not a secret.
+3. Open **Project Settings**, **API Keys**. Copy the **service role** key. Do not put it in chat or in git. Paste it as `SUPABASE_SERVICE_ROLE_KEY` in Vercel (same screen and steps as H1, Production and Preview, **Sensitive** on) and in `code/.env`. Also add `SUPABASE_URL` (Project Settings, **Data API**, the project URL) the same way; that one is not sensitive.
+4. Expect the platform lane to apply the schema through the Supabase tooling once it has the ref, then report round trip latency.
+
+### H4. Connect Muse to the endpoint (Lisa, 30 minutes)
+
+Added when the MCP front door is deployed; see the next section of this runbook then.
+
+## Smoke test 7: the production URL on a real phone
+
+Who: anyone with a phone. Time: 5 minutes. Run it on venue Wi-Fi and again on mobile data, in a private tab.
+
+1. Scan `/qr.svg` (open https://muse-friends.vercel.app/qr.svg on another screen) or type the URL.
+2. Pass: the page loads with no Vercel login, `/api/health` shows `ok: true`, and once the agents are merged, one negotiation runs end to end inside 300 seconds with the timeline updating live.
+3. Fail: write down which network, what you saw, and the time, and send it to the orchestrator.
