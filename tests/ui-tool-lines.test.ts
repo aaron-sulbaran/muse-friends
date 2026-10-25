@@ -131,6 +131,8 @@ describe("the sources a web search carries", () => {
     ]);
     expect(sources.map((source) => source.host)).toEqual(["eater.com", "austin.culturemap.com", "a.example.org"]);
     expect(sources[0]?.url).toBe("https://www.eater.com/austin/best-shawarma");
+    // The chip's title is the page's own when it came with one, and the host when it did not.
+    expect(sources.map((source) => source.title)).toEqual(["eater.com", "CultureMap", "a.example.org"]);
   });
 
   it("are none when the call has none, or the shape is nonsense", () => {
@@ -239,14 +241,15 @@ describe("the lines under a row", () => {
     expect(text(html)).not.toContain("more");
   });
 
-  it("opens each source in a new tab, as a host chip, on the search's own line", () => {
-    const search = { name: "web_search", args: "shawarma", result: "3 results", sources: [{ host: "eater.com", url: "https://www.eater.com/a" }, { host: "yelp.com", url: "https://yelp.com/b" }, { host: "reddit.com", url: "https://reddit.com/c" }] };
+  it("opens each source in a new tab, as the chat's Source chip, on the search's own line", () => {
+    const search = { name: "web_search", args: "shawarma", result: "3 results", sources: [{ title: "Eater", host: "eater.com", url: "https://www.eater.com/a" }, { title: "Yelp", host: "yelp.com", url: "https://yelp.com/b" }, { title: "Reddit", host: "reddit.com", url: "https://reddit.com/c" }] };
     const html = renderToStaticMarkup(createElement(ToolLines, { calls: [search], context }));
     expect(html.match(/<a /g)).toHaveLength(3);
     expect(html).toContain('href="https://www.eater.com/a"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
-    expect(text(html)).toContain("eater.com yelp.com reddit.com");
+    expect(text(html)).toContain("Source eater.com");
+    expect(text(html)).toContain("Source reddit.com");
   });
 
   it("renders nothing when there is nothing to show", () => {

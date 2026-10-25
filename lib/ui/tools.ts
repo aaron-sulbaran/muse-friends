@@ -7,10 +7,7 @@
 
 import { categoryLabel } from "./tokens";
 import { formatWindowList, listOf } from "./format";
-import type { Category, UiMessage } from "./types";
-
-/** A page a web search found: the host is what the chip says, the url is where it opens. */
-export type UiSource = { host: string; url: string };
+import type { Category, UiMessage, UiSource } from "./types";
 
 export type UiToolCall = { name: string; args: string; result: string; /** Pages a search found, https only; absent when there are none. */ sources?: UiSource[] };
 
@@ -27,13 +24,15 @@ const MAX_SOURCES = 3;
 
 /**
  * The pages a search found, as chips: up to three, https only, one per host, `www.` dropped. Each entry is a url or
- * `{ url, title }`; anything else is skipped. Third-party data, so it only ever becomes a link to a real https page.
+ * `{ url, title }` (the title falls back to the host); anything else is skipped. Third-party data, so it only ever
+ * becomes a link to a real https page.
  */
 export function sourcesOf(raw: unknown): UiSource[] {
   if (!Array.isArray(raw)) return [];
   const sources: UiSource[] = [];
   for (const entry of raw) {
-    const candidate = typeof entry === "string" ? entry : (entry as { url?: unknown } | null)?.url;
+    const found: { url?: unknown; title?: unknown } | null = typeof entry === "string" ? { url: entry } : (entry as { url?: unknown; title?: unknown } | null);
+    const candidate = found?.url;
     if (typeof candidate !== "string") continue;
     let parsed: URL;
     try {
@@ -43,7 +42,8 @@ export function sourcesOf(raw: unknown): UiSource[] {
     }
     const host = parsed.hostname.replace(/^www\./, "");
     if (parsed.protocol !== "https:" || host === "" || sources.some((source) => source.host === host)) continue;
-    sources.push({ host, url: parsed.href });
+    const title = typeof found?.title === "string" ? oneLine(found.title) : "";
+    sources.push({ title: title || host, url: parsed.href, host });
     if (sources.length === MAX_SOURCES) break;
   }
   return sources;

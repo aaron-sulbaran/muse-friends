@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MAX_TOOL_LINES, toolLines, type ToolLineContext, type UiToolCall } from "@/lib/ui/tools";
+import { SourceChips } from "./SourceChips";
 
 type Props = {
   calls: UiToolCall[] | undefined;
@@ -14,7 +15,8 @@ type Props = {
 
 /**
  * Under an Activity row: every tool the agent used, one compact line each in plain words, 12px muted and always
- * visible, then the why. A web search carries its pages as host chips that open in a new tab. Six lines at most;
+ * visible, then the why. A web search carries its pages as the same Source chips the chat uses, which open in a new
+ * tab. Six lines at most;
  * the tool lines past that sit behind "+n more", and the why stays in view.
  */
 export function ToolLines({ calls, why, context, initiallyOpen = false }: Props) {
@@ -31,21 +33,7 @@ export function ToolLines({ calls, why, context, initiallyOpen = false }: Props)
       {shown.map((item, index) => (
         <li key={index} data-line>
           {item.text}
-          {item.sources.length > 0 ? (
-            <span className="mt-1 flex flex-wrap gap-1.5">
-              {item.sources.map((source) => (
-                <a
-                  key={source.host}
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-full bg-group px-2.5 py-1 text-[12px] leading-4 text-ink transition-colors [@media(hover:hover)]:hover:bg-bubble-muse"
-                >
-                  {source.host}
-                </a>
-              ))}
-            </span>
-          ) : null}
+          <SourceChips sources={item.sources} />
         </li>
       ))}
       {hidden > 0 ? (
