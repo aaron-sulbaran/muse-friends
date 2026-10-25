@@ -139,6 +139,12 @@ async function run(label) {
   etag = null;
   now = await state();
   check(now.plan?.state === "followed_up", `plan followed_up (${now.plan?.state})`);
+  // The clock no longer counts a plan as followed through; only a person's "We went!" tap does.
+  check(now.followThrough?.events?.length === 0, `the clock alone does not count it (${now.followThrough?.events?.length} event(s))`);
+  const went = await call("POST", `/api/plans/${planId}/outcome`, { role: "a", result: "went" });
+  check(went.status === 200, `"We went!" tapped (${went.status}, ${went.ms}ms)`);
+  etag = null;
+  now = await state();
   check(now.followThrough?.events?.length === 1, `Follow-through counts ${now.followThrough?.events?.length} human event(s)`);
 
   // 4. The privacy toggle.
@@ -229,6 +235,12 @@ async function runGroup(label) {
   etag = null;
   now = await state();
   check(now.plan?.state === "followed_up", `plan followed_up (${now.plan?.state})`);
+  // The clock no longer counts a plan as followed through; only a person's "We went!" tap does.
+  check(now.followThrough?.events?.length === 0, `the clock alone does not count it (${now.followThrough?.events?.length} event(s))`);
+  const went = await call("POST", `/api/plans/${planId}/outcome`, { role: "a", result: "went" });
+  check(went.status === 200, `"We went!" tapped (${went.status}, ${went.ms}ms)`);
+  etag = null;
+  now = await state();
   check(now.followThrough?.events?.length === 1, `Follow-through counts ${now.followThrough?.events?.length} human event(s)`);
   return { messages, agreedMs, last: now };
 }

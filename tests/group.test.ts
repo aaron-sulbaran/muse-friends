@@ -337,11 +337,12 @@ describe("the plan's life with three people", () => {
     const events = await store.listEvents();
     // A reminder and a follow-up from each of the three agents; the third has no phone seat, so no agent on its rows.
     const reminders = events.filter((event) => event.text.includes("reminded their person"));
-    const followUps = events.filter((event) => event.text.includes("again next month?"));
+    const followUps = events.filter((event) => event.text.includes("whether they made it to"));
     expect(reminders.map((event) => event.agent)).toEqual(["aaron", "lisa", undefined]);
     expect(followUps.map((event) => event.agent)).toEqual(["aaron", "lisa", undefined]);
     expect(reminders.map((event) => event.text.split(" ")[0])).toEqual(["Sprout", "Mochi", "Pebble"]);
-    expect(events.filter((event) => event.kind === "followed_through")).toHaveLength(1);
+    // The clock alone does not count it; a person's "We went!" tap does.
+    expect(events.filter((event) => event.kind === "followed_through")).toHaveLength(0);
     expect(events.filter((event) => event.kind === "hold_issued")).toHaveLength(1);
   });
 });

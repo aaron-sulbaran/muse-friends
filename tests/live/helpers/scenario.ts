@@ -108,7 +108,8 @@ export async function runScenario(store: JsonStore, label: string, options: { to
   expect((await advanceClock(store, { step: "next_day" })).ok).toBe(true);
   const final = (await store.getPlan(planId))!;
   expect(final.state).toBe("followed_up");
-  expect((await store.listEvents()).filter((event) => event.kind === "followed_through")).toHaveLength(1);
+  // The clock alone no longer counts it; only a person's "We went!" tap does (the outcome route).
+  expect((await store.listEvents()).filter((event) => event.kind === "followed_through")).toHaveLength(0);
 
   // 4. The privacy toggle: someone stops sharing location, and what they already sent replays under it.
   const beforeToggle = await store.snapshot();
