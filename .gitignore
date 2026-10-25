@@ -26,6 +26,9 @@ CLAUDE_ARCHIVE.md
 .claude/
 .vercel/
 
+# Agent eval reports (pnpm evals)
+.evals/
+
 # Next.js and TypeScript
 /.pnp
 .pnp.*
