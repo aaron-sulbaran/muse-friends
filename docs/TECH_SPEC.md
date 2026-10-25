@@ -201,7 +201,7 @@ type Payment = {
 - **Inject signal:** loads the seeded "Lisa sent Aaron a reel" event.
 - **Fast-forward:** jumps the demo clock to the reminder, then to the next day.
 - **Privacy toggle:** on Lisa's phone settings, flip location for Aaron off.
-- **Replay:** plays back a recorded run from `data/` for a no-network fallback.
+- **Replay:** plays back the committed recording of a real run (`lib/seed/live-run.json`, written by `pnpm demo:record` from a run on the live model, with each message's model proof and tool calls) for a no-network fallback, labeled with the date it was recorded. A hand-written script plays only if that file cannot be read or any of its messages lacks model proof, and it says it is scripted.
 - **Payments:** a cap per plan for each person's Muse (off by default), and a settle-up tap on a confirmed plan.
 
 ## Testing

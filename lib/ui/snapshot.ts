@@ -5,7 +5,7 @@ import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, 
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -16,6 +16,8 @@ import type { UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSet
 
 export type UiOverlay = {
   mode: "live" | "replay";
+  /** Replay only: which recording the frames come from (its source and the date it was made). */
+  recording?: UiRecording;
   /** The run caps for the JSON drawer; omit for a recording, which spends nothing. */
   budget?: RunBudget | null;
   /** The demo reel read live from Instagram before any run has started (lib/instagram.ts). */
@@ -272,6 +274,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
     mode: overlay.mode,
+    ...(overlay.recording ? { recording: overlay.recording } : {}),
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,

@@ -175,11 +175,16 @@ export type PaymentsSettings = { enabled: boolean; cap: number };
 /** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
 export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
 
+/** Which recording a replay frame was built from, so the badge can say what is playing and from when. */
+export type UiRecording = { source: "live" | "scripted"; recordedAt: string };
+
 export type UiSnapshot = {
   /** The demo clock, ISO. */
   now: string;
   clockSimulated: boolean;
   mode: "live" | "replay";
+  /** Only on replay frames: the recording they came from. */
+  recording?: UiRecording;
   /** True when side b is played by the model instead of a second human. */
   simulatedFriend: boolean;
   /** What people see for each side: the Muse characters' names, never the internal ids. */
