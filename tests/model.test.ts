@@ -39,7 +39,7 @@ describe("runAgentTurn (stateless, the default)", () => {
     const metas: unknown[] = [];
     await runAgentTurn({ ...base, handlers: { get_my_calendar: async (_args, meta) => (metas.push(meta), {}) } });
     expect(metas).toEqual([
-      { responseId: "resp_1", model: "muse-spark-1.3", call: expect.objectContaining({ responseId: "resp_1", inputTokens: 10, outputTokens: 5, reasoningTokens: 2, toolNames: ["get_my_calendar"] }), toolCalls: [] },
+      { responseId: "resp_1", model: "muse-spark-1.3", call: expect.objectContaining({ responseId: "resp_1", inputTokens: 10, outputTokens: 5, reasoningTokens: 2, toolNames: ["get_my_calendar"] }), toolCalls: [], callId: "call_1_0", finishedCalls: [] },
     ]);
   });
 

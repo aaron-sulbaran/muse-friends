@@ -38,8 +38,8 @@ export async function runSettleTurn(options: Options & { agent: AgentId; planId:
   const plan = (await store.getPlan(planId))!;
   const scope = (await store.getPolicy(agent, otherAgent(agent)))!.payments!;
 
-  const ctx: PaymentContext = { store, agent, planId, wallNow: options.wallNow, deliver: options.deliver };
-  const { tools, handlers } = buildPaymentTools(ctx, ["get_wallet", "send_money"]);
+  const ctx: PaymentContext = { store, agent, planId, wallNow: options.wallNow, deliver: options.deliver, note: options.note };
+  const { tools, handlers } = buildPaymentTools(ctx, ["get_wallet", "read_receipt", "send_money"]);
   const signal = (await store.listSignals()).at(-1) ?? null;
   const nowMs = options.wallNow?.() ?? Date.now();
   const result = await runAgentTurn({
