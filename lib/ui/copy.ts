@@ -1,4 +1,13 @@
 /* Every user-facing string that is not derived from data, in one place. */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Oct 25": the month and day of a recording, read from its ISO time as written (our recordings carry the Central offset). */
+export function recordingDate(iso: string): string {
+  const month = Number(iso.slice(5, 7));
+  const day = Number(iso.slice(8, 10));
+  return MONTHS[month - 1] && day > 0 ? `${MONTHS[month - 1]} ${day}` : "an earlier date";
+}
+
 export const copy = {
   brand: "Muse Friends",
   tagline: "A proposal for Muse",
@@ -117,6 +126,13 @@ export const copy = {
   liveLabel: "Live",
   replayLabel: "Replay of a recorded run",
   replayShort: "Replay",
+  /** The badge text for a replay, saying what is playing: a real run with the date it was recorded, or the scripted fallback. */
+  replayBadge: (recording: { source: "live" | "scripted"; recordedAt: string } | undefined, compact: boolean) => {
+    if (!recording) return compact ? "Replay" : "Replay of a recorded run";
+    if (recording.source === "scripted") return compact ? "Replay, scripted" : "Replay of a scripted run";
+    const date = recordingDate(recording.recordedAt);
+    return compact ? `Replay, recorded ${date}` : `Replay of a real run, recorded ${date}`;
+  },
   replayStart: "Watch a recorded run",
   simulatedClock: "Simulated clock",
   simulatedFriendBanner: "Simulated friend, fictional, played by a model",

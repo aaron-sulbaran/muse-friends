@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { it, vi } from "vitest";
 import { toCentralIso } from "@/lib/agent/windows";
 import { LiveRunBundle } from "@/lib/seed/live";
+import { recordOutcome } from "@/lib/ui/outcome";
 import { JsonStore } from "@/lib/store/json";
 import { installWire, printReport, resetBetweenRuns, runScenario, seconds, type ScenarioReport } from "./helpers/scenario";
 
@@ -40,6 +41,16 @@ it("records the shawarma scenario live and keeps the best run for Replay", async
     const chosenAttempt = attempts.indexOf(best) + 1;
     const { report } = best;
 
+    // The scenario stops one step short of the last tap: the clock alone no longer counts a plan, only a person's
+    // "We went!" does. The recording plays that tap as the people do in the scenario (the accepts and the hold are
+    // taps too), through the same outcome code the route uses, so Replay ends on the Follow-through counter at 1 and
+    // the next idea Muse picks. The snapshot is taken before the privacy toggle, as before.
+    const ended = new JsonStore(null);
+    await ended.replaceAll(report.beforeToggle);
+    const outcome = await recordOutcome(ended, { planId: report.beforeToggle.plans[0].id, role: "a", result: "went" });
+    if (!outcome.ok) throw new Error(`recording the We went tap failed: ${outcome.error}`);
+    const finalSnapshot = await ended.snapshot();
+
     const bundle = LiveRunBundle.parse({
       run: {
         id: "run_shawarma_live",
@@ -47,7 +58,7 @@ it("records the shawarma scenario live and keeps the best run for Replay", async
         scenario: "shawarma",
         source: "live",
         recordedAt: toCentralIso(Date.now()),
-        snapshot: report.beforeToggle,
+        snapshot: finalSnapshot,
       },
       privacyBeat: report.privacyBeat,
       stats: {

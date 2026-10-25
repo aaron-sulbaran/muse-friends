@@ -242,7 +242,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             <WalletChip snapshot={snapshot} agent={view.agent} />
             {standalone && snapshot.mode === "replay" ? (
               <div className="absolute left-4 top-2">
-                <ReplayBadge mode="replay" compact />
+                <ReplayBadge mode="replay" compact recording={snapshot.recording} />
               </div>
             ) : null}
             {role === "a" && !readOnly && (paymentsOnA || standalone) ? (
