@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { friendsIndicator, needsMichelleOnLoad, onboardingBypassed, pickerMode, roomFriendTier, ROOM_FRIEND, shareFriend, startRequest } from "@/lib/ui/onboarding-flow";
+import { friendsIndicator, needsMichelleOnLoad, onboardingBypassed, pickerMode, roomFriendTier, ROOM_FRIEND, shareFriend, startRequest, startsRunAtDone } from "@/lib/ui/onboarding-flow";
 import { initialOnboarding, reduceOnboarding, type OnboardingAction } from "@/lib/ui/onboarding";
 
 const after = (...actions: OnboardingAction[]) => actions.reduce(reduceOnboarding, initialOnboarding());
@@ -27,7 +27,20 @@ describe("which sheet is open", () => {
   });
 });
 
-describe("what Continue starts", () => {
+describe("what Done starts", () => {
+  it("starts the arrival and the run only when Friends is on and the room's friend is above Off", () => {
+    expect(startsRunAtDone(after({ type: "friendsOn" }, { type: "sync" }, { type: "continue" }))).toBe(true);
+    expect(startsRunAtDone(after({ type: "friendsOn" }, { type: "pick" }, { type: "tier", friendId: "michelle", tier: "friend" }, { type: "continue" }))).toBe(true);
+  });
+
+  it("starts nothing for the opt-out, or with the friend left at Off", () => {
+    expect(startsRunAtDone(initialOnboarding())).toBe(false);
+    expect(startsRunAtDone(after({ type: "notNow" }))).toBe(false);
+    expect(startsRunAtDone(after({ type: "friendsOn" }, { type: "pick" }, { type: "tier", friendId: "priya", tier: "close" }))).toBe(false);
+  });
+});
+
+describe("what Continue writes", () => {
   it("is the room's friend, Michelle, with her Muse", () => {
     expect(ROOM_FRIEND).toMatchObject({ id: "michelle", museModel: "mochi" });
   });
