@@ -29,6 +29,8 @@ export type ThreadLine = {
   /** For your own private question: the Muse it went to, named above the bubble. */
   to?: string;
   at?: string;
+  /** Where in the chat it belongs: "talk" with the Muses' turns before the offer, "after" once the person has decided. */
+  phase?: "talk" | "after";
 };
 
 const roleAgent: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
@@ -51,10 +53,10 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
     // A message from another plan's thread, or one the inbox refused, is not part of this conversation.
     if (message.contextId !== plan.contextId || message.blockedRule !== undefined) continue;
     const sender = muse(message.from);
-    if (PLAN_CHANGING.has(message.type)) lines.push({ id: `thread-${message.id}`, sender, text: messageTitle(message), at: message.at });
+    if (PLAN_CHANGING.has(message.type)) lines.push({ id: `thread-${message.id}`, sender, text: messageTitle(message), at: message.at, phase: "talk" });
     const { withheld } = policyStampFor(message);
     if (message.from === me && withheld) {
-      lines.push({ id: `thread-${message.id}-aside`, sender, text: copy.threadKeptOut(withheld, names.muse[message.to]), onlyYou: true, at: message.at });
+      lines.push({ id: `thread-${message.id}-aside`, sender, text: copy.threadKeptOut(withheld, names.muse[message.to]), onlyYou: true, at: message.at, phase: "talk" });
     }
   }
 
@@ -62,7 +64,7 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
   if (role === "a") {
     for (const entry of snapshot.chat) {
       const sender: Sender = entry.from === "user" ? { kind: "you", name: names.human[me] } : muse(me);
-      lines.push({ id: `thread-chat-${entry.id}`, sender, text: entry.text, onlyYou: true, ...(entry.from === "user" ? { to: snapshot.sides[me] } : {}), at: entry.at });
+      lines.push({ id: `thread-chat-${entry.id}`, sender, text: entry.text, onlyYou: true, ...(entry.from === "user" ? { to: snapshot.sides[me] } : {}), at: entry.at, phase: "after" });
     }
     lines.sort((first, second) => Date.parse(first.at ?? "") - Date.parse(second.at ?? ""));
   }
@@ -71,7 +73,7 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
   const decision = plan.decisions.b;
   if (snapshot.simulatedFriend && decision !== "pending") {
     const sender: Sender = { kind: role === "a" ? "friend" : "you", name: names.human.lisa, simulated: true };
-    lines.push({ id: `thread-friend-${decision}`, sender, text: decisionLine[decision], at: lines.at(-1)?.at });
+    lines.push({ id: `thread-friend-${decision}`, sender, text: decisionLine[decision], at: lines.at(-1)?.at, phase: "after" });
   }
   return lines;
 }
@@ -84,4 +86,17 @@ export function startsRun(previous: ThreadLine | undefined, line: ThreadLine): b
 /** True when a line closes a run: the next line is a different sender, or there is none. The picture sits beside it. */
 export function endsRun(line: ThreadLine, next: ThreadLine | undefined): boolean {
   return !next || startsRun(line, next);
+}
+
+/** The two voices of one phone's own chat: the person, and the Muse that is theirs. */
+export function voicesOf(view: { agent: AgentId; museName: string; humanName: string }): { you: Sender; muse: Sender } {
+  return {
+    you: { kind: "you", name: view.humanName },
+    muse: { kind: "your-muse", name: view.museName, owner: view.humanName, agent: view.agent },
+  };
+}
+
+/** A chat bubble (the Muse's scripted lines to its person, or the person's own taps) as a line of the thread. */
+export function lineOfBubble(item: { id: string; from: "muse" | "user"; text: string }, voices: ReturnType<typeof voicesOf>): ThreadLine {
+  return { id: item.id, sender: item.from === "user" ? voices.you : voices.muse, text: item.text };
 }
