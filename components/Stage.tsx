@@ -6,13 +6,14 @@ import { formatClockLabel, namesFor } from "@/lib/ui/format";
 import { useReplay } from "@/lib/ui/use-replay";
 import { useSimulatedFriend } from "@/lib/ui/use-simulated-friend";
 import { useSnapshot } from "@/lib/ui/use-snapshot";
-import type { UiMessage } from "@/lib/ui/types";
+import type { UiMessage, UiPayment } from "@/lib/ui/types";
 import { ActivityPanel } from "./ActivityPanel";
 import { DemoControls } from "./DemoControls";
 import { FitPhone } from "./PhoneFrame";
 import { JsonDrawer } from "./JsonDrawer";
 import { MuseScreen } from "./MuseScreen";
 import { PausedNotice } from "./PausedNotice";
+import { PaymentDrawer } from "./PaymentDrawer";
 import { TopBar } from "./TopBar";
 
 /** The laptop stage: Phone A, the Activity panel, Phone B, with the presenter controls underneath. Home renders it on every laptop width (scaled down below 1024px) and only a real phone gets the chooser. `--stage-h` pins its height inside the scaled design box; unset, it fills the viewport. */
@@ -35,6 +36,7 @@ export function Stage() {
   );
   useSimulatedFriend(live.snapshot, refresh, !replay.active, pause);
   const [openMessage, setOpenMessage] = useState<UiMessage | null>(null);
+  const [openPayment, setOpenPayment] = useState<UiPayment | null>(null);
   const showPaused = pausedText !== null && replay.active;
   const names = snapshot ? namesFor(snapshot) : null;
 
@@ -55,7 +57,7 @@ export function Stage() {
         <div className="min-h-0">
           {snapshot ? (
             <FitPhone label={`${names?.muse.aaron ?? "Sprout"}'s side`}>
-              <MuseScreen snapshot={snapshot} role="a" framed onChanged={refresh} readOnly={replay.active} onPaused={pause} />
+              <MuseScreen snapshot={snapshot} role="a" framed onChanged={refresh} readOnly={replay.active} onPaused={pause} onOpenPayment={setOpenPayment} />
             </FitPhone>
           ) : null}
         </div>
@@ -65,7 +67,7 @@ export function Stage() {
         <div className="min-h-0">
           {snapshot ? (
             <FitPhone label={snapshot.simulatedFriend ? `${names?.muse.lisa}, a simulated friend` : `${names?.muse.lisa}'s side`}>
-              <MuseScreen snapshot={snapshot} role="b" framed onChanged={refresh} readOnly={replay.active} onPaused={pause} />
+              <MuseScreen snapshot={snapshot} role="b" framed onChanged={refresh} readOnly={replay.active} onPaused={pause} onOpenPayment={setOpenPayment} />
             </FitPhone>
           ) : null}
         </div>
@@ -84,6 +86,9 @@ export function Stage() {
         names={names ?? { muse: { aaron: "", lisa: "" }, human: { aaron: "", lisa: "" } }}
         onClose={() => setOpenMessage(null)}
       />
+      {live.snapshot ? (
+        <PaymentDrawer payment={openPayment} wallets={live.snapshot.wallets} names={live.snapshot.sides} onClose={() => setOpenPayment(null)} />
+      ) : null}
     </div>
   );
 }

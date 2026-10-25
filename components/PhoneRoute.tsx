@@ -9,11 +9,12 @@ import { useMediaQuery } from "@/lib/ui/use-media-query";
 import { useReplay } from "@/lib/ui/use-replay";
 import { useSimulatedFriend } from "@/lib/ui/use-simulated-friend";
 import { useSnapshot } from "@/lib/ui/use-snapshot";
-import type { Role, UiMessage } from "@/lib/ui/types";
+import type { Role, UiMessage, UiPayment } from "@/lib/ui/types";
 import { ActivityPanel } from "./ActivityPanel";
 import { JsonDrawer } from "./JsonDrawer";
 import { MuseScreen } from "./MuseScreen";
 import { PausedNotice } from "./PausedNotice";
+import { PaymentDrawer } from "./PaymentDrawer";
 import { FitPhone } from "./PhoneFrame";
 
 /**
@@ -46,6 +47,7 @@ export function PhoneRoute({ role }: { role: Role }) {
     setPausedText(null);
   }, [stopReplay]);
   const [openMessage, setOpenMessage] = useState<UiMessage | null>(null);
+  const [openPayment, setOpenPayment] = useState<UiPayment | null>(null);
 
   const arrivedForFriend = useRef(false);
   const startedFriend = useRef(false);
@@ -77,6 +79,7 @@ export function PhoneRoute({ role }: { role: Role }) {
       onChanged={refresh}
       readOnly={replay.active}
       onPaused={pause}
+      onOpenPayment={setOpenPayment}
       standalone={{
         activity: (close) => (
           <ActivityPanel
@@ -105,7 +108,12 @@ export function PhoneRoute({ role }: { role: Role }) {
       }}
     />
   );
-  const drawer = <JsonDrawer message={openMessage} budget={liveSnapshot?.budget ?? null} names={names} onClose={() => setOpenMessage(null)} />;
+  const drawer = (
+    <>
+      <JsonDrawer message={openMessage} budget={liveSnapshot?.budget ?? null} names={names} onClose={() => setOpenMessage(null)} />
+      {liveSnapshot ? <PaymentDrawer payment={openPayment} wallets={liveSnapshot.wallets} names={liveSnapshot.sides} onClose={() => setOpenPayment(null)} /> : null}
+    </>
+  );
   const notice =
     pausedText !== null && replay.active ? (
       <PausedNotice

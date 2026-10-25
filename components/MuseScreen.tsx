@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ArrowLeftRight, BatteryFull, Shield, Signal, Wifi } from "lucide-react";
+import { Activity, ArrowLeftRight, BatteryFull, Shield, Signal, Wallet, Wifi } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
@@ -9,7 +9,7 @@ import { otherRole, sideHref } from "@/lib/ui/entry";
 import { formatStatusBarTime, namesFor } from "@/lib/ui/format";
 import { postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
-import type { Role, UiSnapshot } from "@/lib/ui/types";
+import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
 import { ChatBubble, DaySeparator, TypingDots } from "./ChatBubble";
 import { AgreedLine } from "./AgreedLine";
 import { AvatarSheet } from "./AvatarSheet";
@@ -17,13 +17,16 @@ import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
 import { MuseAvatar } from "./MuseAvatar";
+import { PaymentCard } from "./PaymentCard";
 import { OutcomeReplies } from "./OutcomeReplies";
 import { ReelCard } from "./ReelCard";
 import { RecommendationCard } from "./RecommendationCard";
+import { SettleCard } from "./SettleCard";
 import { ReplayBadge } from "./ReplayBadge";
 import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
 import { TabBar, type Tab } from "./TabBar";
+import { WalletChip } from "./WalletChip";
 
 type Props = {
   snapshot: UiSnapshot;
@@ -36,6 +39,8 @@ type Props = {
   readOnly?: boolean;
   /** A run could not start because the live-run caps are reached; the page falls back to a recording. */
   onPaused?: (text: string) => void;
+  /** Opens a payment's ledger ids in the page's drawer; without it a payment card has no Details link. */
+  onOpenPayment?: (payment: UiPayment) => void;
   /**
    * Set when this screen is a phone on its own (the stage has the Activity panel and the other phone beside
    * it): adds a row to switch sides and open Activity as a sheet, whose content the page supplies.
@@ -94,7 +99,7 @@ function StandaloneBar({ snapshot, role, onOpenActivity }: StandaloneBarProps) {
 }
 
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
-export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, standalone }: Props) {
+export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, onOpenPayment, standalone }: Props) {
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
   const [replanError, setReplanError] = useState<string | null>(null);
@@ -200,8 +205,28 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
         return <HoldRow planId={item.planId} role={role} title={item.title} googleUrl={item.googleUrl} disabled={readOnly} />;
+      case "payment-card":
+        return <PaymentCard payment={item.payment} side={item.side} friendName={item.friendName} friendMuse={item.friendMuse} onOpen={onOpenPayment} />;
+      case "settle-card":
+        return (
+          <SettleCard
+            planId={item.planId}
+            role={role}
+            offer={item.offer}
+            friendName={item.friendName}
+            friendMuse={item.friendMuse}
+            paymentCount={snapshot.payments.length}
+            readOnly={readOnly}
+            onChanged={onChanged}
+            onPaused={onPaused}
+            onOpenSettings={() => setSheetOpen(true)}
+          />
+        );
     }
   }
+
+  // Side a has no sharing switches, but it still has a wallet: a payments button opens the same sheet, payments only.
+  const paymentsOnA = role === "a" && !readOnly && snapshot.sandbox.enabled;
 
   return (
     <div className="relative flex h-full flex-col bg-screen">
@@ -226,6 +251,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
               <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} mood={view.mood} />
             )}
             <StatusPill name={view.museName} status={view.status} />
+            <WalletChip snapshot={snapshot} agent={view.agent} />
             {role === "b" && !readOnly ? (
               <button
                 type="button"
@@ -234,6 +260,16 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 className="absolute right-4 top-2 grid size-9 place-items-center rounded-full bg-group transition-colors hover:bg-bubble-muse"
               >
                 <Shield className="size-5" strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            ) : null}
+            {paymentsOnA ? (
+              <button
+                type="button"
+                onClick={() => setSheetOpen(true)}
+                aria-label={`${view.museName} payments`}
+                className="absolute right-4 top-2 grid size-9 place-items-center rounded-full bg-group transition-colors hover:bg-bubble-muse"
+              >
+                <Wallet className="size-5" strokeWidth={1.75} aria-hidden="true" />
               </button>
             ) : null}
           </header>
@@ -289,12 +325,14 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
           </div>
         </div>
       ) : null}
-      {sheetOpen && role === "b" ? (
+      {sheetOpen && (role === "b" || paymentsOnA) ? (
         <AvatarSheet
+          role={role}
           simulated={simulated}
           museName={view.museName}
           friendMuseName={view.friendMuseName}
-          sharing={snapshot.sharing.lisa}
+          sharing={role === "b" ? snapshot.sharing.lisa : undefined}
+          payments={snapshot.sandbox.enabled ? snapshot.paymentsScope[view.agent] : undefined}
           onChanged={onChanged}
           onClose={() => setSheetOpen(false)}
         />
