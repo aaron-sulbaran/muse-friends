@@ -76,7 +76,7 @@ describe("decision, handoff, hold, clock", () => {
     expect(hold.headers.get("content-type")).toBe("text/calendar; charset=utf-8");
     expect(hold.headers.get("content-disposition")).toBe('attachment; filename="hold.ics"');
     expect(ics).toContain("DTSTART:20261027T230000Z");
-    expect(ics).toContain("SUMMARY:Shawarma Point with Sprout");
+    expect(ics).toContain("SUMMARY:Shawarma Point with your friend");
     expect(ics.replace(/\r\n/g, "")).not.toMatch(/[\r\n]/);
 
     expect((await answer(await postClock(json({ action: "advance" })))).status).toBe(200);

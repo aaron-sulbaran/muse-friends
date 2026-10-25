@@ -33,3 +33,11 @@ export function withRoom(url: string, room: string): string {
 export function getRoom(): string {
   return typeof window === "undefined" ? DEMO_ROOM : roomFromSearch(window.location.search);
 }
+
+/**
+ * The state request for a room. A phone says which side it is (`role=a` or `role=b`) so the server can leave out what
+ * is private to the other side (side a's chat with its Muse); the stage asks without a role and gets everything.
+ */
+export function stateUrl(room: string, role?: "a" | "b"): string {
+  return `/api/state?room=${room}${role ? `&role=${role}` : ""}`;
+}

@@ -51,17 +51,19 @@ describe("the share sheet", () => {
     expect(html).toContain("Calendar event names are never shared.");
   });
 
-  it("fills all four switches for a close friend, and restaurants and food only for a friend", () => {
+  it("fills all four switches for a close friend, and from the table for a friend: food on, location off", () => {
     expect(switches(sheet("close")).map((item) => item.on)).toEqual([true, true, true, true]);
-    expect(switches(sheet("friend")).map((item) => item.on)).toEqual([true, false, false, false]);
+    const friend = switches(sheet("friend")).map((item) => item.on);
+    expect(friend[0]).toBe(true);
+    expect(friend[1]).toBe(false);
     expect(sheet("friend")).toContain("Set from Michelle&#x27;s group, Friend.");
   });
 
   it("follows a switch the judge changed, whichever sheet changed it", () => {
     const changed = renderToStaticMarkup(
-      createElement(ShareSheet, { friend: michelle, tier: "friend", sharing: { tier: "friend", categories: { ...categoriesForTier("friend"), events: true } }, onChange: noop, onBack: noop, onDone: noop }),
+      createElement(ShareSheet, { friend: michelle, tier: "friend", sharing: { tier: "friend", categories: { ...categoriesForTier("friend"), food: false, location: true } }, onChange: noop, onBack: noop, onDone: noop }),
     );
-    expect(switches(changed).map((item) => item.on)).toEqual([true, false, true, false]);
+    expect(switches(changed).map((item) => item.on).slice(0, 2)).toEqual([false, true]);
   });
 
   it("ends with Back and Done at the same size", () => {

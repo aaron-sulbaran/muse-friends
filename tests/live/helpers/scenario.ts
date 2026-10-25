@@ -6,6 +6,7 @@ import {
   categoriesInMessage,
   type ActivityEvent,
   type AgentId,
+  type MemberId,
   type MessageRecord,
   type Redaction,
   type SharePolicy,
@@ -113,7 +114,7 @@ export async function runScenario(store: JsonStore, label: string, options: { to
   // 4. The privacy toggle: someone stops sharing location, and what they already sent replays under it.
   const beforeToggle = await store.snapshot();
   const requested = options.toggleOwner ?? "aaron";
-  const owner: AgentId | null =
+  const owner: MemberId | null =
     requested === "auto"
       ? // The demo's switch is on Mochi's side, so prefer her message; fall back to whoever shared a location.
         (beforeToggle.messages.find((record) => record.message.from === "lisa" && hasLocation(record))?.message.from ??
@@ -123,7 +124,7 @@ export async function runScenario(store: JsonStore, label: string, options: { to
   let replayed = 0;
   let privacyBeat: PrivacyBeat | null = null;
   if (owner) {
-    const friend: AgentId = owner === "aaron" ? "lisa" : "aaron";
+    const friend: MemberId = owner === "aaron" ? "lisa" : "aaron";
     const policyBefore = (await store.getPolicy(owner, friend)) as SharePolicy;
     const toggled = await setSharePolicy(store, { owner, friend, categories: { location: false } });
     expect(toggled.ok).toBe(true);

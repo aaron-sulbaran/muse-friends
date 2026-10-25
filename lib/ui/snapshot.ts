@@ -1,12 +1,13 @@
 import type { RunBudget } from "@/lib/agent/caps";
 import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
-import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { CATEGORIES, isCategoryAllowed, isPaymentType, MEMBER_IDS, type AgentId, type MemberId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
+import { SEEDED_LABEL, TRIP_PEOPLE } from "@/lib/seed/trip";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiSnapshot, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiSnapshot, UiTrip, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -26,11 +27,11 @@ export type UiOverlay = {
 };
 
 /*
- * The people this build can draw. A store can hold rows written by a newer build (a group plan's third friend,
- * left in a shared room by a branch run); drawing them would give a row with no name and no avatar, so
- * everything that names a stranger is left out instead.
+ * The people this build can draw: the two phone seats and a group plan's third friend. A store can hold rows
+ * written by a newer build; drawing them would give a row with no name and no avatar, so everything that names
+ * a stranger is left out instead.
  */
-const KNOWN_AGENTS: ReadonlySet<string> = new Set(AGENT_IDS);
+const KNOWN_AGENTS: ReadonlySet<string> = new Set(MEMBER_IDS);
 
 function isKnownAgent(id: string | undefined): boolean {
   return id !== undefined && KNOWN_AGENTS.has(id);
@@ -118,10 +119,62 @@ function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
       a: (plan.decisions.aaron ?? "pending") as Decision,
       b: (plan.decisions.lisa ?? "pending") as Decision,
     },
+    group: plan.group
+      ? {
+          coordinator: plan.group.coordinator,
+          members: plan.group.members.map((id) => ({ id, decision: (plan.group?.decisions[id] ?? "pending") as Decision })),
+          contextIds: [...new Set([plan.contextId, ...Object.values(plan.group.contexts)])],
+        }
+      : null,
+    kind: plan.kind ?? "hangout",
+    trip: toUiTrip(plan, state),
     draft: plan.draft ? rename(plan.draft) : null,
     droppedReason: plan.state === "dropped" ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null) : null,
     history: plan.history.map(({ state, at }) => ({ state, at })),
     outcome: outcomeFor(plan, state),
+  };
+}
+
+/** The trip a plan of kind "trip" carries, with the people named, the pot's balances read from the ledger, and every price labeled seeded. */
+function toUiTrip(plan: Plan, state: StateSnapshot): UiTrip | null {
+  const trip = plan.trip;
+  if (plan.kind !== "trip" || !trip || !plan.group) return null;
+  const ledger = state.room.localLedger ?? {};
+  const balanceOf = (accountId: string | undefined) => (accountId !== undefined && ledger[accountId] !== undefined ? ledger[accountId] : null);
+  return {
+    title: trip.title,
+    destination: trip.destination,
+    horizon: trip.horizon,
+    range: trip.range,
+    people: plan.group.members.map((member) => ({
+      member,
+      name: TRIP_PEOPLE[member].name,
+      muse: TRIP_PEOPLE[member].muse,
+      simulated: member === "kai" || (member !== plan.group!.coordinator && state.room.simulatedFriend),
+      taste: TRIP_PEOPLE[member].taste,
+      constraint: TRIP_PEOPLE[member].constraint,
+    })),
+    answers: plan.group.members.flatMap((member) => {
+      const answer = trip.answers[member];
+      return answer ? [{ member, answer: answer.answer, limit: answer.limit, taste: answer.taste, constraint: answer.constraint ?? null, by: answer.by, at: answer.at }] : [];
+    }),
+    cap: trip.cap ?? null,
+    itinerary: trip.itinerary ? { ...trip.itinerary, lines: trip.itinerary.lines.map((line) => ({ ...line })) } : null,
+    pot: trip.pot
+      ? {
+          perPerson: trip.pot.perPerson,
+          target: trip.pot.target,
+          balance: balanceOf(trip.pot.potAccountId),
+          breakdown: trip.pot.breakdown,
+          deposits: plan.group.members.flatMap((member) => {
+            const deposit = trip.pot?.deposits[member];
+            return deposit ? [{ member, amount: deposit.amount, status: deposit.status, ...(deposit.withdrawalId ? { withdrawalId: deposit.withdrawalId } : {}), ...(deposit.depositId ? { depositId: deposit.depositId } : {}), ...(deposit.refundId ? { refundId: deposit.refundId } : {}), ...(deposit.by ? { by: deposit.by } : {}), ...(deposit.error ? { error: deposit.error } : {}) }] : [];
+          }),
+          wallets: plan.group.members.map((member) => ({ member, balance: balanceOf(trip.pot?.wallets[member]?.accountId) })),
+        }
+      : null,
+    unknowns: trip.unknowns,
+    seededLabel: SEEDED_LABEL,
   };
 }
 
@@ -236,6 +289,7 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
       note: message.note ? rename(message.note) : undefined,
       shared: record.stamp.passed,
       removed: record.stamp.removed,
+      ...(message.trip ? { trip: message.trip } : {}),
       at: message.at,
       proof: withToolCalls(record.proof),
       blockedRule: rejected ? (record.error ?? "Rejected by the receiving inbox") : undefined,
@@ -244,14 +298,30 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
   });
 }
 
-/** Whose model call is running right now, derived from the thread: the receiver of the last message, or the initiator before the first. */
+/**
+ * Whose model call is running right now: for each pair thread still working, the receiver of its last message, or
+ * the initiator before the first. A plan for three has two pair threads, so both friends can be thinking at once.
+ */
 function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["inFlight"] {
   if (!plan) return null;
-  const thread = state.threads.find((candidate) => candidate.contextId === plan.contextId);
-  if (!thread) return plan.state === "detected" ? { agent: plan.initiator } : null;
-  if (thread.state !== "working") return null;
-  const last = state.messages.filter((record) => record.message.contextId === thread.contextId).at(-1);
-  return { agent: last ? last.message.to : thread.initiator };
+  // A trip waits on people most of the time; the coordinator is only thinking while it composes the itinerary.
+  if (plan.kind === "trip") {
+    const composing = plan.state === "negotiating" && plan.group?.members.every((member) => plan.trip?.answers[member]) && !plan.trip?.itinerary;
+    return composing ? { agent: plan.group!.coordinator, agents: [plan.group!.coordinator] } : null;
+  }
+  const groupId = plan.group?.groupId;
+  const threads = groupId ? state.threads.filter((candidate) => candidate.groupId === groupId) : state.threads.filter((candidate) => candidate.contextId === plan.contextId);
+  if (threads.length === 0) return plan.state === "detected" ? { agent: plan.initiator, agents: [plan.initiator] } : null;
+  const thinking: Array<{ agent: MemberId; at: string }> = [];
+  for (const thread of threads) {
+    if (thread.state !== "working") continue;
+    const last = state.messages.filter((record) => record.message.contextId === thread.contextId).at(-1);
+    thinking.push({ agent: last ? last.message.to : thread.initiator, at: last?.message.at ?? thread.updatedAt });
+  }
+  if (thinking.length === 0) return null;
+  const agents = [...new Set(thinking.map((entry) => entry.agent))];
+  const latest = [...thinking].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0].agent;
+  return { agent: latest, agents };
 }
 
 /** An agent's turn that produced no message ends the thread as failed and leaves a turn_failed event naming the agent. */
@@ -284,6 +354,20 @@ function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null 
   return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null };
 }
 
+/**
+ * What a phone is allowed to read. The chat with a Muse (D31) belongs to the person on side a, and the snapshot is
+ * otherwise the same for both phones, so a request that says it is side b (`/api/state?role=b`) gets the snapshot
+ * without any chat line and without the "You asked" rows. No role, or `a`, is the full view the stage and the gate
+ * use. Anything else fails closed and gets the restricted view. If side b ever gets a chat, its lines are hidden from
+ * side a the same way: the lines would carry their side and this is the one place that filters them.
+ */
+export const CHAT_SIDE = "a";
+
+export function forRole(snapshot: UiSnapshot, role: string | null | undefined): UiSnapshot {
+  if (role === undefined || role === null || role === CHAT_SIDE) return snapshot;
+  return { ...snapshot, chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked") };
+}
+
 /** The latest caption read: what the model found, not the sentence the timeline says about it. */
 function reelReadFor(state: StateSnapshot): UiReelRead | null {
   const extracted = state.signals.findLast((signal) => signal.extracted !== undefined)?.extracted;
@@ -302,7 +386,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     mode: overlay.mode,
     ...(overlay.recording ? { recording: overlay.recording } : {}),
     simulatedFriend: state.room.simulatedFriend,
-    sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
+    sides: { aaron: displayName("aaron"), lisa: displayName("lisa"), kai: displayName("kai") },
     messages,
     notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state), payments, state.room.chat)].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,

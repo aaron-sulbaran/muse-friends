@@ -5,26 +5,33 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
-import { formatStatusBarTime, namesFor } from "@/lib/ui/format";
-import { postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
+import { formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
+import { postChat, postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
+import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
 import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
-import { ChatBubble, DaySeparator, TypingDots } from "./ChatBubble";
+import { DaySeparator, TypingDots } from "./ChatBubble";
 import { AgreedLine } from "./AgreedLine";
 import { AvatarSheet } from "./AvatarSheet";
+import { Composer } from "./Composer";
 import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
+import { GroupAvatars, GroupItem, isGroupItem } from "./GroupThread";
+import { tripOwners } from "@/lib/ui/group";
+import { MemberCard } from "./MemberCard";
 import { MuseAvatar } from "./MuseAvatar";
 import { PaymentCard } from "./PaymentCard";
 import { OutcomeReplies } from "./OutcomeReplies";
 import { SimulatedFriendDisc } from "./PersonDisc";
+import { SenderChip, SenderPicture } from "./SenderChip";
 import { ReelCard } from "./ReelCard";
 import { RecommendationCard } from "./RecommendationCard";
 import { SettleCard } from "./SettleCard";
 import { ReplayBadge } from "./ReplayBadge";
 import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
+import { ThreadBubble } from "./ThreadBubble";
 import { TabBar, type Tab } from "./TabBar";
 import { WalletChip } from "./WalletChip";
 
@@ -64,14 +71,16 @@ function StatusBar({ time }: { time: string }) {
   );
 }
 
-const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card"]);
+const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card", "trip-question", "trip-budget", "trip-itinerary", "trip-open", "trip-pot"]);
 
-/** 6px between bubbles from the same speaker, 14px between speakers, 16px around a card. */
-function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
+/** 4px between bubbles of one run, 14px between runs, 16px around a card. */
+function spacingBefore(previous: ChatItem | undefined, item: ChatItem, lineOf: (item: ChatItem | undefined) => ThreadLine | undefined): string {
   if (!previous) return "";
   if (cardKinds.has(previous.kind) || cardKinds.has(item.kind)) return "mt-4";
-  const sameSpeaker = previous.kind === "bubble" && item.kind === "bubble" && previous.from === item.from;
-  return sameSpeaker ? "mt-1.5" : "mt-3.5";
+  // A trip's thread: a run of one speaker sits close, a new speaker sits apart.
+  if (previous.kind === "group-line" && item.kind === "group-line") return item.line.first ? "mt-3.5" : "mt-1.5";
+  const line = lineOf(item);
+  return line && !startsRun(lineOf(previous), line) ? "mt-1" : "mt-3.5";
 }
 
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
@@ -88,10 +97,19 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const chatContent = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const thinking = snapshot.inFlight?.agent === view.agent;
+  // A trip is one group thread: the header shows the three Muses and the group's name, and the wallet chip (the two seats' own wallets) steps aside.
+  const tripPlan = snapshot.plan?.kind === "trip" ? snapshot.plan.trip : null;
+  const avatar = tripPlan ? <GroupAvatars trip={tripPlan} mood={view.mood} viewer={view.agent} /> : <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />;
   const simulated = snapshot.simulatedFriend;
   const names = namesFor(snapshot);
+  // Bubbles and the Muses' own lines read as one thread: who is speaking is a sender, and a run shows its chip once.
+  const voices = voicesOf(view);
+  const lineOf = (item: ChatItem | undefined): ThreadLine | undefined =>
+    item?.kind === "thread-line" ? item.line : item?.kind === "bubble" ? lineOfBubble(item, voices) : undefined;
+  const friendSender: Sender = { kind: "friend", name: view.friendHumanName, simulated };
+  const composerOn = standalone !== undefined && role === "a" && !readOnly;
   const goalContext: GoalContext = {
-    friend: view.friendHumanName,
+    friend: view.group ? listOf(view.group.others.map((other) => other.name)) : view.friendHumanName,
     reelOwner: role === "a" ? `${view.friendHumanName}'s` : "your",
     muses: [names.muse.aaron, names.muse.lisa],
   };
@@ -145,11 +163,13 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   }
 
   function renderItem(item: ChatItem) {
+    if (isGroupItem(item)) return <GroupItem item={item} readOnly={readOnly} onChanged={onChanged} />;
     switch (item.kind) {
       case "separator":
         return <DaySeparator day={item.day} time={item.time} />;
       case "bubble":
-        return <ChatBubble from={item.from}>{item.text}</ChatBubble>;
+      case "thread-line":
+        return null; // drawn as a thread bubble in the list below, where its neighbors are known
       case "collapsed":
         return (
           <p className="animate-fade-in text-[13px] leading-[18px] text-muted" style={{ paddingLeft: 4 }}>
@@ -172,11 +192,27 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         return <DraftCard draft={item.draft} onHandoff={(via) => handoff(item.plan.id, via)} />;
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} onPaused={onPaused} />;
-      case "reel-card":
-        return <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={item.live ? copy.reelLiveLabel : copy.reelLabel} />;
+      case "reel-card": {
+        const card = <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={item.live ? copy.reelLiveLabel : copy.reelLabel} />;
+        if (item.align !== "left") return card;
+        // The friend's reel is her message: her chip above it, her picture beside it, in the bubbles' column.
+        return (
+          <div>
+            <SenderChip sender={friendSender} />
+            <div className="flex items-end gap-2">
+              <div className="w-6 shrink-0">
+                <SenderPicture sender={friendSender} />
+              </div>
+              <div className="min-w-0 flex-1">{card}</div>
+            </div>
+          </div>
+        );
+      }
       case "agreed-line":
         // On the stage, Activity already sits between the phones; a phone on its own opens it as a sheet.
-        return standalone ? <AgreedLine first={item.first} second={item.second} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
+        return standalone ? <AgreedLine names={item.names} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
+      case "member-card":
+        return <MemberCard planId={item.planId} member={item.member} name={item.name} simulated={item.simulated} readOnly={readOnly} onChanged={onChanged} />;
       case "outcome-replies":
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
@@ -223,7 +259,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={`Open ${view.museName} settings`}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
+                {avatar}
               </button>
             ) : standalone && !readOnly ? (
               // Muse opens Activity from the avatar; Sprout's phone has no settings sheet to compete with.
@@ -233,13 +269,13 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={copy.activityOpen}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
+                {avatar}
               </button>
             ) : (
-              <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
+              avatar
             )}
-            <StatusPill name={view.museName} status={view.status} />
-            <WalletChip snapshot={snapshot} agent={view.agent} />
+            <StatusPill name={tripPlan ? tripPlan.title : view.museName} status={view.status} />
+            {tripPlan ? <p className="mt-1.5 px-6 text-center text-[12px] leading-4 text-muted">{tripOwners(tripPlan)}</p> : <WalletChip snapshot={snapshot} agent={view.agent} />}
             {standalone && snapshot.mode === "replay" ? (
               <div className="absolute left-4 top-2">
                 <ReplayBadge mode="replay" compact recording={snapshot.recording} />
@@ -285,14 +321,22 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
               const element = event.currentTarget;
               nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
             }}
-            className="quiet-scroll flex-1 overflow-y-auto px-4 pb-20 [mask-image:linear-gradient(to_bottom,transparent,black_14px)]">
+            className={`quiet-scroll flex-1 overflow-y-auto px-4 [mask-image:linear-gradient(to_bottom,transparent,black_14px)] ${composerOn ? "pb-3" : "pb-20"}`}>
             {/* Anchored to the bottom like any messaging app: a short chat sits just above the tab bar, empty space at the top. */}
             <div ref={chatContent} className="flex min-h-full flex-col justify-end">
-              {view.items.map((item, index) => (
-                <div key={item.id} className={spacingBefore(view.items[index - 1], item)}>
-                  {renderItem(item)}
-                </div>
-              ))}
+              {view.items.map((item, index) => {
+                const previous = view.items[index - 1];
+                const line = lineOf(item);
+                return (
+                  <div key={item.id} className={spacingBefore(previous, item, lineOf)}>
+                    {line ? (
+                      <ThreadBubble line={line} showSender={startsRun(lineOf(previous), line)} showPicture={endsRun(line, lineOf(view.items[index + 1]))} />
+                    ) : (
+                      renderItem(item)
+                    )}
+                  </div>
+                );
+              })}
               {thinking ? (
                 <div className="mt-3.5">
                   <TypingDots />
@@ -300,6 +344,22 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
               ) : null}
             </div>
           </div>
+          {composerOn ? (
+            // Above the floating tab bar, below the cards: the demo never needs it, and it never covers them.
+            <div className="mb-[72px]">
+              <Composer
+                friendLabel={view.friendHumanName}
+                museName={view.museName}
+                askEnabled
+                friendEnabled={false}
+                onSend={async (text) => {
+                  const result = await postChat(text);
+                  onChanged();
+                  return result;
+                }}
+              />
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="quiet-scroll flex-1 overflow-y-auto">

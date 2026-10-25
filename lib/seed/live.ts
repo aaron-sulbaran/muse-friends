@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   ActivityEvent,
-  AgentId,
+  MemberId,
   MessageRecord,
   RecordedRun,
   Redaction,
@@ -17,8 +17,8 @@ import { shawarmaRun } from "./fixtures";
 // The privacy beat from the same run: a person's sharing setting changed and a message they had already
 // sent replayed under it. `before` and `after` are the same message (same id and position).
 export const PrivacyBeat = z.strictObject({
-  owner: AgentId,
-  friend: AgentId,
+  owner: MemberId,
+  friend: MemberId,
   policyBefore: SharePolicy,
   policyAfter: SharePolicy,
   before: MessageRecord,
@@ -35,7 +35,7 @@ export const LiveRunStats = z.strictObject({
   perMessage: z.array(
     z.strictObject({
       seq: z.number().int(),
-      from: AgentId,
+      from: MemberId,
       type: z.string(),
       arrivalMs: z.number().int(),
       turnMs: z.number().int(),

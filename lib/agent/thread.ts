@@ -3,10 +3,13 @@ import { windowHash, windowsOverlap } from "./windows";
 
 // Pure rules for how a thread moves. The model never sets `state`; code does.
 
-export function nextThreadState(candidate: Pick<AgentMessage, "from" | "type" | "windows">, prior: AgentMessage[]): TaskState {
+export function nextThreadState(candidate: Pick<AgentMessage, "from" | "type" | "windows" | "trip">, prior: AgentMessage[]): TaskState {
   // A payment thread is two messages: the payment, then the answer (kept or refunded). The answer ends it.
   if (candidate.type === "payment") return "working";
   if (candidate.type === "payment_received") return "completed";
+  // A trip thread is four messages: ask, answer, plan, reply. The person's reply ends it, joined or not.
+  if (candidate.type === "trip_reply") return candidate.trip?.choice === "out" ? "rejected" : "completed";
+  if (candidate.type === "trip_ask" || candidate.type === "trip_answer" || candidate.type === "trip_plan") return "working";
   if (candidate.type === "payment_cancelled") return "rejected";
   if (candidate.type === "decline") return "rejected";
   if (candidate.type === "accept") {

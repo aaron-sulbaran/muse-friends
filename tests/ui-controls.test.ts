@@ -11,7 +11,7 @@ const open = () => renderToStaticMarkup(createElement(DemoControls, { snapshot: 
 
 describe("what each control says it does", () => {
   it("is one plain sentence per control, with no dash and no emoji", () => {
-    expect(Object.keys(controlInfo).sort()).toEqual(["invite", "jump", "leak", "loadReel", "replay", "reset", "scenario"]);
+    expect(Object.keys(controlInfo).sort()).toEqual(["invite", "jump", "leak", "loadReel", "replay", "replayTrip", "reset", "scenario"]);
     for (const sentence of Object.values(controlInfo)) {
       expect(sentence.endsWith(".")).toBe(true);
       expect(sentence.slice(0, -1)).not.toContain(".");
@@ -45,29 +45,30 @@ describe("the labels that follow the data", () => {
 });
 
 describe("the scenarios", () => {
-  it("offers one to one now, and holds the other two until their routes exist on main", () => {
+  it("offers one to one and the two group scenarios, and holds new in town until its route exists on main", () => {
     expect(scenarios.map((scenario) => [scenario.label, scenario.available])).toEqual([
       ["One to one", true],
       ["New in town", false],
-      ["Group", false],
+      ["Group of three", true],
+      ["Group trip", true],
     ]);
     expect(SCENARIO_LOCKED_NOTE).toBe("after the gate");
   });
 });
 
 describe("the panel", () => {
-  it("lists the five controls, each with its sentence", () => {
+  it("lists the controls, each with its sentence", () => {
     const html = text(open());
-    for (const label of ["Load the shawarma reel", "Jump to reminder", "Replay a recorded run", "Try to leak", "Reset"]) expect(html).toContain(label);
-    for (const key of ["reset", "loadReel", "jump", "replay", "leak"] as const) expect(html).toContain(controlInfo[key]);
+    for (const label of ["Load the shawarma reel", "Jump to reminder", "Replay a recorded run", "Replay the recorded trip", "Try to leak", "Reset"]) expect(html).toContain(label);
+    for (const key of ["reset", "loadReel", "jump", "replay", "replayTrip", "leak"] as const) expect(html).toContain(controlInfo[key]);
   });
 
-  it("has a Scenario row with the last two disabled and marked after the gate", () => {
+  it("has a Scenario row with new in town disabled and marked after the gate", () => {
     const html = open();
     expect(text(html)).toContain("Scenario");
     expect(html.match(/role="radio"[^>]*aria-checked="true"[^>]*>[^<]*(<[^>]+>)*[^<]*One to one/)).not.toBeNull();
-    expect(html.match(/>after the gate</g)).toHaveLength(2);
-    expect(html.match(/role="radio"[^>]*disabled=""/g)).toHaveLength(2);
+    expect(html.match(/>after the gate</g)).toHaveLength(1);
+    expect(html.match(/role="radio"[^>]*disabled=""/g)).toHaveLength(1);
   });
 
   it("has an Invite a friend row that shows a link to copy", () => {

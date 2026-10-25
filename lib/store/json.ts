@@ -4,7 +4,7 @@ import {
   RecordedRun,
   StateSnapshot,
   type ActivityEvent,
-  type AgentId,
+  type MemberId,
   type BusyBlock,
   type DemoClock,
   type MessageRecord,
@@ -86,7 +86,7 @@ export class JsonStore implements Store {
   async putThread(thread: Thread) {
     this.upsert(this.snap.threads, thread, (existing) => existing.contextId === thread.contextId);
   }
-  async listThreads(filter?: { agent?: AgentId }) {
+  async listThreads(filter?: { agent?: MemberId }) {
     const threads = filter?.agent ? this.snap.threads.filter((thread) => thread.participants.includes(filter.agent!)) : this.snap.threads;
     return structuredClone(threads);
   }
@@ -127,13 +127,13 @@ export class JsonStore implements Store {
   async putCard(card: Recommendation) {
     this.upsert(this.snap.cards, card, (existing) => existing.id === card.id);
   }
-  async listCards(filter?: { planId?: string; forAgent?: AgentId }) {
+  async listCards(filter?: { planId?: string; forAgent?: MemberId }) {
     return structuredClone(
       this.snap.cards.filter((card) => (!filter?.planId || card.planId === filter.planId) && (!filter?.forAgent || card.forAgent === filter.forAgent)),
     );
   }
 
-  async getPolicy(owner: AgentId, friend: AgentId) {
+  async getPolicy(owner: MemberId, friend: MemberId) {
     return structuredClone(this.snap.policies.find((policy) => policy.owner === owner && policy.friend === friend) ?? null);
   }
   async putPolicy(policy: SharePolicy) {
@@ -190,7 +190,7 @@ export class JsonStore implements Store {
   async addBusy(block: BusyBlock) {
     this.upsert(this.snap.busy, block, (existing) => existing.event.id === block.event.id);
   }
-  async listBusy(agent?: AgentId) {
+  async listBusy(agent?: MemberId) {
     return structuredClone(agent ? this.snap.busy.filter((block) => block.agent === agent) : this.snap.busy);
   }
 

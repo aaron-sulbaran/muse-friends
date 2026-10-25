@@ -16,6 +16,8 @@ type Props = {
 };
 
 const TIER_ORDER: ReadonlyArray<ShareTier> = ["close", "friend", "off"];
+/** Someone the person met once or twice is set by the follow-up flow, not picked here: shown only while it is the tier. */
+const WITH_ACQUAINTANCE: ReadonlyArray<ShareTier> = ["acquaintance", ...TIER_ORDER];
 
 /** The three-way "Close friend, Friend, Off" control: the avatar sheet's, and one per row of the friends list. */
 export function TierControl({ value, onChange, label, compact = false, disabled }: Props) {
@@ -24,7 +26,7 @@ export function TierControl({ value, onChange, label, compact = false, disabled 
     <fieldset>
       <legend className="sr-only">{label}</legend>
       <div className="flex gap-1 rounded-full bg-group p-1">
-        {TIER_ORDER.map((tier) => (
+        {(value === "acquaintance" ? WITH_ACQUAINTANCE : TIER_ORDER).map((tier) => (
           <label key={tier} className="flex-1">
             <input
               type="radio"

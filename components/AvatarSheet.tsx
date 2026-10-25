@@ -103,7 +103,7 @@ export function AvatarSheet({ role, museName, friendMuseName, sharing, payments,
                 value={sharing.tier}
                 onChange={(tier) => change({ tier })}
                 label={`Who ${friendMuseName} is to ${museName}`}
-                disabled={(tier) => pending || tier === "off"}
+                disabled={(tier) => pending || tier === "off" || tier === "acquaintance"}
               />
             </div>
 

@@ -1,4 +1,5 @@
 import { PLAN_STATES, type AgentId, type Decision, type Plan, type PlanState, type RecordedRun, type StateSnapshot, type Thread } from "@/lib/protocol";
+import { tripAt, tripLedgerAt } from "./replay-trip";
 import { toUiSnapshot } from "./snapshot";
 import type { UiSnapshot } from "./types";
 
@@ -49,13 +50,15 @@ function planAt(plan: Plan, events: StateSnapshot["events"], time: number): Plan
   const history = plan.history.filter((entry) => ms(entry.at) <= time);
   if (history.length === 0) return null;
   const state = history.at(-1)!.state;
-  return {
+  const visible: Plan = {
     ...plan,
     state,
     history,
     decisions: decisionsAt(events.filter((event) => event.planId === plan.id || event.contextId === plan.contextId)),
     dropReason: state === "dropped" ? plan.dropReason : undefined,
   };
+  // A trip keeps its answers, outline and deposits on the plan, so they are cut by time too.
+  return plan.trip ? tripAt(visible, events, time) : visible;
 }
 
 /** The run as it stood at `time`: only what had happened by then, with the plan, thread, and cards to match. */
@@ -79,10 +82,14 @@ export function stateAt(run: StateSnapshot, time: number): StateSnapshot {
   });
 
   const awaitingOrLater = plan !== undefined && plan.state !== "detected" && plan.state !== "negotiating";
-  const cards = awaitingOrLater ? run.cards.map((card) => ({ ...card, status: plan.decisions[card.forAgent] ?? card.status })) : [];
+  const cards = awaitingOrLater ? run.cards.map((card) => ({ ...card, status: plan.decisions[card.forAgent as AgentId] ?? card.status })) : [];
+
+  // The trip's pot and wallets read their balances from the ledger: show them as they stood, not as they ended.
+  const room = plan?.kind === "trip" ? { ...run.room, localLedger: tripLedgerAt(plan, run.room.localLedger) } : run.room;
 
   return {
     ...run,
+    room,
     clock: { now: new Date(time).toISOString() },
     messages,
     events,
@@ -100,13 +107,13 @@ export function holdFor(gapMs: number): number {
 }
 
 /** Every frame of a recorded run, starting from the empty stage and ending on the last state; consecutive duplicates are merged. */
-export function buildReplay(run: RecordedRun): Replay {
+export function buildReplay(run: RecordedRun, extra: { model?: string } = {}): Replay {
   const beats = beatTimes(run.snapshot);
   const times = beats.length > 0 ? [beats[0] - 1, ...beats] : [Date.now()];
   const frames: ReplayFrame[] = [];
   let previous = "";
   times.forEach((time, index) => {
-    const snapshot = toUiSnapshot(stateAt(run.snapshot, time), { mode: "replay", recording: { source: run.source, recordedAt: run.recordedAt } });
+    const snapshot = toUiSnapshot(stateAt(run.snapshot, time), { mode: "replay", recording: { source: run.source, recordedAt: run.recordedAt, ...(extra.model ? { model: extra.model } : {}) } });
     const holdMs = index < times.length - 1 ? holdFor(times[index + 1] - time) : 0;
     const key = JSON.stringify({ ...snapshot, now: undefined });
     if (key === previous && frames.length > 0) {

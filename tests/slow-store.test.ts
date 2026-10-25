@@ -15,7 +15,7 @@ vi.mock("next/server", async (original) => ({ ...(await original<typeof import("
 const DELAY = 10;
 const TUE = { start: "2026-10-27T18:00:00-05:00", end: "2026-10-27T20:00:00-05:00" };
 const stamp = { passed: ["availability"], removed: [], windowsDropped: 0 };
-const bearer = (agent: "aaron" | "lisa") => ({ authorization: `Bearer ${agentToken(agent)}`, "content-type": "application/json" });
+const bearer = (agent: "aaron" | "lisa" | "kai") => ({ authorization: `Bearer ${agentToken(agent)}`, "content-type": "application/json" });
 
 let uninstallWire: (() => void) | undefined;
 afterEach(() => {
@@ -45,7 +45,7 @@ function intent(contextId: string) {
   });
 }
 
-async function postToInbox(id: "lisa" | "aaron", body: unknown, sender: "aaron" | "lisa") {
+async function postToInbox(id: "lisa" | "aaron" | "kai", body: unknown, sender: "aaron" | "lisa" | "kai") {
   const { POST } = await import("@/app/api/agents/[id]/inbox/route");
   return POST(new Request(`http://localhost:3001/api/agents/${id}/inbox`, { method: "POST", headers: bearer(sender), body: JSON.stringify(body) }), {
     params: Promise.resolve({ id }),

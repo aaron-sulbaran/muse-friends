@@ -22,4 +22,4 @@ export const FREE_TIMES_LINE = "Free times are always included: open windows onl
 export const EVENT_NAMES_LINE = "Calendar event names are never shared.";
 
 /** What each tier is called wherever a person picks or reads one. */
-export const TIER_LABELS: Record<ShareTier, string> = { close: "Close friend", friend: "Friend", off: "Off" };
+export const TIER_LABELS: Record<ShareTier, string> = { close: "Close friend", friend: "Friend", acquaintance: "Acquaintance", off: "Off" };

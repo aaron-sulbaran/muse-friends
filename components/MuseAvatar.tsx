@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import type { AgentId, AvatarMood } from "@/lib/ui/types";
+import type { AvatarMood, MemberId } from "@/lib/ui/types";
 
 type Props = {
-  agent: AgentId;
+  agent: MemberId;
   /** The Muse's name, for the accessible label. */
   name?: string;
   /** Rendered height in pixels. The renders are made for 36 (rows and cards) and 44 (the header), never above 96. */
@@ -14,7 +14,7 @@ type Props = {
   className?: string;
 };
 
-const characterOf: Record<AgentId, string> = { aaron: "sprout", lisa: "mochi" };
+const characterOf = { aaron: "sprout", lisa: "mochi", kai: "pebble" } as const;
 const moods: AvatarMood[] = ["idle", "thinking", "talking"];
 
 let preloaded = false;
@@ -29,7 +29,7 @@ function preloadLoops() {
 }
 
 /**
- * A Muse's character: Blender renders of Sprout and Mochi, bare, no circle and no tile. The header gets the loop for its
+ * A Muse's character: Blender renders of Sprout, Mochi and Pebble (Kai's Muse, in a plan for three), bare, no circle and no tile. The header gets the loop for its
  * mood (a still frame under reduced motion); everywhere else is the static portrait. Mochi is Michelle's Muse too, so
  * the simulated friend's side shows Mochi; Michelle herself, the person, is a PersonDisc.
  */

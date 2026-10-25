@@ -1,3 +1,5 @@
+import { capital, isUnnamed } from "./tokens";
+
 /* Every user-facing string that is not derived from data, in one place. */
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -25,6 +27,7 @@ export const copy = {
   activityTitle: "Activity",
   activityEmpty: (first: string, second: string) => `Nothing yet. When ${first} and ${second} talk, every message shows up here.`,
   reconnecting: "Reconnecting...",
+  thinking: (who: string, count: number) => `${who} ${count === 1 ? "is" : "are"} thinking`,
 
   // Status lines are words only; the state's animated glyph (public/status) comes from the phone view.
   statusReading: (friend: string) => `reading ${friend}'s reel`,
@@ -36,7 +39,7 @@ export const copy = {
   statusTrouble: (muse: string) => `having trouble reaching ${muse}`,
 
   proposalBubble: (friend: string, place: string, when: string) =>
-    `You and ${friend} both want to try ${place}, and you're both free ${when}.`,
+    isUnnamed(friend) ? `You both want to try ${place}, and you're both free ${when}.` : `You and ${friend} both want to try ${place}, and you're both free ${when}.`,
   cardTitle: (muse: string, friend: string) => `${muse} wants to make a plan with ${friend}`,
   /** `reelOwner` is already possessive: "Lisa's" or "your". */
   cardReason: (reelOwner: string) => `Based on ${reelOwner} reel and both calendars.`,
@@ -48,11 +51,12 @@ export const copy = {
   acceptB: "Sounds good",
   youSaidYes: "✓ You said yes",
   youPassed: "You said not now",
-  friendPassed: (friend: string) => `${friend} said not now.`,
+  friendPassed: (friend: string) => `${capital(friend)} said not now.`,
   friendIsIn: (muse: string) => `${muse} is in`,
 
-  draftIntroA: (friend: string) => `${friend}'s in. Here's a message you can send ${friend}.`,
-  draftIntroB: (friend: string) => `${friend} is sending you a message on WhatsApp.`,
+  draftIntroA: (friend: string) => `${capital(friend)}'s in. Here's a message you can send ${friend}.`,
+  // The person sends it, not their Muse, so this always names the person: their name, or "your friend".
+  draftIntroB: (friend: string) => `${capital(friend)} is sending you a message on WhatsApp.`,
   draftCopy: "Copy",
   draftCopied: "Copied",
   draftOpenWhatsApp: "Open WhatsApp",
@@ -78,7 +82,7 @@ export const copy = {
   reelLabel: "Sample reel",
   reelLiveLabel: "Lisa's own reel, live from Instagram",
   reelLivePlace: "Instagram reel",
-  dropped: (friend: string) => `${friend}'s Muse couldn't find a time that works this week. I'll keep an eye out.`,
+  dropped: (friend: string) => `${capital(friend)}'s Muse couldn't find a time that works this week. I'll keep an eye out.`,
 
   sendReelTitle: (friend: string) => `Still want that shawarma plan with ${friend}?`,
   sendReelDetail: "The reel from last week is still sitting in the chat. Your Muse can pick it up.",
@@ -91,13 +95,13 @@ export const copy = {
   // Money: whole paper dollars, on Capital One's sandbox or a local ledger.
   walletLabel: "Capital One sandbox",
   paymentSent: (amount: string, friend: string) => `You sent ${friend} ${amount}`,
-  paymentReceived: (amount: string, friend: string) => `${friend} sent you ${amount}`,
+  paymentReceived: (amount: string, friend: string) => `${capital(friend)} sent you ${amount}`,
   paymentWaitingFriend: (muse: string) => `Waiting on ${muse}`,
   paymentWaitingYou: "Waiting for your Muse",
-  paymentKept: (friend: string) => `${friend} has it`,
+  paymentKept: (friend: string) => `${capital(friend)} has it`,
   paymentKeptYou: (before: string, after: string) => `Kept. Your balance went from ${before} to ${after}`,
   paymentKeptYouPlain: "Kept",
-  paymentRefundedPayer: (friend: string) => `${friend}'s Muse sent it back`,
+  paymentRefundedPayer: (friend: string) => `${capital(friend)}'s Muse sent it back`,
   paymentRefundedPayee: "You sent it back",
   paymentDetails: "Details",
   // D28: the Muse prepares a payment, the person confirms it, and nothing moves before that.
@@ -124,6 +128,7 @@ export const copy = {
   provenanceTool: (tool: string) => `Read with ${tool}`,
   provenanceToolUnknown: "A tool call from this turn",
   provenanceTools: (names: string) => `Tools called: ${names}`,
+  toolPrepared: (state: string) => `send_money (prepared, ${state})`,
   provenanceLedgerLater: "Ledger ids appear here after you send.",
   provenanceInWords: "In words",
   confirmTitle: (friend: string) => `Send to ${friend}`,
@@ -171,6 +176,33 @@ export const copy = {
   inviteCopy: "Copy link",
   inviteCopied: "Copied",
   inviteSwitching: "Making room for your friend...",
+  // A plan for three: Sprout, Mochi and Pebble (Pebble has no phone, so the coordinator's phone answers for them).
+  groupProposalA: (first: string, second: string, place: string, when: string) =>
+    `You, ${first} and ${second} all want to try ${place}, and you're all free ${when}.`,
+  groupProposalB: (coordinator: string, other: string, place: string, when: string) =>
+    `${coordinator} is getting ${other} and you together for ${place}, ${when}. You're all free.`,
+  groupCardTitleA: (muse: string, first: string, second: string) => `${muse} wants to make a plan with ${first} and ${second}`,
+  groupCardTitleMember: (coordinator: string, other: string) => `${coordinator} is getting ${other} and you together`,
+  groupCardReason: (reelOwner: string) => `Based on ${reelOwner} reel and all three calendars.`,
+  groupMusesAgreed: "All three Muses agreed on this time.",
+  groupYou: "you",
+  groupSaidYes: "said yes",
+  groupSaidNo: "said not now",
+  groupWaiting: "deciding",
+  groupDraftIntro: (friends: string) => `${friends} are in. Here's a message you can send them.`,
+  groupHoldDetails: (first: string, second: string, third: string) => `${first}, ${second} and ${third} planned this in Muse Friends.`,
+  groupDropped: "The Muses couldn't find a time that works for all three this week. I'll keep an eye out.",
+  memberCardTitle: (name: string) => `${name} has no phone`,
+  memberCardDetail: (name: string) => `${name} is a fictional friend, so you answer for ${name}.`,
+  memberDeciding: (name: string) => `${name} is deciding`,
+  memberPlayedByModel: (name: string) => `${name} is fictional and played by a model. If it stalls, you can answer for ${name}.`,
+  memberAccept: (name: string) => `${name} says yes`,
+  memberDecline: (name: string) => `${name} says not now`,
+  planForThree: "Plan for three",
+  planATrip: "Plan a trip",
+  tripStartTitle: "Plan a trip with your friends",
+  tripStartDetail: "Sprout asks each Muse one question, then proposes a seeded itinerary and a pot. Michelle and Kai are played by a model.",
+  tripStartAction: "Plan a trip",
   goalsTitle: "Goals",
   goalsTracking: "Tracking",
   goalsEmpty: (friend: string) => `Nothing tracked yet. When you and ${friend} settle on a plan, it shows up here.`,
@@ -186,18 +218,19 @@ export const copy = {
   replayLabel: "Replay of a recorded run",
   replayShort: "Replay",
   /** The badge text for a replay, saying what is playing: a real run with the date it was recorded, or the scripted fallback. */
-  replayBadge: (recording: { source: "live" | "scripted"; recordedAt: string } | undefined, compact: boolean) => {
+  replayBadge: (recording: { source: "live" | "scripted"; recordedAt: string; model?: string } | undefined, compact: boolean) => {
     if (!recording) return compact ? "Replay" : "Replay of a recorded run";
     if (recording.source === "scripted") return compact ? "Replay, scripted" : "Replay of a scripted run";
     const date = recordingDate(recording.recordedAt);
-    return compact ? `Replay, recorded ${date}` : `Replay of a real run, recorded ${date}`;
+    const made = recording.model ? `${date}, ${recording.model}` : date;
+    return compact ? `Replay, recorded ${made}` : `Replay of a real run, recorded ${made}`;
   },
   replayStart: "Watch a recorded run",
   simulatedClock: "Simulated clock",
   simulatedFriendBanner: "Simulated friend, fictional, played by a model",
 
   // The opening moment after onboarding (D26): the reel arrives, Sprout reads it, and the offer lands.
-  openingSenderLine: (friend: string) => `${friend} sent you a reel`,
+  openingSenderLine: (friend: string) => `${capital(friend)} sent you a reel`,
   openingTeammateReel: "A teammate's reel, read live from Instagram",
   openingOffer: (friend: string, when: string) => `You and ${friend} are both free ${when}. Want me to set it up?`,
   openingPlanTitle: (place: string, friend: string) => `${place} with ${friend}`,

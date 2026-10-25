@@ -40,6 +40,20 @@ export const phone = {
 /** The simulated friend who stands in for side b when one judge plays alone. */
 export const simulatedFriend = { human: "Michelle", muse: "Michelle's Muse" } as const;
 
+/** The third person of a plan for three, fictional in every room: Kai, whose Muse is Pebble. A model plays Kai when one judge plays alone. */
+export const simulatedMember = { human: "Kai", muse: "Pebble" } as const;
+
+/**
+ * What the other person is called when nobody has told us their name. A person is never called by their Muse's name:
+ * Sprout and Mochi are Muses, and the friend sends the WhatsApp message, not their Muse.
+ */
+export const unnamedFriend = "your friend";
+
+export const isUnnamed = (name: string): boolean => name === unnamedFriend;
+
+/** For a sentence that starts with the other person: "your friend" becomes "Your friend", "Michelle" stays. */
+export const capital = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+
 export const categoryLabel: Record<Category, string> = {
   food: "food",
   events: "events",

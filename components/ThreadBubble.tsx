@@ -17,6 +17,7 @@ function fillFor(sender: Sender): string {
   if (sender.kind === "you") return "bg-bubble-user";
   if (sender.agent === "aaron") return "bg-bubble-sprout";
   if (sender.agent === "lisa") return "bg-bubble-mochi";
+  if (sender.agent === "kai") return "bg-bubble-pebble";
   return "bg-bubble-muse";
 }
 

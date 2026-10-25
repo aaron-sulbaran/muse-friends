@@ -21,6 +21,24 @@ const CHAIN_RETRY_DELAYS_MS = [400, 800, 1600];
 // side; the next call goes through, but a single call can see several in a row. Eight short retries cost
 // nothing normally and at most 6 s when the flap is at its worst.
 const MODEL_NOT_FOUND_RETRY_DELAYS_MS = [200, 300, 400, 600, 800, 1000, 1200, 1500];
+// A burst can outlast that ladder: Meta's whole endpoint has answered 404 on every model for ten to thirty seconds, and the
+// 404 comes back instantly, so it is time and not calls that rides a burst out. When every model has answered 404 through the
+// ladder, the call keeps going on a slow tail: one more try of each model (the configured one first) every 2 seconds, for up
+// to MODEL_404_TAIL_MS (default 20 s; 0 turns the tail off), before the turn falls to the scripted fallback. Only the 404
+// takes the tail: a 429, a 5xx or any other error ends the call at once.
+export const DEFAULT_404_TAIL_MS = 20_000;
+const NOT_FOUND_TAIL_INTERVAL_MS = 2000;
+
+export function notFoundTailMs(): number {
+  const raw = process.env.MODEL_404_TAIL_MS;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_404_TAIL_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : DEFAULT_404_TAIL_MS;
+}
+
+// When a fallback model exists, the configured one gets only the first of those retries (a flap clears in one or two
+// tries when it is a flap); then the next model takes over the rest of the same ladder, so the total pause is the same.
+const PRIMARY_NOT_FOUND_RETRIES = 3;
 
 let cachedClient: OpenAI | undefined;
 
@@ -45,6 +63,21 @@ export function setModelClient(client: OpenAI | undefined): void {
 
 export function modelId(): string {
   return process.env.MODEL_ID ?? DEFAULT_MODEL;
+}
+
+// The model ids to fall back on, in order, when the configured one answers 404 "model not found" through its share of
+// the retry ladder (MODEL_FALLBACK_IDS, comma separated; set it to an empty string for no fallback).
+export const DEFAULT_FALLBACK_IDS = "muse-spark-1.2";
+
+export function fallbackModelIds(): string[] {
+  const raw = process.env.MODEL_FALLBACK_IDS ?? DEFAULT_FALLBACK_IDS;
+  const primary = modelId();
+  return [...new Set(raw.split(",").map((id) => id.trim()).filter((id) => id !== "" && id !== primary))];
+}
+
+// What a turn may call, in order: the configured model, then the fallbacks.
+export function modelCandidates(): string[] {
+  return [modelId(), ...fallbackModelIds()];
 }
 
 export type ToolDefinition = {
@@ -82,7 +115,9 @@ export type TurnFailure = {
 
 export type ModelCallTrace = {
   responseId: string;
+  // The model that answered. When it is a fallback, `fallbackFrom` is the configured model that did not (404).
   model: string;
+  fallbackFrom?: string;
   ms: number;
   chained: boolean;
   chainRetries: number;
@@ -142,6 +177,9 @@ export type AgentTurnOptions = {
   // The turn is only done once one of these succeeded (for example send_to_friend_agent). A reply
   // with no tool call before that gets one nudge, then the turn fails. Omit when prose is fine.
   requiredTools?: string[];
+  // How many successful calls to required tools finish the turn (default 1). A coordinator that has to
+  // answer two friends in one turn needs 2.
+  requiredSuccesses?: number;
   // End the turn as soon as a required tool succeeded, skipping the closing prose call. Default true.
   finishOnRequired?: boolean;
   nudge?: string;
@@ -172,22 +210,42 @@ function isModelNotFound(error: unknown): boolean {
   return error instanceof OpenAI.APIError && error.status === 404 && (error.code === "model_not_found" || /requested model was not found/i.test(error.message));
 }
 
+// Which model a turn is calling. Starts on the configured one; once a fallback has answered the rest of the turn stays
+// on it, so the reasoning items it replays come from one model and a down model is not retried on every call.
+type ModelRoute = { models: string[]; index: number };
+
+type Created = { response: Response; chainRetries: number; model: string; fallbackFrom?: string };
+
 // A just-finished response can briefly answer a chain call with 400 or 404; retry after a pause. A 404
-// model_not_found is retried on any call, chained or not, because the model is there on the next try.
-async function createResponse(
-  params: ResponseCreateParamsNonStreaming,
-): Promise<{ response: Response; chainRetries: number }> {
+// model_not_found is retried on any call, chained or not, because the model is there on the next try. If it keeps
+// answering 404, the call moves to the next model in the route (immediately, and only for this error: a 429 or a 5xx
+// never switches models) and that model uses the rest of the ladder.
+async function createResponse(params: Omit<ResponseCreateParamsNonStreaming, "model">, route: ModelRoute): Promise<Created> {
   const client = getClient();
   let chainRetries = 0;
   let notFoundRetries = 0;
+  let retriesOnThisModel = 0;
   for (;;) {
+    const model = route.models[route.index];
     try {
-      return { response: await client.responses.create(params), chainRetries };
+      const response = await client.responses.create({ ...params, model });
+      return { response, chainRetries, model, fallbackFrom: route.index > 0 ? route.models[0] : undefined };
     } catch (error) {
-      if (isModelNotFound(error) && notFoundRetries < MODEL_NOT_FOUND_RETRY_DELAYS_MS.length) {
-        await sleep(MODEL_NOT_FOUND_RETRY_DELAYS_MS[notFoundRetries]);
-        notFoundRetries += 1;
-        continue;
+      if (isModelNotFound(error)) {
+        const hasNext = route.index < route.models.length - 1;
+        if (hasNext && retriesOnThisModel >= PRIMARY_NOT_FOUND_RETRIES) {
+          if (process.env.NODE_ENV !== "test") console.warn(`model ${model} answered 404 model_not_found; trying ${route.models[route.index + 1]}`);
+          route.index += 1;
+          retriesOnThisModel = 0;
+          continue;
+        }
+        if (notFoundRetries < MODEL_NOT_FOUND_RETRY_DELAYS_MS.length) {
+          await sleep(MODEL_NOT_FOUND_RETRY_DELAYS_MS[notFoundRetries]);
+          notFoundRetries += 1;
+          retriesOnThisModel += 1;
+          continue;
+        }
+        return slowTail(client, params, route, error);
       }
       const status = statusOf(error);
       const retriable = params.previous_response_id && (status === 400 || status === 404);
@@ -196,6 +254,34 @@ async function createResponse(
       chainRetries += 1;
     }
   }
+}
+
+// The slow tail after the ladder: every model has answered 404 through it. Each tick tries the models in order (the
+// configured one first), so the model that comes back first answers, and the call is sticky on it. Gives up with the last 404
+// once the tail's time is used up.
+async function slowTail(client: OpenAI, params: Omit<ResponseCreateParamsNonStreaming, "model">, route: ModelRoute, last: unknown): Promise<Created> {
+  const tailMs = notFoundTailMs();
+  if (tailMs > 0 && process.env.NODE_ENV !== "test") console.warn(`every model answered 404 model_not_found; retrying every ${NOT_FOUND_TAIL_INTERVAL_MS / 1000}s for up to ${tailMs / 1000}s`);
+  const started = Date.now();
+  let waited = 0;
+  let failure = last;
+  // `waited` counts the intended pauses (so a test that shrinks them still runs every tick); the wall clock bounds a tail whose calls are slow.
+  while (waited < tailMs && Date.now() - started < tailMs + 15_000) {
+    await sleep(NOT_FOUND_TAIL_INTERVAL_MS);
+    waited += NOT_FOUND_TAIL_INTERVAL_MS;
+    for (let index = 0; index < route.models.length; index += 1) {
+      route.index = index;
+      try {
+        const response = await client.responses.create({ ...params, model: route.models[index] });
+        return { response, chainRetries: 0, model: route.models[index], fallbackFrom: index > 0 ? route.models[0] : undefined };
+      } catch (error) {
+        if (!isModelNotFound(error)) throw error;
+        failure = error;
+      }
+    }
+  }
+  route.index = 0;
+  throw failure;
 }
 
 // Stateless replay can be rejected when a reasoning item is malformed; drop reasoning items and retry once.
@@ -237,6 +323,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
   const performed: ToolCallSummary[] = [];
   const finished: Array<{ callId: string; name: string }> = [];
 
+  const route: ModelRoute = { models: modelCandidates(), index: 0 };
   const mode = options.mode ?? contextMode();
   const initial: ResponseInput =
     typeof options.input === "string" ? [{ role: "user", content: options.input }] : [...options.input];
@@ -244,6 +331,8 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
   const history: ResponseInput = [...initial];
   let pending: ResponseInput = initial;
   let previousResponseId: string | undefined;
+  const needed = options.requiredSuccesses ?? 1;
+  let successes = 0;
   let requiredSatisfied = required.size === 0;
   let nudged = false;
   let finalText = "";
@@ -262,8 +351,8 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
     const callStarted = Date.now();
     let response: Response;
     let chainRetries: number;
+    let answeredBy: Pick<Created, "model" | "fallbackFrom">;
     const shared = {
-      model: modelId(),
       instructions: options.instructions,
       tools,
       reasoning: { effort: options.effort ?? defaultEffort() },
@@ -271,14 +360,14 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
     } satisfies Partial<ResponseCreateParamsNonStreaming>;
     try {
       if (mode === "chain") {
-        ({ response, chainRetries } = await createResponse({ ...shared, input: pending, previous_response_id: previousResponseId }));
+        ({ response, chainRetries, ...answeredBy } = await createResponse({ ...shared, input: pending, previous_response_id: previousResponseId }, route));
       } else {
         const stateless = { ...shared, store: false, include: ["reasoning.encrypted_content" as const] };
         try {
-          ({ response, chainRetries } = await createResponse({ ...stateless, input: history }));
+          ({ response, chainRetries, ...answeredBy } = await createResponse({ ...stateless, input: history }, route));
         } catch (error) {
           if (statusOf(error) !== 400 || !history.some((item) => "type" in item && item.type === "reasoning")) throw error;
-          ({ response, chainRetries } = await createResponse({ ...stateless, input: withoutReasoning(history) }));
+          ({ response, chainRetries, ...answeredBy } = await createResponse({ ...stateless, input: withoutReasoning(history) }, route));
         }
       }
     } catch (error) {
@@ -288,7 +377,8 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
     const functionCalls = response.output.filter((item) => item.type === "function_call");
     const trace: ModelCallTrace = {
       responseId: response.id,
-      model: response.model ?? modelId(),
+      model: response.model ?? answeredBy.model,
+      ...(answeredBy.fallbackFrom ? { fallbackFrom: answeredBy.fallbackFrom } : {}),
       ms: Date.now() - callStarted,
       chained: mode === "chain" && previousResponseId !== undefined,
       chainRetries,
@@ -351,7 +441,10 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
       });
       performed.push((options.summarizeCall ?? summarizeToolCall)({ name: call.name, args, output, ok }));
       finished.push({ callId: call.call_id, name: call.name });
-      if (ok && required.has(call.name)) requiredSatisfied = true;
+      if (ok && required.has(call.name)) {
+        successes += 1;
+        if (successes >= needed) requiredSatisfied = true;
+      }
       outputs.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(output) });
     }
 

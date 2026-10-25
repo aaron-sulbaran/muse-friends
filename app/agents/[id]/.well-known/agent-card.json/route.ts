@@ -1,11 +1,11 @@
-import { AgentId } from "@/lib/protocol";
+import { MemberId } from "@/lib/protocol";
 import { getPersona } from "@/lib/seed/fixtures";
 
 // The agent card, pinned to A2A v0.3 field names (current A2A docs show v1.0 names, which are not
 // used here). The inbox is a plain bearer-authenticated HTTP endpoint, not the A2A methods, so this
 // card says A2A-shaped and nothing more.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const id = AgentId.safeParse((await params).id);
+  const id = MemberId.safeParse((await params).id);
   if (!id.success) return Response.json({ error: "unknown agent" }, { status: 404 });
 
   const origin = new URL(request.url).origin;

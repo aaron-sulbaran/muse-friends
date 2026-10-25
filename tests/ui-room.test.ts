@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_ROOM, newRoomId, roomFromSearch, withRoom } from "@/lib/ui/room";
+import { DEMO_ROOM, newRoomId, roomFromSearch, stateUrl, withRoom } from "@/lib/ui/room";
 
 describe("which room a phone is in", () => {
   it("reads ?room= from the address, and falls back to the shared demo room", () => {
@@ -27,5 +27,16 @@ describe("which room a phone is in", () => {
     expect(withRoom("/api/controls", "k3x9qa")).toBe("/api/controls?room=k3x9qa");
     expect(withRoom("/api/state?x=1", "k3x9qa")).toBe("/api/state?x=1&room=k3x9qa");
     expect(withRoom("/api/controls", DEMO_ROOM)).toBe("/api/controls");
+  });
+});
+
+describe("the state request", () => {
+  it("names the room, and the side when a phone asks, so the server can leave out the other side's private chat", () => {
+    expect(stateUrl("k3x9qa", "a")).toBe("/api/state?room=k3x9qa&role=a");
+    expect(stateUrl("k3x9qa", "b")).toBe("/api/state?room=k3x9qa&role=b");
+  });
+
+  it("asks without a role from the stage, which shows everything", () => {
+    expect(stateUrl(DEMO_ROOM)).toBe("/api/state?room=demo");
   });
 });

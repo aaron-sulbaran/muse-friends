@@ -28,8 +28,13 @@ describe("categoriesForTier", () => {
     expect(categoriesForTier("close")).toMatchObject({ food: true, location: true, events: true, interests: true });
   });
 
-  it("turns on restaurants and food only for a friend", () => {
-    expect(categoriesForTier("friend")).toMatchObject({ food: true, location: false, events: false, interests: false });
+  it("turns on restaurants and food for a friend, and never location", () => {
+    expect(categoriesForTier("friend")).toMatchObject({ food: true, location: false });
+  });
+
+  it("gives an acquaintance less than a friend", () => {
+    const shared = (tier: "friend" | "acquaintance") => Object.values(categoriesForTier(tier)).filter(Boolean).length;
+    expect(shared("acquaintance")).toBeLessThan(shared("friend"));
   });
 
   it("turns everything off for off", () => {

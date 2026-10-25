@@ -192,10 +192,13 @@ describe("runAgentTurn (stateless, the default)", () => {
 
   it("calls a model that answered 404 through every retry a model error, never a cap", async () => {
     process.env.MODEL_RETRY_SCALE = "0";
+    // No fallback chain here, so the plain 404 is the whole story (tests/model-fallback.test.ts covers the chain).
+    process.env.MODEL_FALLBACK_IDS = "";
     // The first call and each of the eight retries answer 404 model_not_found.
     installFakeModel(Array.from({ length: 9 }, () => ({ error: 404, code: "model_not_found" })));
     const result = await runAgentTurn({ ...base, handlers: {} });
     delete process.env.MODEL_RETRY_SCALE;
+    delete process.env.MODEL_FALLBACK_IDS;
     expect(result.failure).toMatchObject({ reason: "model_error", detail: "api_error", message: expect.stringContaining("not found") });
     expect(describeFailure(result.failure)).toMatch(/^the model did not answer \(.*not found/);
     expect(describeFailure(result.failure)).not.toMatch(/cap/);
@@ -238,8 +241,11 @@ describe("a model_not_found flap on the Meta API", () => {
   });
 
   it("gives up after the retries and reports the API error", async () => {
+    // No fallback model here: the whole ladder is spent on the configured one (tests/model-fallback.test.ts covers the chain).
+    process.env.MODEL_FALLBACK_IDS = "";
     const fake = installFakeModel(Array.from({ length: 12 }, () => ({ error: 404, code: "model_not_found" })));
     const result = await runAgentTurn({ ...base, handlers: {} });
+    delete process.env.MODEL_FALLBACK_IDS;
     expect(result.status).toBe("failed");
     expect(result.failure).toMatchObject({ detail: "api_error", message: expect.stringContaining("model was not found") });
     expect(fake.calls).toHaveLength(9);

@@ -39,7 +39,8 @@ describe("a Muse's line for each turn that changed the plan", () => {
     const lines = threadLines(run, "a");
     expect(kinds(lines)).toEqual(["friend-muse", "your-muse", "friend-muse"]);
     expect(lines.map((line) => line.sender.name)).toEqual(["Mochi", "Sprout", "Mochi"]);
-    expect(lines.map((line) => line.sender.owner)).toEqual(["Mochi", "Sprout", "Mochi"]);
+    // The friend's Muse is "your friend's Muse" until someone says who the friend is; never "Mochi's Muse".
+    expect(lines.filter((line) => line.sender.kind === "friend-muse").map((line) => line.sender.owner)).toEqual(["your friend", "your friend"]);
     expect(lines.map((line) => line.sender.agent)).toEqual(["lisa", "aaron", "lisa"]);
   });
 
@@ -50,7 +51,7 @@ describe("a Muse's line for each turn that changed the plan", () => {
   it("names the people who own the Muses when the friend is Michelle", () => {
     const lines = threadLines({ ...run, simulatedFriend: true }, "a");
     expect(lines.map((line) => line.sender.name)).toEqual(["Mochi", "Sprout", "Mochi"]);
-    expect(lines.map((line) => line.sender.owner)).toEqual(["Michelle", "Sprout", "Michelle"]);
+    expect(lines.filter((line) => line.sender.kind === "friend-muse").map((line) => line.sender.owner)).toEqual(["Michelle", "Michelle"]);
   });
 
   it("leaves the opening intent out, because it opens the thread rather than moving the plan", () => {
@@ -159,6 +160,11 @@ describe("your private conversation with your Muse", () => {
     const ids = threadLines(early, "a").map((line) => line.id);
     expect(ids.indexOf("thread-msg_shawarma_002")).toBeLessThan(ids.indexOf("thread-chat-chat_1"));
     expect(ids.indexOf("thread-chat-chat_1")).toBeLessThan(ids.indexOf("thread-msg_shawarma_005"));
+  });
+
+  it("needs no plan: you can ask before anything has started", () => {
+    const lines = threadLines({ ...asked, plan: null, messages: [] }, "a");
+    expect(lines.map((line) => line.id)).toEqual(["thread-chat-chat_1", "thread-chat-chat_2"]);
   });
 
   it("never shows a chat on the other phone", () => {

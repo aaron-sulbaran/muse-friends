@@ -78,7 +78,7 @@ describe("what the header avatar is doing", () => {
   });
 
   it("thinks while its own model call is in flight, and only that Muse does", () => {
-    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const, agents: ["aaron" as const] } };
     expect(viewForRole(inFlight, "a").mood).toBe("thinking");
     expect(viewForRole(inFlight, "b").mood).toBe("talking");
   });
@@ -92,7 +92,7 @@ describe("what the header avatar is doing", () => {
 
 describe("the journey, phone by phone", () => {
   it("reading the reel, then talking, are status lines and nothing else in the chat", () => {
-    expect(viewForRole(at("detected"), "a").status).toEqual({ glyph: "reading", text: "reading Mochi's reel" });
+    expect(viewForRole(at("detected"), "a").status).toEqual({ glyph: "reading", text: "reading your friend's reel" });
     expect(viewForRole(quietNegotiation(), "a").status).toEqual({ glyph: "talking", text: "talking to Mochi" });
     expect(viewForRole(quietNegotiation(), "b").status).toEqual({ glyph: "talking", text: "talking to Sprout" });
     expect(kinds(viewForRole(at("negotiating"), "a").items)).not.toContain("plan-card");
@@ -105,7 +105,7 @@ describe("the journey, phone by phone", () => {
       expect(view.status).toEqual({ glyph: "waiting-you", text: "waiting for you" });
     }
     const bubble = viewForRole(at("awaiting_humans"), "a").items.find((item) => item.kind === "bubble" && item.id === "proposal");
-    expect(bubble).toMatchObject({ text: "You and Mochi both want to try Shawarma Point, and you're both free Tuesday 6 to 8." });
+    expect(bubble).toMatchObject({ text: "You both want to try Shawarma Point, and you're both free Tuesday 6 to 8." });
   });
 
   it("collapses a card to a line after that person's yes, and waits for the other", () => {
@@ -115,7 +115,7 @@ describe("the journey, phone by phone", () => {
     const a = viewForRole(snapshot, "a");
     expect(kinds(a.items)).toContain("collapsed");
     expect(kinds(a.items)).not.toContain("plan-card");
-    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi" });
+    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for your friend" });
     expect(kinds(viewForRole(snapshot, "b").items)).toContain("plan-card");
   });
 
@@ -132,12 +132,12 @@ describe("the journey, phone by phone", () => {
   it("the hold row offers a prefilled Google Calendar event naming the other person, in UTC, with the place", () => {
     const row = viewForRole(at("scheduled"), "a").items.find((item) => item.kind === "hold-row");
     const url = new URL(row && row.kind === "hold-row" && row.googleUrl ? row.googleUrl : "");
-    expect(url.searchParams.get("text")).toBe("Shawarma Point with Mochi");
+    expect(url.searchParams.get("text")).toBe("Shawarma Point with your friend");
     expect(url.searchParams.get("dates")).toBe("20261027T230000Z/20261028T010000Z");
     expect(url.searchParams.get("details")).toBe("Sprout and Mochi planned this in Muse Friends.");
     expect(url.searchParams.get("location")).toBe("E 6th St, Austin");
     const other = viewForRole(at("scheduled"), "b").items.find((item) => item.kind === "hold-row");
-    expect(new URL(other && other.kind === "hold-row" && other.googleUrl ? other.googleUrl : "").searchParams.get("text")).toBe("Shawarma Point with Sprout");
+    expect(new URL(other && other.kind === "hold-row" && other.googleUrl ? other.googleUrl : "").searchParams.get("text")).toBe("Shawarma Point with your friend");
   });
 
   it("the Google Calendar link never carries a place that was withheld", () => {
@@ -150,7 +150,7 @@ describe("the journey, phone by phone", () => {
 
   it("reminded and followed up add a day separator and the Muse's line", () => {
     const reminded = viewForRole(at("reminded"), "a").items;
-    expect(reminded.some((item) => item.kind === "bubble" && item.text.startsWith("Shawarma Point with Mochi at 6"))).toBe(true);
+    expect(reminded.some((item) => item.kind === "bubble" && item.text.startsWith("Shawarma Point with your friend at 6"))).toBe(true);
     const followed = viewForRole(at("followed_up"), "a").items;
     expect(followed.some((item) => item.kind === "bubble" && item.text === "Did you two make it?")).toBe(true);
     // The recording counted the hangout, so the answer shows and the next idea comes from another shared signal.
@@ -167,13 +167,13 @@ describe("the journey, phone by phone", () => {
     expect(lastWeek).toBeGreaterThan(-1);
     expect(reel).toBeGreaterThan(lastWeek);
     expect(today).toBeGreaterThan(reel);
-    expect(items[today + 1]).toMatchObject({ kind: "bubble", from: "muse", text: "Mochi sent you this a week ago. Want me to see if you two can make it happen?" });
+    expect(items[today + 1]).toMatchObject({ kind: "bubble", from: "muse", text: "Your friend sent you this a week ago. Want me to see if you two can make it happen?" });
   });
 
   it("a friend's no reads neutrally on each side", () => {
     const a = viewForRole(at("dropped"), "a").items.find((item) => item.kind === "bubble" && item.id === "dropped");
     const b = viewForRole(at("dropped"), "b").items.find((item) => item.kind === "bubble" && item.id === "dropped");
-    expect(a).toMatchObject({ text: "Mochi said not now." });
+    expect(a).toMatchObject({ text: "Your friend said not now." });
     expect(b).toMatchObject({ text: "You said not now" });
   });
 });
@@ -248,7 +248,7 @@ describe("what the store can say that the recorded states do not", () => {
 
 describe("the status glyph follows what the Muse is doing", () => {
   it("thinks while its own call runs during a negotiation, and talks while it waits", () => {
-    const thinkingA = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    const thinkingA = { ...at("negotiating"), inFlight: { agent: "aaron" as const, agents: ["aaron" as const] } };
     expect(viewForRole(thinkingA, "a").status).toEqual({ glyph: "thinking", text: "thinking it over" });
     expect(viewForRole(thinkingA, "b").status).toEqual({ glyph: "talking", text: "talking to Sprout" });
     expect(viewForRole(thinkingA, "a").mood).toBe("thinking");
@@ -266,6 +266,74 @@ describe("the status glyph follows what the Muse is doing", () => {
         const status = viewForRole(at(state), role).status;
         expect(status === null || !emoji.test(status.text)).toBe(true);
       }
+    }
+  });
+});
+
+describe("the app's own lines carry no emoji", () => {
+  const emoji = /\p{Extended_Pictographic}/u;
+  const everyLine = (snapshot: ReturnType<typeof at>) =>
+    (["a", "b"] as Role[]).flatMap((role) => viewForRole(snapshot, role).items.flatMap((item) => (item.kind === "bubble" || item.kind === "collapsed" ? [item.text] : [])));
+
+  it("in the seeded history on both phones", () => {
+    const lines = everyLine(at("awaiting_humans"));
+    expect(lines.some((line) => /sent you a reel/.test(line))).toBe(true);
+    expect(lines.some((line) => /Cedar Bluff Trail/.test(line))).toBe(true);
+    for (const line of lines) expect(line).not.toMatch(emoji);
+  });
+
+  it("in the reply after a plan happens, and in the nudge", () => {
+    expect(copy.outcomeWentReply).not.toMatch(emoji);
+    expect(copy.nudgeSent("Michelle")).not.toMatch(emoji);
+  });
+});
+
+describe("Michelle's own phone names her Muse Mochi", () => {
+  it("in the pill and the line under the plan card, while Sprout's phone says Michelle's Muse", () => {
+    const state = snapshotAtPlanState("awaiting_humans");
+    state.room = { ...state.room, simulatedFriend: true };
+    const snapshot = toUiSnapshot(state, live);
+    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
+    expect(viewForRole(snapshot, "b").humanName).toBe("Michelle");
+    expect(viewForRole(snapshot, "a").friendMuseName).toBe("Michelle's Muse");
+    const agreed = viewForRole(snapshot, "b").items.find((item) => item.kind === "agreed-line");
+    expect(agreed && agreed.kind === "agreed-line" ? agreed.names[0] : null).toBe("Mochi");
+  });
+});
+
+describe("the thread in the chat", () => {
+  const lines = (items: ChatItem[]) => items.flatMap((item) => (item.kind === "thread-line" ? [item.line] : []));
+
+  it("lands the Muses' turns before the offer, and nothing else before it", () => {
+    const items = viewForRole(at("awaiting_humans"), "a").items;
+    const ids = items.map((item) => item.id);
+    expect(lines(items).filter((line) => line.phase === "talk").length).toBeGreaterThan(0);
+    const lastTalk = Math.max(...items.flatMap((item, index) => (item.kind === "thread-line" && item.line.phase === "talk" ? [index] : [])));
+    expect(lastTalk).toBeLessThan(ids.indexOf("proposal"));
+  });
+
+  it("shows the turns live while the Muses negotiate, so a judge watches them talk", () => {
+    expect(lines(viewForRole(quietNegotiation(), "a").items).length).toBeGreaterThan(0);
+  });
+
+  it("keeps every card and the agreed line where they were", () => {
+    const kindsAfter = kinds(viewForRole(at("awaiting_humans"), "a").items);
+    expect(kindsAfter).toContain("plan-card");
+    expect(kindsAfter).toContain("agreed-line");
+  });
+
+  it("puts Michelle's scripted yes after the person's own decision, and only for a simulated friend", () => {
+    const base = at("awaiting_humans");
+    const accepted = { ...base, simulatedFriend: true, plan: { ...base.plan!, decisions: { a: "accepted" as const, b: "accepted" as const } } };
+    const items = viewForRole(accepted, "a").items;
+    expect(items.at(-1)).toMatchObject({ kind: "thread-line", line: { sender: { kind: "friend", simulated: true }, text: "Yes, I'm in." } });
+    expect(lines(viewForRole({ ...accepted, simulatedFriend: false }, "a").items).some((line) => line.sender.kind === "friend")).toBe(false);
+  });
+
+  it("gives every item a distinct id", () => {
+    for (const role of ["a", "b"] as Role[]) {
+      const ids = viewForRole(at("awaiting_humans"), role).items.map((item) => item.id);
+      expect(new Set(ids).size).toBe(ids.length);
     }
   });
 });
@@ -307,36 +375,5 @@ describe("the onboarding in the chat", () => {
   it("gives every item a distinct id, so the chat can key them", () => {
     const items = onboardingItems(after({ type: "notNow" }), "Michelle");
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
-  });
-});
-
-describe("the app's own lines carry no emoji", () => {
-  const emoji = /\p{Extended_Pictographic}/u;
-  const everyLine = (snapshot: ReturnType<typeof at>) =>
-    (["a", "b"] as Role[]).flatMap((role) => viewForRole(snapshot, role).items.flatMap((item) => (item.kind === "bubble" || item.kind === "collapsed" ? [item.text] : [])));
-
-  it("in the seeded history on both phones, with and without the simulated friend", () => {
-    const lines = everyLine(at("awaiting_humans"));
-    expect(lines.some((line) => /sent you a reel/.test(line))).toBe(true);
-    expect(lines.some((line) => /Cedar Bluff Trail/.test(line))).toBe(true);
-    for (const line of lines) expect(line).not.toMatch(emoji);
-  });
-
-  it("in the reply after a plan happens, and in the nudge", () => {
-    expect(copy.outcomeWentReply).not.toMatch(emoji);
-    expect(copy.nudgeSent("Michelle")).not.toMatch(emoji);
-  });
-});
-
-describe("Michelle's own phone names her Muse Mochi", () => {
-  it("in the pill, and in the line under the plan card, while Sprout's phone says Michelle's Muse", () => {
-    const state = snapshotAtPlanState("awaiting_humans");
-    state.room = { ...state.room, simulatedFriend: true };
-    const snapshot = toUiSnapshot(state, live);
-    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
-    expect(viewForRole(snapshot, "b").humanName).toBe("Michelle");
-    expect(viewForRole(snapshot, "a").friendMuseName).toBe("Michelle's Muse");
-    const agreed = viewForRole(snapshot, "b").items.find((item) => item.kind === "agreed-line");
-    expect(agreed && agreed.kind === "agreed-line" ? agreed.first : null).toBe("Mochi");
   });
 });

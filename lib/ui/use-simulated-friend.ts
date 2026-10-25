@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { postSimulatedAnswer } from "./actions";
+import { useSimulatedMember } from "./use-simulated-member";
 import type { UiSnapshot } from "./types";
 
 /**
@@ -9,9 +10,11 @@ import type { UiSnapshot } from "./types";
  * plan from this page (the server answers once overall). Never runs over a recording.
  */
 export function useSimulatedFriend(snapshot: UiSnapshot | null, onChanged: () => void, enabled = true, onPaused?: (text: string) => void) {
+  // In a plan for three the model also plays Kai, who has no phone; a no-op for every other plan.
+  useSimulatedMember(snapshot, onChanged, enabled, onPaused);
   const asked = useRef(new Set<string>());
   const plan = snapshot?.plan ?? null;
-  const waiting = enabled && snapshot?.simulatedFriend === true && plan?.state === "awaiting_humans" && plan.decisions.b === "pending";
+  const waiting = enabled && snapshot?.simulatedFriend === true && plan?.state === "awaiting_humans" && plan.decisions.b === "pending" && plan.kind !== "trip";
   const planId = waiting ? plan.id : null;
 
   useEffect(() => {
