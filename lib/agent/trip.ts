@@ -682,7 +682,8 @@ export async function driveTrip(store: Store, planId: string, players: TripPlaye
         return;
       }
       if (!isTripPlan(plan) || plan.state === "confirmed") return;
-      const simulated = room.simulatedFriend ? OTHER_MEMBERS : [];
+      // Kai is fictional in every room, so a model always plays them; Michelle only when no second person is in (the simulated-friend switch).
+      const simulated: MemberId[] = room.simulatedFriend ? OTHER_MEMBERS : ["kai"];
 
       if (plan.state === "negotiating") {
         if ((await store.listMessages(plan.group.contexts[OTHER_MEMBERS[0]]!)).length === 0) await askMembers(store, planId, options);

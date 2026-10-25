@@ -70,12 +70,13 @@ describe("Kai, played by a model", () => {
 });
 
 describe("Kai's answer over the route", () => {
-  it("refuses when the room has real people, so Kai answers from the coordinator's phone", async () => {
-    const model = installFakeModel([]);
-    expect((await answer(await postMember(json({ planId: plan.id })))).status).toBe(409);
-    expect(model.calls).toHaveLength(0);
-    expect((await store.getPlan(plan.id))?.group?.decisions.kai).toBe("pending");
-  });
+  it("plays Kai even when a real friend is in the room, because Kai is fictional and has no phone", async () => {
+    const model = installFakeModel([{ calls: [{ name: "answer_card", args: { choice: "accept" } }] }]);
+    const result = await answer(await postMember(json({ planId: plan.id })));
+    expect(result.status).toBe(200);
+    expect(model.calls).toHaveLength(1);
+    expect((await store.getPlan(plan.id))?.group?.decisions.kai).toBe("accepted");
+  }, 15_000);
 
   it("answers once with a real model call; a second ask finds nothing waiting", async () => {
     await store.putRoom({ ...(await store.getRoom()), simulatedFriend: true });
@@ -87,11 +88,13 @@ describe("Kai's answer over the route", () => {
     expect((await answer(await postMember(json({ planId: plan.id })))).status).toBe(409);
   }, 15_000);
 
-  it("answers 502 and records nothing when the model does not answer", async () => {
-    await store.putRoom({ ...(await store.getRoom()), simulatedFriend: true });
+  it("answers from Kai's seeded profile, and says so on the timeline, when the model does not answer", async () => {
     installFakeModel([{ text: "sure" }, { text: "sure" }]);
-    expect((await answer(await postMember(json({ planId: plan.id })))).status).toBe(502);
-    expect((await store.getPlan(plan.id))?.group?.decisions.kai).toBe("pending");
+    const result = await answer(await postMember(json({ planId: plan.id })));
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ data: { choice: "accept", seeded: true } });
+    expect((await store.getPlan(plan.id))?.group?.decisions.kai).toBe("accepted");
+    expect((await store.snapshot()).events.map((event) => event.text).join(" | ")).toMatch(/Kai said yes from the seeded profile: the model that plays Kai did not answer/);
   }, 15_000);
 
   it("takes a live-run slot, and past the cap makes no model call: 429 paused, the card stays pending", async () => {

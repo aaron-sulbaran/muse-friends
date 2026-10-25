@@ -1,4 +1,4 @@
-import type { PlanState, UiReel } from "./types";
+import type { PlanState, UiPlan, UiReel } from "./types";
 
 /*
  * What the presenter's Demo controls say about themselves: one sentence per control, the scenario list, and the
@@ -15,7 +15,7 @@ export const controlInfo: Record<ControlKey, string> = {
   replay: "Plays the labeled recording of a real run, without starting a live one.",
   replayTrip: "Plays the labeled recording of the trip for three, with the model that made it named, without starting a live one.",
   leak: "Sends two forged messages to the inbox and shows the refusals.",
-  scenario: "Picks which demo to run; the other two open after the gate.",
+  scenario: "Picks which demo to run, and the group demos play Michelle and Kai with a model so one person can run them.",
   invite: "The link a friend opens to join this room on their own phone.",
 };
 
@@ -42,3 +42,10 @@ export const scenarios: readonly Scenario[] = [
 ];
 
 export const SCENARIO_LOCKED_NOTE = "after the gate";
+
+/** The scenario on screen right now, so the row shows what is running: a trip, a plan for three, or the one-to-one default. */
+export function runningScenario(plan: Pick<UiPlan, "kind" | "group"> | null): Scenario["id"] {
+  if (plan?.kind === "trip") return "trip";
+  if (plan?.group) return "group";
+  return "one-to-one";
+}

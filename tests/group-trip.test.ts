@@ -253,18 +253,31 @@ describe("the itinerary", () => {
   });
 });
 
-describe("without a model-played room", () => {
-  it("waits for the people: nothing is answered until a person taps", async () => {
+describe("without a model-played friend", () => {
+  it("still plays Kai, who is fictional, and waits for Michelle's person to answer for herself", async () => {
     await store.putRoom({ ...(await store.getRoom()), simulatedFriend: false });
     await driveTrip(store, planId, players(), { wallNow });
-    expect((await planOf()).trip!.answers).toEqual({});
-    // The questions are out, on both threads.
-    expect((await messagesOf("kai")).map((message) => message.type)).toEqual(["trip_ask"]);
+    const answers = (await planOf()).trip!.answers;
+    expect(Object.keys(answers)).toEqual(["kai"]);
+    expect(answers.kai).toMatchObject({ by: "person_model", limit: 900 });
+    // The questions are out on both threads, Kai has answered, Michelle's has not.
+    expect((await messagesOf("kai")).map((message) => message.type)).toEqual(["trip_ask", "trip_answer"]);
     expect((await messagesOf("lisa")).map((message) => message.type)).toEqual(["trip_ask"]);
-    // A person answers for Kai from the coordinator's phone, and the trip still waits for the rest.
-    expect((await recordAnswer(store, { planId, member: "kai", answer: "limit", limit: 900, by: "person" }, { wallNow })).ok).toBe(true);
+    expect((await recordAnswer(store, { planId, member: "lisa", answer: "yes", by: "person" }, { wallNow })).ok).toBe(true);
     expect((await planOf()).state).toBe("negotiating");
     expect((await proposeTrip(store, planId, { wallNow })).ok).toBe(false);
+  });
+
+  it("plays Kai's deposit too, so the trip waits only on the people who are really there", async () => {
+    await store.putRoom({ ...(await store.getRoom()), simulatedFriend: false });
+    await recordAnswer(store, { planId, member: "aaron", answer: "yes", by: "person" }, { wallNow });
+    await recordAnswer(store, { planId, member: "lisa", answer: "yes", by: "person" }, { wallNow });
+    installFakeModel([compose("FL-1", "ST-1", ["EX-1", "EX-5"])]);
+    await driveTrip(store, planId, players(), { wallNow });
+    const pot = (await planOf()).trip!.pot!;
+    expect(pot.deposits.kai).toMatchObject({ status: "confirmed", by: "person_model" });
+    expect(pot.deposits.lisa).toMatchObject({ status: "proposed" });
+    expect((await planOf()).state).toBe("awaiting_humans");
   });
 });
 

@@ -6,6 +6,7 @@ import type { ChatItem } from "@/lib/ui/chat";
 import { postTripJoin } from "@/lib/ui/actions";
 import { answerWord, money, personOf, servedBy, tripDates, type GroupLine } from "@/lib/ui/group";
 import type { AvatarMood, MemberId, UiTrip } from "@/lib/ui/types";
+import { capital } from "@/lib/ui/tokens";
 import { MuseAvatar } from "./MuseAvatar";
 import { PersonDisc } from "./PersonDisc";
 import { QuestionCard } from "./QuestionCard";
@@ -138,7 +139,7 @@ function PotCard({ item, readOnly, onChanged }: { item: Extract<ChatItem, { kind
   const [error, setError] = useState<string | null>(null);
   const inPot = pot.deposits.filter((deposit) => deposit.status === "confirmed").reduce((sum, deposit) => sum + deposit.amount, 0);
   const held = pot.balance ?? inPot;
-  const nameOf = (member: MemberId) => (member === viewer ? "You" : member === "aaron" ? "The organizer" : personOf(trip, member).name);
+  const nameOf = (member: MemberId) => (member === viewer ? "You" : capital(personOf(trip, member).name));
   const open = state === "awaiting_humans";
 
   async function send(member: MemberId, choice: "in" | "out") {
@@ -179,7 +180,9 @@ function PotCard({ item, readOnly, onChanged }: { item: Extract<ChatItem, { kind
                 ? "You confirmed it"
                 : deposit.by === "seed"
                   ? `Seeded: the model did not answer, so ${person.name}'s profile joined`
-                  : `${person.name} confirmed it${deposit.member === "aaron" ? "" : `, ${person.muse} sent it`}`
+                  : deposit.by === "person_model"
+                    ? `Played by a model, confirmed it; ${person.muse} sent it`
+                    : `${person.name} confirmed it${deposit.member === "aaron" ? "" : `, ${person.muse} sent it`}`
               : deposit.status === "failed"
                 ? (deposit.error ?? "The deposit did not go through")
                 : deposit.status === "refunded"
@@ -203,7 +206,7 @@ function PotCard({ item, readOnly, onChanged }: { item: Extract<ChatItem, { kind
                   onClick={() => setConfirming(deposit.member)}
                   className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50"
                 >
-                  Your turn
+                  Put in {money(deposit.amount)}
                 </button>
               ) : deposit.status === "confirmed" ? (
                 <span className="flex shrink-0 items-center gap-1 text-[15px] font-semibold text-tracking">
