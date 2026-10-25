@@ -40,7 +40,7 @@ The same protocol serves three situations. One to one this week is the demo abov
 
 ## How it works
 
-Two separate Muse Spark agents, one per person, each given only that person's calendar, interests, and sharing rules. They talk over real HTTP in structured messages (an offer, a counter, a yes) rather than free chat. A policy gate in our code checks every message against what its sender agreed to share, and the receiver checks again. Candidate times come from both calendars by code, so the model cannot invent a free evening. Once they agree, the plan is tracked from first signal to follow-up. Details: [PRD](docs/PRD.md) and [technical spec](docs/TECH_SPEC.md).
+Two separate Muse Spark agents, one per person, each given only that person's calendar, interests, and sharing rules. They talk over real HTTP in structured messages (an offer, a counter, a yes) rather than free chat. A policy gate in our code checks every message against what its sender agreed to share, and the receiver checks again. Candidate times come from both calendars by code, so the model cannot invent a free evening. Once they agree, the plan is tracked from first signal to follow-up. Details: [PRD](docs/PRD.md) and [technical spec](docs/TECH_SPEC.md). The live site has the same walk-through on one page, with the recorded run's real messages: [/how](https://musefriends.tech/how).
 
 ## What is real and what is seeded
 

@@ -1,7 +1,9 @@
 "use client";
 
 import { X } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { HOW_ANCHORS, HOW_PATH, howCopy } from "@/lib/how";
 import { THREAD_CAP } from "@/lib/protocol";
 import { copy } from "@/lib/ui/copy";
 import { formatLatency, formatTimeWithSeconds, type Names } from "@/lib/ui/format";
@@ -116,7 +118,10 @@ export function JsonDrawer({ message, budget, names, onClose }: Props) {
               <pre className="whitespace-pre-wrap">{JSON.stringify(budget, null, 2)}</pre>
             </Section>
           ) : null}
-          <footer className="mt-6">
+          <footer className="mt-6 flex items-center justify-between gap-4">
+            <Link href={`${HOW_PATH}#${HOW_ANCHORS.protocol}`} className="text-[13px] font-semibold leading-[18px] text-accent-dot hover:underline">
+              {howCopy.drawerLink}
+            </Link>
             <button
               type="button"
               onClick={copyJson}
