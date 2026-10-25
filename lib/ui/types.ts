@@ -91,7 +91,7 @@ export type FollowThroughEvent = {
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "payment_sent" | "payment_received" | "payment_declined" | "payment_failed";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "reel_source" | "payment_sent" | "payment_received" | "payment_declined" | "payment_failed";
   at: string;
   text: string;
 };
@@ -137,6 +137,9 @@ export type UiPayment = {
 /** What a person lets their Muse do with money: off by default, with a cap per plan in whole dollars. */
 export type PaymentsSettings = { enabled: boolean; cap: number };
 
+/** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
+export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
+
 export type UiSnapshot = {
   /** The demo clock, ISO. */
   now: string;
@@ -150,6 +153,8 @@ export type UiSnapshot = {
   /** Non-message timeline rows, merged with the messages by time. */
   notes: UiNote[];
   plan: UiPlan | null;
+  /** The demo reel read live from Instagram, or null for the seeded one. */
+  reel: UiReel | null;
   followThrough: {
     /** Plans that happened: the only thing the counter counts. */
     events: FollowThroughEvent[];

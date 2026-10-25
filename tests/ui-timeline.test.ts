@@ -10,17 +10,32 @@ describe("timeline notes", () => {
     const state = recordedSnapshot();
     state.events.push({ id: "evt_policy", at: state.clock.now, kind: "policy_changed", actor: "human", agent: "lisa", text: "Mochi changed sharing with Sprout: location off" });
     const kinds = toUiSnapshot(state, live).notes.map((note) => note.kind);
-    expect(kinds).toEqual(["caption_extracted", "thread_opened", "policy_changed"]);
+    expect(kinds).toEqual(["reel_source", "caption_extracted", "thread_opened", "policy_changed"]);
   });
 
   it("does not turn message_sent or card events into notes: messages already have rows", () => {
     const notes = toUiSnapshot(recordedSnapshot(), live).notes;
-    expect(notes.every((note) => ["caption_extracted", "thread_opened", "policy_changed"].includes(note.kind))).toBe(true);
+    expect(notes.every((note) => ["reel_source", "caption_extracted", "thread_opened", "policy_changed"].includes(note.kind))).toBe(true);
+  });
+
+  it("says honestly where the reel came from: the seed, or live from Instagram", () => {
+    const seeded = toUiSnapshot(recordedSnapshot(), live).notes.find((note) => note.kind === "reel_source");
+    expect(seeded?.text).toMatch(/^Seeded demo reel, fictional/);
+    const state = recordedSnapshot();
+    state.signals = state.signals.map((signal) => ({
+      ...signal,
+      media: { ...signal.media, username: "owner.account" },
+      provenance: { ...signal.provenance, source: "instagram_graph_api" as const, fictional: false },
+    }));
+    const fromInstagram = toUiSnapshot(state, live);
+    expect(fromInstagram.notes.find((note) => note.kind === "reel_source")?.text).toContain("read live from @owner.account through the Instagram Graph API");
+    expect(fromInstagram.reel?.username).toBe("owner.account");
   });
 
   it("orders notes and messages by when they happened, the caption read before the first message", () => {
     const entries = timelineOf(toUiSnapshot(recordedSnapshot(), live));
-    expect(entries.slice(0, 3).map((entry) => (entry.kind === "note" ? entry.note.kind : entry.message.type))).toEqual([
+    expect(entries.slice(0, 4).map((entry) => (entry.kind === "note" ? entry.note.kind : entry.message.type))).toEqual([
+      "reel_source",
       "caption_extracted",
       "thread_opened",
       "intent",

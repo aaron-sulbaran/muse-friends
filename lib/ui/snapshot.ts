@@ -1,10 +1,10 @@
 import type { RunBudget } from "@/lib/agent/caps";
 import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
-import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
-import type { Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
+import type { UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -17,6 +17,8 @@ export type UiOverlay = {
   mode: "live" | "replay";
   /** The run caps for the JSON drawer; omit for a recording, which spends nothing. */
   budget?: RunBudget | null;
+  /** The demo reel read live from Instagram before any run has started (lib/instagram.ts). */
+  liveReel?: ReelMedia | null;
 };
 
 /*
@@ -157,6 +159,19 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
 
 const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed", "busy_added", "payment_sent", "payment_received", "payment_declined", "payment_failed"]);
 
+/** One row per reel a run started from, saying honestly whether it came live from Instagram or from the seed. */
+function reelSourceNotes(state: StateSnapshot): UiNote[] {
+  return state.signals.map((signal) => ({
+    id: `note_reel_${signal.id}`,
+    kind: "reel_source" as const,
+    at: signal.receivedAt,
+    text:
+      signal.provenance.source === "instagram_graph_api"
+        ? `Lisa's own reel, read live from @${signal.media.username} through the Instagram Graph API`
+        : "Seeded demo reel, fictional (Instagram was not used for this run)",
+  }));
+}
+
 function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
   return events
     .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]))
@@ -224,6 +239,13 @@ function toFollowThrough(events: StateSnapshot["events"], rename: (text: string)
   return events.filter((event) => event.kind === "followed_through").map((event) => ({ id: event.id, label: rename(event.text), at: event.at }));
 }
 
+/** A run's reel when it came live from Instagram, else the one read before the run, else null (the seeded reel). */
+function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null {
+  const media = state.signals.findLast((signal) => signal.provenance.source === "instagram_graph_api")?.media ?? before;
+  if (!media) return null;
+  return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null };
+}
+
 export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnapshot {
   const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
@@ -235,7 +257,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: toNotes(state.events, renameFor(state)),
+    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state))].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events, renameFor(state)),
@@ -244,6 +266,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     },
     inFlight: deriveInFlight(state, plan),
     budget: overlay.budget ?? null,
+    reel: reelFor(state, overlay.liveReel ?? null),
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
     wallets: { aaron: walletFor("aaron", state), lisa: walletFor("lisa", state) },
