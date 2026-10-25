@@ -529,7 +529,7 @@ export async function proposeTrip(store: Store, planId: string, options: Options
 // The one deliberate step (D28): the person confirms, and only then does money move, from their own seeded trip wallet
 // into the pot. The deposit is recorded with its ledger ids, the member's Muse tells the coordinator, and the person's
 // yes goes through the same lifecycle as any plan.
-export async function confirmJoin(store: Store, input: { planId: string; member: MemberId }, options: Options = {}): Promise<TripResult<{ plan: Plan }>> {
+export async function confirmJoin(store: Store, input: { planId: string; member: MemberId; by?: TripAnswer["by"] }, options: Options = {}): Promise<TripResult<{ plan: Plan }>> {
   const moved = await withLock(tripLock(input.planId), async (): Promise<TripResult<{ plan: Plan; ledgerRef: string }>> => {
     const plan = await store.getPlan(input.planId);
     if (!isTripPlan(plan)) return { ok: false, error: "no such trip", status: 404 };
@@ -564,10 +564,17 @@ export async function confirmJoin(store: Store, input: { planId: string; member:
       await store.appendEvent(row(plan, at, "payment_failed", "system", `${TRIP_PEOPLE[input.member].name}'s pot deposit did not go through: ${failed.error}. Nothing moved.`));
       return { ok: false, error: failed.error, status: 502 };
     }
-    const confirmed = { amount: deposit.amount, status: "confirmed" as const, withdrawalId: withdrawn.data.id, depositId, at };
+    const by = input.by ?? "person";
+    const confirmed = { amount: deposit.amount, status: "confirmed" as const, withdrawalId: withdrawn.data.id, depositId, by, at };
     const next = await putTrip(store, plan, { pot: { ...pot, wallets, deposits: { ...pot.deposits, [input.member]: confirmed } } }, at);
     await store.appendEvent(
-      row(next, at, "payment_sent", "human", `${TRIP_PEOPLE[input.member].name} put ${money(deposit.amount)} in the trip pot: paper dollars on the demo ledger (withdrawal ${withdrawn.data.id}, deposit ${depositId})`),
+      row(
+        next,
+        at,
+        "payment_sent",
+        by === "person" ? "human" : "agent",
+        `${TRIP_PEOPLE[input.member].name} put ${money(deposit.amount)} in the trip pot${by === "person_model" ? " (played by a model)" : by === "seed" ? " (seeded: the model did not answer)" : ""}: paper dollars on the demo ledger (withdrawal ${withdrawn.data.id}, deposit ${depositId})`,
+      ),
     );
     return { ok: true, plan: next, ledgerRef: depositId };
   });
@@ -701,13 +708,16 @@ export async function driveTrip(store: Store, planId: string, players: TripPlaye
         await Promise.all(
           waiting.map(async (member) => {
             let choice: "in" | "out" = "in";
+            let by: "person_model" | "seed" = "person_model";
             try {
               choice = (await players.joins(member as SimulatedMember, planSummary(plan, member))).choice;
             } catch (error) {
+              // The model that plays this person did not answer. A simulated person has no card, so the trip would wait
+              // forever: the seeded profile joins instead, and the pot's row and the timeline say so.
               console.error(`${member} did not answer the trip proposal`, error);
-              return; // never fake a person's yes: the card stays for a human
+              by = "seed";
             }
-            if (choice === "in") await confirmJoin(store, { planId, member }, options);
+            if (choice === "in") await confirmJoin(store, { planId, member, by }, options);
             else await declineJoin(store, { planId, member }, options);
           }),
         );

@@ -89,7 +89,7 @@ export type UiTripAnswer = { member: MemberId; answer: "yes" | "no" | "limit"; l
 
 export type UiTripLine = { id: string; kind: "flight" | "stay" | "excursion"; label: string; cost: number; source: string; serves: string[] };
 
-export type UiTripDeposit = { member: MemberId; amount: number; status: "proposed" | "confirmed" | "declined" | "failed" | "refunded"; withdrawalId?: string; depositId?: string; refundId?: string; error?: string };
+export type UiTripDeposit = { member: MemberId; amount: number; status: "proposed" | "confirmed" | "declined" | "failed" | "refunded"; withdrawalId?: string; depositId?: string; refundId?: string; by?: "person" | "person_model" | "seed"; error?: string };
 
 /** The trip a plan of kind "trip" carries: every number with its source, nothing booked. */
 export type UiTrip = {

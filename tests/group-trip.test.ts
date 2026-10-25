@@ -157,6 +157,18 @@ describe("the numbers are the people's and the seed's", () => {
     expect((await messagesOf("kai"))[1].trip?.by).toBe("seed");
   });
 
+  it("joins from the seeded profile, and says so, when the model that plays a person does not answer the proposal", async () => {
+    await recordAnswer(store, { planId, member: "aaron", answer: "yes", by: "person" }, { wallNow });
+    installFakeModel([compose("FL-1", "ST-1", ["EX-1", "EX-5"])]);
+    await driveTrip(store, planId, players({ joins: async (member) => (member === "kai" ? Promise.reject(new Error("model down")) : { choice: "in" }) }), { wallNow });
+    const pot = (await planOf()).trip!.pot!;
+    expect(pot.deposits.kai).toMatchObject({ status: "confirmed", by: "seed" });
+    expect(pot.deposits.lisa).toMatchObject({ status: "confirmed", by: "person_model" });
+    expect((await planOf()).group!.decisions.kai).toBe("accepted");
+    const events = (await store.snapshot()).events.map((event) => event.text).join(" | ");
+    expect(events).toMatch(/Kai put \$420 in the trip pot \(seeded: the model did not answer\)/);
+  });
+
   it("refuses an answer message whose number is not the one the person gave", async () => {
     // Kai's person has answered $900 (recorded on the plan) but the Muse has not yet said so on the wire.
     await askMembers(store, planId, { wallNow });

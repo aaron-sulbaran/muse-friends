@@ -167,7 +167,7 @@ function toUiTrip(plan: Plan, state: StateSnapshot): UiTrip | null {
           breakdown: trip.pot.breakdown,
           deposits: plan.group.members.flatMap((member) => {
             const deposit = trip.pot?.deposits[member];
-            return deposit ? [{ member, amount: deposit.amount, status: deposit.status, ...(deposit.withdrawalId ? { withdrawalId: deposit.withdrawalId } : {}), ...(deposit.depositId ? { depositId: deposit.depositId } : {}), ...(deposit.refundId ? { refundId: deposit.refundId } : {}), ...(deposit.error ? { error: deposit.error } : {}) }] : [];
+            return deposit ? [{ member, amount: deposit.amount, status: deposit.status, ...(deposit.withdrawalId ? { withdrawalId: deposit.withdrawalId } : {}), ...(deposit.depositId ? { depositId: deposit.depositId } : {}), ...(deposit.refundId ? { refundId: deposit.refundId } : {}), ...(deposit.by ? { by: deposit.by } : {}), ...(deposit.error ? { error: deposit.error } : {}) }] : [];
           }),
           wallets: plan.group.members.map((member) => ({ member, balance: balanceOf(trip.pot?.wallets[member]?.accountId) })),
         }

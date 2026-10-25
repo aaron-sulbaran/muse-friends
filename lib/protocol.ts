@@ -537,6 +537,8 @@ export const TripDeposit = z.strictObject({
   withdrawalId: Id.optional(),
   depositId: Id.optional(),
   refundId: Id.optional(),
+  // Who confirmed it: a person's tap, a model that plays them, or the seeded profile when that model did not answer.
+  by: z.enum(["person", "person_model", "seed"]).optional(),
   error: z.string().max(160).optional(),
   at: IsoDateTime.optional(),
 });

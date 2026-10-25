@@ -210,7 +210,9 @@ function PotCard({ item, readOnly, onChanged }: { item: Extract<ChatItem, { kind
             deposit.status === "confirmed"
               ? deposit.member === viewer
                 ? "You confirmed it"
-                : `${person.name} confirmed it${deposit.member === "aaron" ? "" : `, ${person.muse} sent it`}`
+                : deposit.by === "seed"
+                  ? `Seeded: the model did not answer, so ${person.name}'s profile joined`
+                  : `${person.name} confirmed it${deposit.member === "aaron" ? "" : `, ${person.muse} sent it`}`
               : deposit.status === "failed"
                 ? (deposit.error ?? "The deposit did not go through")
                 : deposit.status === "refunded"
