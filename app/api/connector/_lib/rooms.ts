@@ -17,8 +17,9 @@ export type RoomRepo = {
   // Like load, but says whether a missing room was never there or has just expired (a link answers 404 or 410).
   lookup(roomKey: string, now: number): Promise<RoomLookup>;
   save(roomKey: string, snapshot: StateSnapshot): Promise<void>;
-  // How many rooms were created at or after `sinceMs`, for the cap on rooms per hour.
-  countCreatedSince(sinceMs: number): Promise<number>;
+  // How many rooms were created at or after `sinceMs`, for the cap on rooms per hour. With a prefix, only the
+  // rooms whose key starts with it (phone rooms are p_..., judge rooms j_... and room_...).
+  countCreatedSince(sinceMs: number, prefix?: string): Promise<number>;
   // Deletes rooms past their expiry; returns how many.
   purgeExpired(now: number): Promise<number>;
 };
@@ -53,8 +54,8 @@ export function memoryRoomRepo(): RoomRepo {
       const stored = rooms.get(roomKey);
       if (stored) stored.snapshot = structuredClone(snapshot);
     },
-    async countCreatedSince(sinceMs) {
-      return [...rooms.values()].filter((stored) => stored.createdAt >= sinceMs).length;
+    async countCreatedSince(sinceMs, prefix) {
+      return [...rooms.entries()].filter(([key, stored]) => stored.createdAt >= sinceMs && (prefix === undefined || key.startsWith(prefix))).length;
     },
     async purgeExpired(now) {
       let removed = 0;
@@ -97,8 +98,10 @@ export function supabaseRoomRepo(db: SupabaseClient): RoomRepo {
       const { error } = await db.from("byom_rooms").update({ snapshot }).eq("room_key", roomKey);
       if (error) throw new RoomStorageError("save", error.message);
     },
-    async countCreatedSince(sinceMs) {
-      const { count, error } = await db.from("byom_rooms").select("room_key", { count: "exact", head: true }).gte("created_at", iso(sinceMs));
+    async countCreatedSince(sinceMs, prefix) {
+      let query = db.from("byom_rooms").select("room_key", { count: "exact", head: true }).gte("created_at", iso(sinceMs));
+      if (prefix !== undefined) query = query.like("room_key", `${prefix.replace(/[\\%_]/g, (character) => `\\${character}`)}%`);
+      const { count, error } = await query;
       if (error) throw new RoomStorageError("count", error.message);
       return count ?? 0;
     },

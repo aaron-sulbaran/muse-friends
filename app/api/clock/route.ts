@@ -1,7 +1,7 @@
+import { withRoom, withoutRoom } from "@/app/api/_lib/room";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { advanceClock, currentPlan } from "@/lib/agent/lifecycle";
-import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -13,14 +13,17 @@ const bodySchema = z.object({ action: z.literal("advance") });
  * counted once). The UI labels the clock as simulated whenever it has moved.
  */
 export async function POST(request: Request) {
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const raw = await request.json().catch(() => null);
+  const parsed = bodySchema.safeParse(withoutRoom(raw));
   if (!parsed.success) {
     return NextResponse.json({ data: null, error: { message: "Expected { action: advance }" } }, { status: 400 });
   }
-  const store = await getStore();
-  const plan = await currentPlan(store);
-  const step = plan && (plan.state === "confirmed" || plan.state === "scheduled") ? "reminder" : "next_day";
-  const result = await advanceClock(store, { step });
-  if (!result.ok) return NextResponse.json({ data: null, error: { message: result.error } }, { status: result.status });
-  return NextResponse.json({ data: { now: result.value.clock.now, plan: result.value.plan.state }, error: null });
+  return withRoom(request, raw, {}, async (room) => {
+    const store = room.store;
+    const plan = await currentPlan(store);
+    const step = plan && (plan.state === "confirmed" || plan.state === "scheduled") ? "reminder" : "next_day";
+    const result = await advanceClock(store, { step });
+    if (!result.ok) return NextResponse.json({ data: null, error: { message: result.error } }, { status: result.status });
+    return NextResponse.json({ data: { now: result.value.clock.now, plan: result.value.plan.state }, error: null });
+  });
 }
