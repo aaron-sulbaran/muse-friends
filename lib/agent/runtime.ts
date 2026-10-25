@@ -56,10 +56,17 @@ export async function injectSignal(store: Store, signal: Signal, wallNow: () => 
 // The timeline says a turn failed and why in a word; the full reason (an API error body, an incomplete
 // response) goes to the server log, where the person running the demo can read it. The log says what happened in
 // plain words: a model that did not answer is not a cap, and it says whether the scripted fallback spoke.
+// The request ids of the failed API calls, for the log line only: the first and the last bracket a burst, and the count says how
+// long it was. These are what the Meta reps look up. Never on the timeline row.
+function describeRequestIds(ids: string[] | undefined): string {
+  if (!ids || ids.length === 0) return "";
+  return ids.length === 1 ? `; request id ${ids[0]}` : `; request ids ${ids[0]} to ${ids.at(-1)}, ${ids.length} calls`;
+}
+
 export function describeFailure(failure: TurnResult["failure"]): string {
   switch (failure?.reason) {
     case "model_error":
-      return `the model did not answer (${failure.message ?? failure.detail})`;
+      return `the model did not answer (${failure.message ?? failure.detail}${describeRequestIds(failure.requestIds)})`;
     case "no_tool_call":
       return "the model replied without acting, even after a nudge";
     case "cap_reached":

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { describeFailure, injectSignal, runSignalTurn } from "@/lib/agent/runtime";
 import { notFoundTailMs, runAgentTurn, type ToolDefinition } from "@/lib/model";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
@@ -237,5 +237,83 @@ describe("the slow tail after a 404 burst", () => {
       process.env.MODEL_404_TAIL_MS = raw;
       expect(notFoundTailMs(), raw).toBe(expected);
     }
+  });
+});
+
+// The next 404 burst should hand the Meta reps request ids: the x-request-id of each failed call goes on the log line.
+describe("request ids on the 'did not answer' log line", () => {
+  const withIds = (count: number, prefix = "req_"): Step[] => Array.from({ length: count }, (_, index) => ({ error: 404, code: "model_not_found", requestId: `${prefix}${index + 1}` }));
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps the id of every failed call of a burst on the turn's failure, oldest first", async () => {
+    installFakeModel(withIds(12));
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    // 4 calls on the configured model and 6 on the fallback.
+    expect(result.failure?.requestIds).toEqual(Array.from({ length: 10 }, (_, index) => `req_${index + 1}`));
+    expect(describeFailure(result.failure)).toBe("the model did not answer (404 The requested model was not found.; request ids req_1 to req_10, 10 calls)");
+  });
+
+  it("includes the tail's calls too, and the single id of a plain 5xx", async () => {
+    process.env.MODEL_404_TAIL_MS = "2000";
+    installFakeModel(withIds(30));
+    const burst = await runAgentTurn({ ...base, handlers: {} });
+    // The ladder (10) and one tick of both models (2).
+    expect(burst.failure?.requestIds).toHaveLength(12);
+    expect(describeFailure(burst.failure)).toContain("request ids req_1 to req_12, 12 calls");
+
+    removeFakeModel();
+    installFakeModel([{ error: 503, requestId: "req_503" }]);
+    const single = await runAgentTurn({ ...base, handlers: {} });
+    expect(single.failure?.requestIds).toEqual(["req_503"]);
+    expect(describeFailure(single.failure)).toMatch(/\(503 .*; request id req_503\)$/);
+  });
+
+  it("says nothing about ids when the API sent none", async () => {
+    installFakeModel(Array.from({ length: 12 }, () => notFound));
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.failure?.requestIds).toBeUndefined();
+    expect(describeFailure(result.failure)).not.toContain("request id");
+  });
+
+  it("puts the ids on the server log line, with whether the scripted fallback spoke", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const store = new JsonStore(null);
+    const { contextId } = await injectSignal(store, { ...rawShawarmaSignal(), id: "sig_ids" });
+    installFakeModel(withIds(12));
+    const turn = await runSignalTurn({ store, agent: "aaron", signalId: "sig_ids", contextId });
+    expect(turn.fallback).toBe(true);
+    expect(error).toHaveBeenCalledWith("agent turn failed (aaron): the model did not answer (404 The requested model was not found.; request ids req_1 to req_10, 10 calls); the scripted fallback spoke");
+    // The model switch is logged with the id of the 404 that caused it.
+    expect(warn).toHaveBeenCalledWith("model muse-spark-1.3 answered 404 model_not_found (request id req_4); trying muse-spark-1.2");
+  });
+
+  it("logs the id of the last 404 when the slow tail starts", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    process.env.MODEL_404_TAIL_MS = "2000";
+    installFakeModel(withIds(30));
+    await runAgentTurn({ ...base, handlers: {} });
+    expect(warn).toHaveBeenCalledWith("every model answered 404 model_not_found (request id req_10); retrying every 2s for up to 2s");
+  });
+});
+
+describe("the tail length is read when the call is made", () => {
+  it("a changed MODEL_404_TAIL_MS applies to the next call without reloading anything", async () => {
+    process.env.MODEL_404_TAIL_MS = "6000";
+    const first = installFakeModel(Array.from({ length: 60 }, () => notFound));
+    await runAgentTurn({ ...base, handlers: {} });
+    expect(first.calls).toHaveLength(16); // the ladder (10) and three ticks of both models
+
+    removeFakeModel();
+    process.env.MODEL_404_TAIL_MS = "2000";
+    const second = installFakeModel(Array.from({ length: 60 }, () => notFound));
+    await runAgentTurn({ ...base, handlers: {} });
+    expect(second.calls).toHaveLength(12); // the ladder and one tick
   });
 });

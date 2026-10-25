@@ -72,7 +72,7 @@ export const privacyCopy = {
   heading: "Privacy in code",
   lines: [
     "A policy gate in our code checks every message against what its sender agreed to share, and the receiver checks again. Candidate times come from both calendars by code, so the model cannot invent a free evening. Turn your friend's location off on the stage and the next message shows it withheld.",
-    "A second phone asks for the state with role=b and gets it without the first person's private chat with their own Muse. Notes from your Muse to you, such as what it kept out of a message, sit in your thread marked Only you see this and never reach your friend's phone.",
+    "Your friend's phone never receives your private chat with your Muse. Notes from your Muse to you, such as what it kept out of a message, sit in your thread marked Only you see this and never reach your friend's phone.",
   ],
   panels: [
     {
