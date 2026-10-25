@@ -14,7 +14,8 @@
     "demo:payments": "node scripts/demo-payments.mjs",
     "nessie:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/nessie-check.mjs",
     "gate:c5": "node scripts/gate-c5.mjs",
-    "laptop:check": "node scripts/laptop-check.mjs"
+    "laptop:check": "node scripts/laptop-check.mjs",
+    "evals": "RUN_EVALS=1 vitest run --config vitest.evals.config.mts --reporter=verbose"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.4.0",
