@@ -12,7 +12,7 @@ import { installWireShim } from "./helpers/wire";
 const scheduled: Array<() => unknown> = [];
 vi.mock("next/server", async (original) => ({ ...(await original<typeof import("next/server")>()), after: (callback: () => unknown) => void scheduled.push(callback) }));
 
-const DELAY = 100;
+const DELAY = 10;
 const TUE = { start: "2026-10-27T18:00:00-05:00", end: "2026-10-27T20:00:00-05:00" };
 const stamp = { passed: ["availability"], removed: [], windowsDropped: 0 };
 const bearer = (agent: "aaron" | "lisa") => ({ authorization: `Bearer ${agentToken(agent)}`, "content-type": "application/json" });
@@ -54,19 +54,19 @@ async function postToInbox(id: "lisa" | "aaron", body: unknown, sender: "aaron" 
 
 describe("the inbox with a slow store", () => {
   it("answers 202 in a few store round trips, not one per write, and before any model call", async () => {
-    const { store } = slowStore(DELAY);
+    const { store, depth, reset } = slowStore(DELAY);
     (globalThis as { __museStore?: unknown }).__museStore = Promise.resolve(store);
     const { contextId } = await injectSignal(store, rawShawarmaSignal());
     const model = installFakeModel([]);
 
-    const started = Date.now();
+    reset();
     const response = await postToInbox("lisa", { message: intent(contextId), stamp, redaction: null }, "aaron");
-    const elapsed = Date.now() - started;
 
     expect(response.status).toBe(202);
     expect(await response.json()).toMatchObject({ contextId, seq: 1, status: { state: "working" } });
-    // Reads together, then the core writes together: about three round trips. One-after-another would be 15 or more.
-    expect(elapsed).toBeLessThan(DELAY * 6);
+    // Reads together, then the core's reads together, then its writes together: three round trips, however
+    // slow each one is. One call after another would be a dozen or more.
+    expect(depth()).toBeLessThanOrEqual(3);
     expect(model.calls).toHaveLength(0);
     expect(scheduled).toHaveLength(1);
     // The message is durable, the cosmetic rows are not yet.
@@ -228,14 +228,16 @@ describe("a thread that hits the cap", () => {
 });
 
 describe("receiveMessage on a slow store (unit)", () => {
-  it("spends no more than four sequential round trips on the way to the 202", async () => {
-    const { store, calls } = slowStore(60);
+  it("spends no more than three sequential round trips on the way to the 202", async () => {
+    const { store, calls, depth, reset } = slowStore(10);
     const { contextId } = await injectSignal(store, rawShawarmaSignal());
-    calls.length = 0;
-    const started = Date.now();
+    reset();
     const result = await receiveMessage(store, { recipient: "lisa", sender: "aaron", envelope: { message: intent(contextId), stamp, redaction: null } });
     expect(result.ok).toBe(true);
-    expect(Date.now() - started).toBeLessThan(60 * 5);
+    expect(depth()).toBeLessThanOrEqual(3);
+    // Nothing cosmetic is on the way to the 202: the timeline rows wait for finish().
     expect(calls.filter((name) => name === "appendEvent")).toHaveLength(0);
+    if (result.ok) await result.finish();
+    expect(calls.filter((name) => name === "appendEvent").length).toBeGreaterThan(0);
   });
 });
