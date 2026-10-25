@@ -27,6 +27,7 @@ export const copy = {
   activityTitle: "Activity",
   activityEmpty: (first: string, second: string) => `Nothing yet. When ${first} and ${second} talk, every message shows up here.`,
   reconnecting: "Reconnecting...",
+  thinking: (who: string, count: number) => `${who} ${count === 1 ? "is" : "are"} thinking`,
 
   // Status lines are words only; the state's animated glyph (public/status) comes from the phone view.
   statusReading: (friend: string) => `reading ${friend}'s reel`,
@@ -175,6 +176,27 @@ export const copy = {
   inviteCopy: "Copy link",
   inviteCopied: "Copied",
   inviteSwitching: "Making room for your friend...",
+  // A plan for three: Sprout, Mochi and Pebble (Pebble has no phone, so the coordinator's phone answers for them).
+  groupProposalA: (first: string, second: string, place: string, when: string) =>
+    `You, ${first} and ${second} all want to try ${place}, and you're all free ${when}.`,
+  groupProposalB: (coordinator: string, other: string, place: string, when: string) =>
+    `${coordinator} is getting ${other} and you together for ${place}, ${when}. You're all free.`,
+  groupCardTitleA: (muse: string, first: string, second: string) => `${muse} wants to make a plan with ${first} and ${second}`,
+  groupCardTitleMember: (coordinator: string, other: string) => `${coordinator} is getting ${other} and you together`,
+  groupCardReason: (reelOwner: string) => `Based on ${reelOwner} reel and all three calendars.`,
+  groupMusesAgreed: "All three Muses agreed on this time.",
+  groupYou: "you",
+  groupSaidYes: "said yes",
+  groupSaidNo: "said not now",
+  groupWaiting: "deciding",
+  groupDraftIntro: (friends: string) => `${friends} are in. Here's a message you can send them.`,
+  groupHoldDetails: (first: string, second: string, third: string) => `${first}, ${second} and ${third} planned this in Muse Friends.`,
+  groupDropped: "The Muses couldn't find a time that works for all three this week. I'll keep an eye out.",
+  memberCardTitle: (name: string) => `${name} has no phone`,
+  memberCardDetail: (name: string) => `${name} is a fictional friend, so you answer for ${name}.`,
+  memberAccept: (name: string) => `${name} says yes`,
+  memberDecline: (name: string) => `${name} says not now`,
+  planForThree: "Plan for three",
   goalsTitle: "Goals",
   goalsTracking: "Tracking",
   goalsEmpty: (friend: string) => `Nothing tracked yet. When you and ${friend} settle on a plan, it shows up here.`,

@@ -1,6 +1,6 @@
 import { copy } from "./copy";
 import { messageTitle, namesFor, policyStampFor } from "./format";
-import type { AgentId, MessageType, Role, UiSnapshot } from "./types";
+import type { AgentId, MemberId, MessageType, Role, UiSnapshot } from "./types";
 
 /*
  * The phone thread as people read it (D32): the person and their friend still talking, with both Muses in the same
@@ -16,8 +16,8 @@ export type Sender = {
   owner?: string;
   /** True for a friend who is played by a model, until a real one joins. */
   simulated?: boolean;
-  /** Which Muse, so the chip can draw it. Absent for people. */
-  agent?: AgentId;
+  /** Which Muse, so the chip can draw it. Absent for people. A plan for three adds Pebble. */
+  agent?: MemberId;
 };
 
 export type ThreadLine = {
@@ -46,7 +46,7 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
   if (!plan) return [];
   const names = namesFor(snapshot);
   const me = roleAgent[role];
-  const muse = (agent: AgentId): Sender => ({ kind: agent === me ? "your-muse" : "friend-muse", name: snapshot.sides[agent], owner: names.human[agent], agent });
+  const muse = (agent: MemberId): Sender => ({ kind: agent === me ? "your-muse" : "friend-muse", name: snapshot.sides[agent], owner: names.human[agent], agent });
 
   const lines: ThreadLine[] = [];
   for (const message of snapshot.messages) {

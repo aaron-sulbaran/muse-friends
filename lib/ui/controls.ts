@@ -36,7 +36,7 @@ export type Scenario = { id: "one-to-one" | "new-in-town" | "group"; label: stri
 export const scenarios: readonly Scenario[] = [
   { id: "one-to-one", label: "One to one", available: true },
   { id: "new-in-town", label: "New in town", available: false },
-  { id: "group", label: "Group", available: false },
+  { id: "group", label: "Group of three", available: true },
 ];
 
 export const SCENARIO_LOCKED_NOTE = "after the gate";
