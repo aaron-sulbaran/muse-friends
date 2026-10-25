@@ -2,16 +2,17 @@
 
 import { Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { postClockAdvance, postLeakAttempt, postReset, postSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
-import { controlInfo, jumpLabel as jumpLabelFor, loadReelLabel, SCENARIO_LOCKED_NOTE, scenarios, type ControlKey } from "@/lib/ui/controls";
+import { postClockAdvance, postGroupSignal, postLeakAttempt, postReset, postSignal, postSimulatedFriendSwitch, postTripSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
+import { controlInfo, jumpLabel as jumpLabelFor, loadReelLabel, runningScenario, SCENARIO_LOCKED_NOTE, scenarios, type ControlKey } from "@/lib/ui/controls";
 import { friendLink } from "@/lib/ui/entry";
 import { getRoom } from "@/lib/ui/room";
+import type { ReplayScenario } from "@/lib/ui/use-replay";
 import type { UiSnapshot } from "@/lib/ui/types";
 
 type Props = {
   snapshot: UiSnapshot | null;
   onChanged: () => void;
-  replay: { active: boolean; start: () => Promise<void>; stop: () => void; error: string | null };
+  replay: { active: boolean; start: (scenario?: ReplayScenario) => Promise<void>; stop: () => void; error: string | null };
   /** A run could not start because the live-run caps are reached; the stage falls back to a recording. */
   onPaused: (text: string) => void;
   /** Opens the panel on first render, for a panel drawn after the fact. */
@@ -65,7 +66,22 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
     if (replay.active) replay.stop();
     else await replay.start();
   };
+  const toggleTripReplay = async () => {
+    if (replay.active) replay.stop();
+    else await replay.start("trip");
+  };
   const loadReel = () => run(postSignal);
+  // The group demos are one person's to run: Michelle is played by a model (Kai always is), so the room switches to that first.
+  // Starting is only offered with no plan alive, so the switch, which clears the room, never wipes a plan.
+  const startAlone = async (start: () => Promise<Result>): Promise<Result> => {
+    if (!snapshot?.simulatedFriend) {
+      const switched = await postSimulatedFriendSwitch(true);
+      if (!switched.ok) return switched;
+    }
+    return start();
+  };
+  const planForThree = () => run(() => startAlone(postGroupSignal));
+  const planTrip = () => run(() => startAlone(postTripSignal));
   const tryToLeak = async () => {
     setLeak({ running: true });
     const result = await postLeakAttempt();
@@ -75,9 +91,9 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
   const jump = () => run(postClockAdvance);
   const reset = () => run(postReset);
 
-  const actions = useRef({ loadReel, tryToLeak, jump, reset, toggleReplay });
+  const actions = useRef({ loadReel, planForThree, planTrip, tryToLeak, jump, reset, toggleReplay, toggleTripReplay });
   useEffect(() => {
-    actions.current = { loadReel, tryToLeak, jump, reset, toggleReplay };
+    actions.current = { loadReel, planForThree, planTrip, tryToLeak, jump, reset, toggleReplay, toggleTripReplay };
   });
 
   useEffect(() => {
@@ -88,6 +104,9 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
       const key = event.key.toLowerCase();
       if (key === "s") void actions.current.loadReel();
+      else if (key === "g") void actions.current.planForThree();
+      else if (key === "t") void actions.current.planTrip();
+      else if (key === "y") void actions.current.toggleTripReplay();
       else if (key === "l") void actions.current.tryToLeak();
       else if (key === "f") void actions.current.jump();
       else if (key === "0") void actions.current.reset();
@@ -98,10 +117,12 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
   }, []);
 
   const replaying = replay.active;
+  const selectedScenario = runningScenario(plan);
   const items: ReadonlyArray<{ info: ControlKey; label: string; key: string; run: () => void; disabled?: boolean }> = [
     { info: "loadReel", label: loadReelLabel(snapshot?.reel ?? null), key: "S", run: loadReel, disabled: planIsAlive || replaying },
     { info: "jump", label: jumpLabel, key: "F", run: jump, disabled: !canJump || replaying },
     { info: "replay", label: replaying ? "Stop the replay" : "Replay a recorded run", key: "R", run: toggleReplay },
+    { info: "replayTrip", label: replaying ? "Stop the replay" : "Replay the recorded trip", key: "Y", run: toggleTripReplay },
     { info: "leak", label: "Try to leak", key: "L", run: tryToLeak, disabled: replaying || (leak !== null && "running" in leak) },
     { info: "reset", label: "Reset", key: "0", run: reset, disabled: replaying },
   ];
@@ -143,12 +164,13 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
                   key={scenario.id}
                   type="button"
                   role="radio"
-                  aria-checked={scenario.available}
-                  disabled={!scenario.available}
-                  className="flex w-full items-center justify-between rounded-group px-3 py-1.5 text-left text-[15px] disabled:opacity-40"
+                  aria-checked={selectedScenario === scenario.id}
+                  disabled={!scenario.available || (scenario.id !== "one-to-one" && (planIsAlive || replaying))}
+                  onClick={scenario.id === "group" ? planForThree : scenario.id === "trip" ? planTrip : undefined}
+                  className={`flex w-full items-center justify-between rounded-group px-3 py-1.5 text-left text-[15px] ${selectedScenario === scenario.id ? "font-semibold disabled:opacity-100" : "disabled:opacity-40"}`}
                 >
                   <span className="flex items-center gap-2">
-                    <span aria-hidden="true" className={`size-2 rounded-full ${scenario.available ? "bg-accent" : "bg-faint"}`} />
+                    <span aria-hidden="true" className={`size-2 rounded-full ${selectedScenario === scenario.id ? "bg-accent" : "bg-faint"}`} />
                     {scenario.label}
                   </span>
                   {scenario.available ? null : <span className="text-[12px] text-muted">{SCENARIO_LOCKED_NOTE}</span>}

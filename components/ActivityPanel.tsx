@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/lib/ui/copy";
-import { discInitials, namesFor } from "@/lib/ui/format";
+import { discInitials, listOf, namesFor } from "@/lib/ui/format";
 import { timelineOf } from "@/lib/ui/timeline";
 import type { UiMessage, UiSnapshot } from "@/lib/ui/types";
 import { ActivityNote } from "./ActivityNote";
@@ -33,14 +33,14 @@ function ThinkingRow({ snapshot }: { snapshot: UiSnapshot }) {
   }, [startedAt]);
 
   if (!snapshot.inFlight) return null;
-  const agent = snapshot.inFlight.agent;
+  const { agent, agents } = snapshot.inFlight;
   const names = namesFor(snapshot);
   const initial = discInitials(snapshot)[agent];
   return (
     <li className="animate-row-in">
       <div className="flex items-center gap-3 rounded-group bg-group px-3 py-2.5">
         <MuseAvatar agent={agent} initial={initial} name={names.muse[agent]} size={36} />
-        <span className="text-[15px] leading-5">{names.muse[agent]} is thinking</span>
+        <span className="text-[15px] leading-5">{copy.thinking(listOf(agents.map((member) => names.muse[member])), agents.length)}</span>
         <span className="flex gap-1" aria-hidden="true">
           {[0, 1, 2].map((dot) => (
             <span key={dot} className="size-1.5 animate-typing rounded-full bg-muted" style={{ animationDelay: `${dot * 150}ms` }} />

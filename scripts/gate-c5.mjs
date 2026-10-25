@@ -19,7 +19,8 @@
 // scenario through scripts/demo-http.mjs N times (each run is one PASS or FAIL line); the privacy toggle
 // check that demo:http performs, once per run; Replay parses and carries its messages; and the demo room is
 // left reset. One PASS or FAIL line per step. Exit 0 when every step passes, 1 when any fails, 2 when the
-// room is not empty and --force was not given (nothing was touched). With --payments or --group, one more line
+// room is not empty and --force was not given (nothing was touched), 64 for an option it does not know (nothing
+// was touched; an ignored option would look like a step that passed). With --payments or --group, one more line
 // each (PASS, FAIL, or SKIP when the feature is absent) comes after Replay and before the final reset; without
 // the flags the output is exactly as before.
 //
@@ -47,21 +48,31 @@ export function parseArgs(argv) {
     group: false,
     paymentsScript: path.join(here, "demo-payments.mjs"),
     groupScript: path.join(here, "demo-group.mjs"),
+    // Anything this script does not know. An option that is ignored in silence looks like a step that passed, so
+    // the command line refuses to run on one (a typo, or a copy of this script from before the option existed).
+    unknown: [],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    const value = () => argv[++index];
-    if (argument === "--base") options.base = value();
-    else if (argument === "--expect-sha") options.expectSha = value();
-    else if (argument === "--runs") options.runs = Number(value());
-    else if (argument === "--timeout") options.timeout = Number(value());
+    const value = () => {
+      if (index + 1 >= argv.length || argv[index + 1].startsWith("--")) {
+        options.unknown.push(`${argument} (needs a value)`);
+        return undefined;
+      }
+      return argv[++index];
+    };
+    if (argument === "--base") options.base = value() ?? options.base;
+    else if (argument === "--expect-sha") options.expectSha = value() ?? options.expectSha;
+    else if (argument === "--runs") options.runs = Number(value() ?? options.runs);
+    else if (argument === "--timeout") options.timeout = Number(value() ?? options.timeout);
     else if (argument === "--force") options.force = true;
     else if (argument === "--verbose") options.verbose = true;
     else if (argument === "--payments") options.payments = true;
     else if (argument === "--group") options.group = true;
-    else if (argument === "--demo-script") options.demoScript = value(); // for tests
-    else if (argument === "--payments-script") options.paymentsScript = value(); // for tests
-    else if (argument === "--group-script") options.groupScript = value(); // for tests
+    else if (argument === "--demo-script") options.demoScript = value() ?? options.demoScript; // for tests
+    else if (argument === "--payments-script") options.paymentsScript = value() ?? options.paymentsScript; // for tests
+    else if (argument === "--group-script") options.groupScript = value() ?? options.groupScript; // for tests
+    else if (argument !== "--") options.unknown.push(argument); // pnpm hands a lone -- through; everything else is unknown
   }
   options.base = options.base.replace(/\/$/, "");
   if (!Number.isInteger(options.runs) || options.runs < 1) options.runs = 2;
@@ -275,7 +286,8 @@ export async function runGate(options, write = (line) => console.log(line)) {
     for (const line of shown) write(`      | ${line}`);
   };
 
-  write(`C5 gate against ${options.base}`);
+  const optIns = [options.payments ? "--payments" : null, options.group ? "--group" : null].filter(Boolean);
+  write(`C5 gate against ${options.base}${optIns.length > 0 ? ` (with ${optIns.join(", ")})` : ""}`);
 
   // 1. Health and the deployed commit.
   let health;
@@ -416,5 +428,10 @@ export async function runGate(options, write = (line) => console.log(line)) {
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
 if (isMain) {
-  runGate(parseArgs(process.argv.slice(2))).then((code) => process.exit(code));
+  const options = parseArgs(process.argv.slice(2));
+  if (options.unknown.length > 0) {
+    console.error(`gate:c5 refused its command line (${options.unknown.join("; ")}); nothing was touched. Options: --base URL, --expect-sha SHA, --runs N, --timeout SECONDS, --force, --verbose, --payments, --group.`);
+    process.exit(64);
+  }
+  runGate(options).then((code) => process.exit(code));
 }

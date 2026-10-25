@@ -80,9 +80,9 @@ describe("whether a phone offers Settle up", () => {
     expect(settleOffer(at("scheduled", { paymentsScope: { aaron: { enabled: true, cap: 0 }, lisa: off } }), snapshotPlan("scheduled"), "aaron")).toMatchObject({ kind: "turn_on" });
   });
 
-  it("holds a second ask while one payment is still waiting on the friend, and frees it once answered", () => {
+  it("holds a second ask while one payment is still waiting, calls the plan settled once the friend kept it, and offers again if it came back", () => {
     expect(settleOffer(at("scheduled", { payments: [payment({ status: "sent" })] }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "waiting" });
-    expect(settleOffer(at("scheduled", { payments: [payment({ status: "received" })] }), snapshotPlan("scheduled"), "aaron")).toMatchObject({ kind: "ready", cap: 30 });
+    expect(settleOffer(at("scheduled", { payments: [payment({ status: "received" })] }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "settled", amount: 15 });
     expect(settleOffer(at("scheduled", { payments: [payment({ status: "refunded" })] }), snapshotPlan("scheduled"), "aaron")).toMatchObject({ kind: "ready", cap: 30 });
   });
 });

@@ -6,13 +6,13 @@ import {
   policyStampFor,
   type Names,
 } from "@/lib/ui/format";
-import type { AgentId, UiMessage } from "@/lib/ui/types";
+import type { MemberId, UiMessage } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
 import { PolicyStamp } from "./PolicyStamp";
 
 type Props = {
   message: UiMessage;
-  initials: Record<AgentId, string | null>;
+  initials: Record<MemberId, string | null>;
   names: Names;
   onOpen: (message: UiMessage) => void;
 };

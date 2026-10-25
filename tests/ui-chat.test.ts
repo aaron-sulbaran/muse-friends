@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PLAN_STATES, type PlanState, type StateSnapshot } from "@/lib/protocol";
 import { recordedSnapshot, seedSnapshot } from "@/lib/seed/fixtures";
 import { snapshotAtPlanState } from "@/lib/seed/states";
+import { copy } from "@/lib/ui/copy";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 import type { Role } from "@/lib/ui/types";
@@ -56,7 +57,7 @@ describe("how a judge starts", () => {
     state.room = { ...state.room, simulatedFriend: true };
     const snapshot = toUiSnapshot(state, live);
     expect(kinds(viewForRole(snapshot, "b").items)).not.toContain("start-card");
-    expect(viewForRole(snapshot, "b").museName).toBe("Michelle's Muse");
+    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
   });
 
   it("once a plan exists, nobody is offered a start", () => {
@@ -76,7 +77,7 @@ describe("what the header avatar is doing", () => {
   });
 
   it("thinks while its own model call is in flight, and only that Muse does", () => {
-    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const, agents: ["aaron" as const] } };
     expect(viewForRole(inFlight, "a").mood).toBe("thinking");
     expect(viewForRole(inFlight, "b").mood).toBe("talking");
   });
@@ -239,14 +240,14 @@ describe("what the store can say that the recorded states do not", () => {
     state.room = { ...state.room, simulatedFriend: true };
     const snapshot = toUiSnapshot(state, live);
     expect(snapshot.simulatedFriend).toBe(true);
-    expect(viewForRole(snapshot, "b").museName).toBe("Michelle's Muse");
+    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
     expect(viewForRole(snapshot, "a").friendHumanName).toBe("Michelle");
   });
 });
 
 describe("the status glyph follows what the Muse is doing", () => {
   it("thinks while its own call runs during a negotiation, and talks while it waits", () => {
-    const thinkingA = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    const thinkingA = { ...at("negotiating"), inFlight: { agent: "aaron" as const, agents: ["aaron" as const] } };
     expect(viewForRole(thinkingA, "a").status).toEqual({ glyph: "thinking", text: "thinking it over" });
     expect(viewForRole(thinkingA, "b").status).toEqual({ glyph: "talking", text: "talking to Sprout" });
     expect(viewForRole(thinkingA, "a").mood).toBe("thinking");
@@ -264,6 +265,74 @@ describe("the status glyph follows what the Muse is doing", () => {
         const status = viewForRole(at(state), role).status;
         expect(status === null || !emoji.test(status.text)).toBe(true);
       }
+    }
+  });
+});
+
+describe("the app's own lines carry no emoji", () => {
+  const emoji = /\p{Extended_Pictographic}/u;
+  const everyLine = (snapshot: ReturnType<typeof at>) =>
+    (["a", "b"] as Role[]).flatMap((role) => viewForRole(snapshot, role).items.flatMap((item) => (item.kind === "bubble" || item.kind === "collapsed" ? [item.text] : [])));
+
+  it("in the seeded history on both phones", () => {
+    const lines = everyLine(at("awaiting_humans"));
+    expect(lines.some((line) => /sent you a reel/.test(line))).toBe(true);
+    expect(lines.some((line) => /Cedar Bluff Trail/.test(line))).toBe(true);
+    for (const line of lines) expect(line).not.toMatch(emoji);
+  });
+
+  it("in the reply after a plan happens, and in the nudge", () => {
+    expect(copy.outcomeWentReply).not.toMatch(emoji);
+    expect(copy.nudgeSent("Michelle")).not.toMatch(emoji);
+  });
+});
+
+describe("Michelle's own phone names her Muse Mochi", () => {
+  it("in the pill and the line under the plan card, while Sprout's phone says Michelle's Muse", () => {
+    const state = snapshotAtPlanState("awaiting_humans");
+    state.room = { ...state.room, simulatedFriend: true };
+    const snapshot = toUiSnapshot(state, live);
+    expect(viewForRole(snapshot, "b").museName).toBe("Mochi");
+    expect(viewForRole(snapshot, "b").humanName).toBe("Michelle");
+    expect(viewForRole(snapshot, "a").friendMuseName).toBe("Michelle's Muse");
+    const agreed = viewForRole(snapshot, "b").items.find((item) => item.kind === "agreed-line");
+    expect(agreed && agreed.kind === "agreed-line" ? agreed.names[0] : null).toBe("Mochi");
+  });
+});
+
+describe("the thread in the chat", () => {
+  const lines = (items: ChatItem[]) => items.flatMap((item) => (item.kind === "thread-line" ? [item.line] : []));
+
+  it("lands the Muses' turns before the offer, and nothing else before it", () => {
+    const items = viewForRole(at("awaiting_humans"), "a").items;
+    const ids = items.map((item) => item.id);
+    expect(lines(items).filter((line) => line.phase === "talk").length).toBeGreaterThan(0);
+    const lastTalk = Math.max(...items.flatMap((item, index) => (item.kind === "thread-line" && item.line.phase === "talk" ? [index] : [])));
+    expect(lastTalk).toBeLessThan(ids.indexOf("proposal"));
+  });
+
+  it("shows the turns live while the Muses negotiate, so a judge watches them talk", () => {
+    expect(lines(viewForRole(quietNegotiation(), "a").items).length).toBeGreaterThan(0);
+  });
+
+  it("keeps every card and the agreed line where they were", () => {
+    const kindsAfter = kinds(viewForRole(at("awaiting_humans"), "a").items);
+    expect(kindsAfter).toContain("plan-card");
+    expect(kindsAfter).toContain("agreed-line");
+  });
+
+  it("puts Michelle's scripted yes after the person's own decision, and only for a simulated friend", () => {
+    const base = at("awaiting_humans");
+    const accepted = { ...base, simulatedFriend: true, plan: { ...base.plan!, decisions: { a: "accepted" as const, b: "accepted" as const } } };
+    const items = viewForRole(accepted, "a").items;
+    expect(items.at(-1)).toMatchObject({ kind: "thread-line", line: { sender: { kind: "friend", simulated: true }, text: "Yes, I'm in." } });
+    expect(lines(viewForRole({ ...accepted, simulatedFriend: false }, "a").items).some((line) => line.sender.kind === "friend")).toBe(false);
+  });
+
+  it("gives every item a distinct id", () => {
+    for (const role of ["a", "b"] as Role[]) {
+      const ids = viewForRole(at("awaiting_humans"), role).items.map((item) => item.id);
+      expect(new Set(ids).size).toBe(ids.length);
     }
   });
 });

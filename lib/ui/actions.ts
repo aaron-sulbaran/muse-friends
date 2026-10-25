@@ -1,5 +1,5 @@
 import { getRoom, withRoom } from "./room";
-import type { Category, Role, ShareTier } from "./types";
+import type { Category, MemberId, Role, ShareTier } from "./types";
 
 export type Result = { ok: true } | { ok: false; message: string; paused?: boolean; refused?: boolean };
 
@@ -41,6 +41,31 @@ export function postSignal() {
   return post("/api/signals", { scenario: "shawarma" });
 }
 
+/** "The friend sent a reel" for a plan of three: Sprout's Muse gets Mochi and Pebble together. Same caps and 429 as a pair. */
+export function postGroupSignal() {
+  return post("/api/signals", { scenario: "group" });
+}
+
+/** "Make this happen" for the group chat that never left the chat: Sprout plans a trip months out for three (lib/agent/trip.ts). */
+export function postTripSignal() {
+  return post("/api/signals", { scenario: "trip" });
+}
+
+/** A person answers the trip's bounded question: yes, no, or their own limit in whole dollars. */
+export function postTripAnswer(planId: string, member: MemberId, answer: "yes" | "no" | "limit", limit?: number) {
+  return post("/api/trip/answer", { planId, member, answer, ...(limit === undefined ? {} : { limit }) });
+}
+
+/** A person confirms their own pot deposit and joins ("in"), or passes ("out"). Money moves only on "in". */
+export function postTripJoin(planId: string, member: MemberId, choice: "in" | "out") {
+  return post("/api/trip/join", { planId, member, choice });
+}
+
+/** Pebble has no phone, so the coordinator's phone answers for them. Any member can be named; the server refuses a second answer. */
+export function postMemberDecision(planId: string, member: MemberId, choice: "accept" | "decline") {
+  return post(`/api/plans/${planId}/member-decision`, { member, choice });
+}
+
 /**
  * The person named someone they met. The gate decides whether Sprout may reach out: a refusal comes back as
  * `refused`, with nothing started, and is shown on the timeline and the phone rather than as an error.
@@ -70,6 +95,11 @@ export function postSimulatedFriendSwitch(on: boolean): Promise<Result> {
 /** Asks the simulated friend to answer her card. Safe to repeat: the server answers once. */
 export function postSimulatedAnswer(planId: string) {
   return post("/api/simulated-friend", { planId });
+}
+
+/** Asks the model that plays Kai (the third person of a plan for three) to answer their card. Safe to repeat: the server answers once. */
+export function postSimulatedMemberAnswer(planId: string) {
+  return post("/api/simulated-member", { planId, member: "kai" });
 }
 
 /**

@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: "node",
+    setupFiles: ["./tests/helpers/no-404-tail.ts"],
     // Lane worktrees live under .claude/worktrees; never run their tests from the main checkout.
     exclude: [...configDefaults.exclude, ".claude/**"],
   },

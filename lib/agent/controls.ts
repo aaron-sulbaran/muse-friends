@@ -5,6 +5,8 @@ import {
   isPaymentType,
   SharePolicy,
   type AgentId,
+  type MemberId,
+  membersOfPlan,
   type BusyBlock,
   type RecordedRun,
   type Redaction,
@@ -14,7 +16,7 @@ import { enforceSharePolicy } from "@/lib/policy";
 import { CALENDAR_RANGE, displayName, getPersona, seedSnapshot } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { LifecycleResult } from "./lifecycle";
-import { newId } from "./ids";
+import { newId, seatOf } from "./ids";
 import { PLAN_LOCK, withLock } from "./lock";
 import { PAYMENTS_OFF_TEXT, carryWallets, ensureWallets, paymentsEnabled } from "./wallets";
 import { describeWindow, toCentralIso, toMs } from "./windows";
@@ -31,7 +33,7 @@ const nowIso = (options: Options) => toCentralIso(options.wallNow?.() ?? Date.no
 // affects messages sent from then on.
 export function setSharePolicy(
   store: Store,
-  input: { owner: AgentId; friend: AgentId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
+  input: { owner: MemberId; friend: MemberId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
   options: Options = {},
 ): Promise<LifecycleResult<{ policy: SharePolicy; replayed: Redaction[] }>> {
   return withLock(PLAN_LOCK, () => setSharePolicyLocked(store, input, options));
@@ -39,7 +41,7 @@ export function setSharePolicy(
 
 async function setSharePolicyLocked(
   store: Store,
-  input: { owner: AgentId; friend: AgentId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
+  input: { owner: MemberId; friend: MemberId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
   options: Options,
 ): Promise<LifecycleResult<{ policy: SharePolicy; replayed: Redaction[] }>> {
   if (input.owner === input.friend) return { ok: false, status: 422, error: "a person cannot share with themselves" };
@@ -56,13 +58,13 @@ async function setSharePolicyLocked(
     .map(([key, value]) => (key === "tier" ? `tier ${value}` : `${key} ${value ? "on" : "off"}`))
     .join(", ");
   const plans = await store.listPlans();
-  const plan = plans.find((candidate) => candidate.participants.includes(input.owner) && candidate.participants.includes(input.friend) && candidate.state !== "dropped") ?? plans.at(-1);
+  const plan = plans.find((candidate) => membersOfPlan(candidate).includes(input.owner) && membersOfPlan(candidate).includes(input.friend) && candidate.state !== "dropped") ?? plans.at(-1);
   await store.appendEvent({
     id: newId("evt"),
     at,
     kind: "policy_changed",
     actor: "human",
-    agent: input.owner,
+    agent: seatOf(input.owner),
     contextId: plan?.contextId,
     planId: plan?.id,
     text: `${displayName(input.owner)} changed sharing with ${displayName(input.friend)}: ${changes || "no change"}`,
@@ -101,7 +103,7 @@ async function setSharePolicyLocked(
       at,
       kind: "redaction",
       actor: "system",
-      agent: message.from,
+      agent: seatOf(message.from),
       contextId: message.contextId,
       planId: thread?.planId,
       messageId: message.id,

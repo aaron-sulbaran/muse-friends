@@ -95,7 +95,7 @@ describe("a mutual acquaintance: the run starts, with a smaller footprint", () =
     expect(snapshot.standIn).toEqual({ person: "Jules", muse: "Jules's Muse" });
     expect(namesFor(snapshot).human.lisa).toBe("Jules");
     expect(namesFor(snapshot).muse.lisa).toBe("Jules's Muse");
-    expect(discInitials(snapshot)).toEqual({ aaron: null, lisa: "J" });
+    expect(discInitials(snapshot)).toEqual({ aaron: null, lisa: "J", kai: null });
     expect(viewForRole(snapshot, "a").friendHumanName).toBe("Jules");
   });
 
@@ -104,9 +104,9 @@ describe("a mutual acquaintance: the run starts, with a smaller footprint", () =
     await store.putRoom({ ...(await store.getRoom()), simulatedFriend: true });
     const withMichelle = await ui(store);
     expect(withMichelle.standIn).toEqual({ person: "Michelle", muse: "Michelle's Muse" });
-    expect(discInitials(withMichelle)).toEqual({ aaron: null, lisa: null });
+    expect(discInitials(withMichelle)).toEqual({ aaron: null, lisa: null, kai: null });
     expect(await startFollowUp(store, { target: "jules" })).toMatchObject({ ok: true, started: true });
-    expect(discInitials(await ui(store))).toEqual({ aaron: null, lisa: "J" });
+    expect(discInitials(await ui(store))).toEqual({ aaron: null, lisa: "J", kai: null });
   });
 
   it("never talks about a reel: no reel in the card, the status, the goal, or phone b's chat", async () => {

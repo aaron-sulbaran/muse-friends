@@ -1,10 +1,11 @@
 import {
   THREAD_CAP,
   type ActivityEvent,
-  type AgentId,
+  type MemberId,
   type AgentMessage,
   type DropReason,
   isPaymentType,
+  isTripType,
   type MessageRecord,
   type Plan,
   type Recommendation,
@@ -16,8 +17,11 @@ import { canTransition, transitionPlan } from "@/lib/plans";
 import type { Store } from "@/lib/store";
 import { toCentralIso, windowHash, describeWindow } from "./windows";
 import { buildCards } from "./cards";
+import { allPairsAgreed, namesOf, planForContext } from "./group";
+import { withLock } from "./lock";
 import { commitPaymentCore } from "./payment-rules";
-import { newId } from "./ids";
+import { commitTripCore } from "./trip-rules";
+import { newId, seatOf } from "./ids";
 import { passedOver } from "./thread";
 
 // Committing a message is the receiving side of the wire: it persists the message, advances the
@@ -47,10 +51,12 @@ export type CommitResult = {
 export async function commitMessageCore(store: Store, record: MessageRecord, redaction: Redaction | null = null): Promise<CommitResult> {
   // Payments have a channel of their own: no plan transitions, no cards, no windows ledger.
   if (isPaymentType(record.message.type)) return commitPaymentCore(store, record, redaction);
+  // So do trips: a thread of their own per member, linked to the plan, which only the trip engine moves.
+  if (isTripType(record.message.type)) return commitTripCore(store, record, redaction);
   const { message } = record;
   const at = message.at;
   const [existingPlan, priorRecords, existingThread] = await Promise.all([
-    store.getPlanByContext(message.contextId),
+    planForContext(store, message.contextId),
     store.listMessages(message.contextId),
     store.getThread(message.contextId),
   ]);
@@ -63,6 +69,7 @@ export async function commitMessageCore(store: Store, record: MessageRecord, red
     ({
       contextId: message.contextId,
       planId: plan.id,
+      groupId: plan.group?.groupId,
       initiator: message.from,
       participants: [message.from, message.to],
       state: "working",
@@ -73,12 +80,14 @@ export async function commitMessageCore(store: Store, record: MessageRecord, red
 
   const events: ActivityEvent[] = [];
   const event = (kind: ActivityEvent["kind"], actor: ActivityEvent["actor"], text: string, extra: Partial<ActivityEvent> = {}) =>
-    events.push({ id: newId("evt"), at, kind, actor, contextId: message.contextId, planId: plan.id, agent: message.from, text, ...extra });
+    events.push({ id: newId("evt"), at, kind, actor, contextId: message.contextId, planId: plan.id, agent: seatOf(message.from), text, ...extra });
 
   let nextPlan = plan;
   let cards: Recommendation[] = [];
-  if (opening) {
+  if (opening && nextPlan.state === "detected") {
     nextPlan = transitionPlan(nextPlan, "negotiating", at);
+  }
+  if (opening) {
     event("thread_opened", "agent", `${displayName(message.from)} opened a thread with ${displayName(message.to)}`);
   }
   event("message_sent", "agent", messageEventText(message), { messageId: message.id });
@@ -98,7 +107,8 @@ export async function commitMessageCore(store: Store, record: MessageRecord, red
   let threadState: Thread["state"] = message.state;
   let threadDropReason: DropReason | undefined = dropReason;
 
-  if (message.state === "input-required" && nextPlan.state === "negotiating") {
+  // In a group, awaiting_humans waits for every pair thread (settleGroup, below); in a pair it is this message.
+  if (message.state === "input-required" && nextPlan.state === "negotiating" && !nextPlan.group) {
     nextPlan = {
       ...transitionPlan(nextPlan, "awaiting_humans", at, { note: "Both agents accepted" }),
       activity: message.activity ?? prior.find((entry) => entry.activity)?.activity,
@@ -108,7 +118,7 @@ export async function commitMessageCore(store: Store, record: MessageRecord, red
     nextPlan = { ...nextPlan, draft: buildCards(nextPlan, at).find((card) => card.draft)?.draft };
     cards = buildCards(nextPlan, at);
     for (const card of cards) {
-      event("card_created", "agent", `Card for ${displayName(card.forAgent)}: ${card.forAgent === nextPlan.initiator ? `reach out to ${displayName(card.friend)}` : `${displayName(card.friend)} is about to reach out`}`, { agent: card.forAgent });
+      event("card_created", "agent", `Card for ${displayName(card.forAgent)}: ${card.forAgent === nextPlan.initiator ? `reach out to ${displayName(card.friend)}` : `${displayName(card.friend)} is about to reach out`}`, { agent: seatOf(card.forAgent) });
     }
   } else if (message.state === "rejected" && nextPlan.state === "negotiating") {
     nextPlan = transitionPlan(nextPlan, "dropped", at, { note: "A decline ended the thread", dropReason });
@@ -128,12 +138,53 @@ export async function commitMessageCore(store: Store, record: MessageRecord, red
     ...cards.map((card) => store.putCard(card)),
   ]);
 
+  let groupEvents: ActivityEvent[] = [];
+  if (nextPlan.group && message.state === "input-required") {
+    groupEvents = await settleGroup(store, plan.id, message, prior, at);
+  }
+
   const finish = async () => {
     await Promise.all([...(redaction ? [store.appendRedaction(redaction)] : []), ...passed.map((hash) => store.addRejectedWindow(message.contextId, hash))]);
     // Timeline rows go in order, one after another, so the Activity view reads the way it happened.
-    for (const row of events) await store.appendEvent(row);
+    for (const row of [...events, ...groupEvents]) await store.appendEvent(row);
   };
   return { threadState, capped, finish };
+}
+
+// The group moves on when every pair thread has agreed: awaiting_humans, one card each, and the rows that say
+// so. Runs under the group's lock, and checks the plan afresh, so two last accepts landing together settle it once.
+async function settleGroup(store: Store, planId: string, message: AgentMessage, prior: AgentMessage[], at: string): Promise<ActivityEvent[]> {
+  const probe = await store.getPlan(planId);
+  const groupId = probe?.group?.groupId;
+  if (!groupId) return [];
+  return withLock(`group:${groupId}`, async () => {
+    const plan = await store.getPlan(planId);
+    if (!plan?.group || plan.state !== "negotiating") return [];
+    if (!(await allPairsAgreed(store, plan.group))) return [];
+
+    const activity = message.activity ?? prior.find((entry) => entry.activity)?.activity ?? plan.activity;
+    let next: Plan = { ...transitionPlan(plan, "awaiting_humans", at, { note: "Every pair agreed" }), activity, window: message.windows?.[0] };
+    const cards = buildCards(next, at);
+    next = { ...next, draft: cards.find((card) => card.draft)?.draft };
+    await Promise.all([store.putPlan(next), ...cards.map((card) => store.putCard(card))]);
+
+    const row = (kind: ActivityEvent["kind"], actor: ActivityEvent["actor"], text: string, extra: Partial<ActivityEvent> = {}): ActivityEvent => ({
+      id: newId("evt"),
+      at,
+      kind,
+      actor,
+      contextId: message.contextId,
+      planId,
+      text,
+      ...extra,
+    });
+    return [
+      row("plan_state", "system", `${namesOf(plan.group.members)} agreed on ${next.window ? describeWindow(next.window) : "a time"}. Waiting on all ${plan.group.members.length} people.`),
+      ...cards.map((card) =>
+        row("card_created", "agent", `Card for ${displayName(card.forAgent)}: ${card.forAgent === plan.group!.coordinator ? "reach out to the others" : `${displayName(plan.group!.coordinator)} is about to reach out`}`, { agent: seatOf(card.forAgent) }),
+      ),
+    ];
+  });
 }
 
 // The whole commit, finished before returning: for the in-process delivery path and tests.
@@ -147,8 +198,8 @@ async function createPlan(store: Store, message: AgentMessage, at: string): Prom
   const plan: Plan = {
     id: newId("plan"),
     contextId: message.contextId,
-    initiator: message.from,
-    participants: [message.from, message.to],
+    initiator: seatOf(message.from) ?? "aaron",
+    participants: [seatOf(message.from) ?? "aaron", seatOf(message.to) ?? "lisa"],
     state: "detected",
     decisions: { aaron: "pending", lisa: "pending" },
     history: [{ state: "detected", at }],
@@ -164,7 +215,7 @@ async function createPlan(store: Store, message: AgentMessage, at: string): Prom
 export async function failThread(
   store: Store,
   contextId: string,
-  agent: AgentId,
+  agent: MemberId,
   detail: string,
   wallNow: number = Date.now(),
   reason: DropReason = "agent_unavailable",
@@ -181,7 +232,7 @@ export async function failThread(
     at,
     kind: "turn_failed",
     actor: "system",
-    agent,
+    agent: seatOf(agent),
     contextId,
     planId: plan?.id,
     text: `${displayName(agent)}'s turn ended without a message (${detail}); the thread is marked failed and the plan dropped with reason ${reason}`,

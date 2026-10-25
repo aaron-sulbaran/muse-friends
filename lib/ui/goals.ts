@@ -9,7 +9,7 @@ import type { PlanState, UiPlan } from "./types";
  */
 
 export type GoalContext = {
-  /** The other person's name as this phone says it: "Mochi", or "Michelle". */
+  /** The other person's name as this phone says it: "Mochi", or "Michelle"; in a plan for three, both others ("Mochi and Pebble"). */
   friend: string;
   /** Possessive for whose reel it was: "Mochi's" or "your". */
   reelOwner: string;
@@ -44,11 +44,11 @@ export function stepDetail(state: PlanState, plan: UiPlan, at: string, context: 
     case "detected":
       return plan.target ? `You asked to follow up with ${context.friend}` : `From ${context.reelOwner} reel`;
     case "negotiating":
-      return `${context.muses[0]} and ${context.muses[1]} are comparing times`;
+      return plan.group ? "The three Muses are comparing times" : `${context.muses[0]} and ${context.muses[1]} are comparing times`;
     case "awaiting_humans":
-      return `Waiting for you and ${context.friend}`;
+      return plan.group ? "Waiting for all three of you" : `Waiting for you and ${context.friend}`;
     case "confirmed":
-      return "You both said yes";
+      return plan.group ? "All three of you said yes" : "You both said yes";
     case "scheduled":
       return plan.window ? formatWindow(plan.window) : "Hold added";
     case "reminded":
@@ -65,7 +65,7 @@ export type GoalStep = { state: PlanState; label: string; detail: string; time: 
 
 /** What the outcome changes about the last step: the goal is Done only on a human "We went!". */
 function outcomeWords(plan: UiPlan): { label: string; detail: string } | null {
-  if (plan.outcome?.result === "went") return { label: "Done", detail: "You two made it" };
+  if (plan.outcome?.result === "went") return { label: "Done", detail: plan.group ? "You all made it" : "You two made it" };
   if (plan.outcome?.result === "didnt") return { label: "Didn't happen", detail: "It didn't happen this time" };
   if (plan.state === "followed_up") return { label: "Did you make it?", detail: "Asked whether you went" };
   return null;

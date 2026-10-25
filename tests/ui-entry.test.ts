@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { friendLink, phoneRootHref, runInProgress, wantsSimulatedFriend } from "@/lib/ui/entry";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { friendLink, markMichelleSeen, needsMichelleOnLoad, phoneRootHref, runInProgress, wantsSimulatedFriend, wasMichelleSeen } from "@/lib/ui/entry";
 import type { PlanState, UiPlan } from "@/lib/ui/types";
 
 describe("how a phone gets in", () => {
@@ -35,5 +35,44 @@ describe("when a judge arriving may reset the room", () => {
     expect(runInProgress(null)).toBe(false);
     expect(runInProgress(planIn("dropped"))).toBe(false);
     expect(runInProgress(planIn("followed_up"))).toBe(false);
+  });
+});
+
+describe("a fresh phone room with no friend", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const stubStorage = () => {
+    const items = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", { getItem: (key: string) => items.get(key) ?? null, setItem: (key: string, value: string) => void items.set(key, value) });
+  };
+
+  it("turns Michelle on at first load when there is no plan and she is off", () => {
+    expect(needsMichelleOnLoad({ plan: null, simulatedFriend: false }, false)).toBe(true);
+  });
+
+  it("leaves her alone when she is already on, a run is going, or this tab has seen her on", () => {
+    expect(needsMichelleOnLoad({ plan: null, simulatedFriend: true }, false)).toBe(false);
+    expect(needsMichelleOnLoad({ plan: { id: "p" } as UiPlan, simulatedFriend: false }, false)).toBe(false);
+    expect(needsMichelleOnLoad({ plan: null, simulatedFriend: false }, true)).toBe(false);
+  });
+
+  it("remembers per room that this tab has seen her, so an Invite that turned her off is not undone by a reload", () => {
+    stubStorage();
+    expect(wasMichelleSeen("r1")).toBe(false);
+    markMichelleSeen("r1");
+    expect(wasMichelleSeen("r1")).toBe(true);
+    expect(wasMichelleSeen("r2")).toBe(false);
+  });
+
+  it("works with storage blocked: she is simply offered once more", () => {
+    vi.stubGlobal("sessionStorage", {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+    });
+    expect(wasMichelleSeen("r1")).toBe(false);
+    expect(() => markMichelleSeen("r1")).not.toThrow();
   });
 });

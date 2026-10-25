@@ -1,8 +1,9 @@
-import type { ActivityEvent, AgentId, Plan, Recommendation, StateSnapshot } from "@/lib/protocol";
+import { membersOfPlan, type ActivityEvent, type Decision, type MemberId, type Plan, type Recommendation, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import { transitionPlan } from "@/lib/plans";
 import type { Store } from "@/lib/store";
-import { newId, otherAgent } from "./ids";
+import { namesOf } from "./group";
+import { newId, seatOf } from "./ids";
 import { PLAN_LOCK, withLock } from "./lock";
 import { describeWindow, toCentralIso, toMs } from "./windows";
 
@@ -57,49 +58,66 @@ export async function scheduleHold(store: Store, given: Plan, at: string): Promi
 // they write), and the plan's `decisions` are rebuilt from the cards, so two taps at once, even on two
 // server instances, cannot erase each other: whoever runs last sees both cards and finishes the job.
 // A no drops the plan; two yeses confirm it. Loops until a re-read shows nothing left to change.
+// What each member of a plan has answered. A pair keeps its answers in Plan.decisions; a group keeps all three in
+// Plan.group.decisions and mirrors the two phone seats into Plan.decisions, so everything that reads that works.
+function decisionsOf(plan: Plan): Partial<Record<MemberId, Decision>> {
+  return plan.group ? { ...plan.decisions, ...plan.group.decisions } : { ...plan.decisions };
+}
+
+function withDecisions(plan: Plan, decisions: Partial<Record<MemberId, Decision>>): Plan {
+  const seats = { aaron: decisions.aaron ?? plan.decisions.aaron, lisa: decisions.lisa ?? plan.decisions.lisa };
+  return plan.group ? { ...plan, decisions: seats, group: { ...plan.group, decisions } } : { ...plan, decisions: seats };
+}
+
 export async function reconcilePlan(store: Store, planId: string, at: string): Promise<Plan | null> {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const plan = await store.getPlan(planId);
     if (!plan) return null;
+    const members = membersOfPlan(plan);
     const cards = await store.listCards({ planId });
-    const decisions = { ...plan.decisions };
+    const decisions = decisionsOf(plan);
     for (const card of cards) if (card.status !== "pending") decisions[card.forAgent] = card.status;
 
-    let next: Plan = { ...plan, decisions };
-    const declinedBy = plan.participants.find((agent) => decisions[agent] === "declined");
+    let next: Plan = withDecisions(plan, decisions);
+    const declinedBy = members.find((member) => decisions[member] === "declined");
+    const everyone = members.length === 2 ? "Both people said yes" : `All ${members.length} people said yes`;
     if (plan.state === "awaiting_humans" && declinedBy) {
       next = transitionPlan(next, "dropped", at, { note: `${displayName(declinedBy)} declined`, dropReason: "declined" });
-    } else if (plan.state === "awaiting_humans" && plan.participants.every((agent) => decisions[agent] === "accepted")) {
-      next = transitionPlan(next, "confirmed", at, { note: "Both people said yes" });
+    } else if (plan.state === "awaiting_humans" && members.every((member) => decisions[member] === "accepted")) {
+      next = transitionPlan(next, "confirmed", at, { note: everyone });
     }
 
-    const unchanged = next.state === plan.state && JSON.stringify(next.decisions) === JSON.stringify(plan.decisions);
+    const unchanged = next.state === plan.state && JSON.stringify(next.decisions) === JSON.stringify(plan.decisions) && JSON.stringify(next.group) === JSON.stringify(plan.group);
     if (unchanged) return plan;
     await store.putPlan(next);
     if (next.state === "dropped" && plan.state !== "dropped") {
-      await setThreadState(store, plan.contextId, "rejected", at);
+      await Promise.all((plan.group ? Object.values(plan.group.contexts) : [plan.contextId]).map((contextId) => setThreadState(store, contextId!, "rejected", at)));
       await store.appendEvent(row(plan, at, "plan_state", "system", "Plan dropped: a person declined"));
     } else if (next.state === "confirmed" && plan.state !== "confirmed") {
-      await store.appendEvent(row(plan, at, "plan_state", "system", "Plan confirmed by both people"));
+      await store.appendEvent(row(plan, at, "plan_state", "system", members.length === 2 ? "Plan confirmed by both people" : `Plan confirmed by all ${members.length} people`));
     }
   }
   return store.getPlan(planId);
 }
 
-// A person taps yes or no on their card. Either person may go first. The hold follows when the draft
+// A person taps yes or no on their card. Anyone in the plan may go first. The hold follows when the draft
 // is opened (recordHandoff) or the clock moves on.
 export function decide(
   store: Store,
-  input: { planId: string; agent: AgentId; choice: "accept" | "decline" },
+  input: { planId: string; agent: MemberId; choice: "accept" | "decline" },
   options: Options = {},
 ): Promise<LifecycleResult<{ plan: Plan; cards: Recommendation[] }>> {
   return withLock(PLAN_LOCK, async () => {
     const plan = await store.getPlan(input.planId);
     if (!plan) return { ok: false, status: 404, error: "no such plan" } as const;
     if (plan.state !== "awaiting_humans") return { ok: false, status: 409, error: `the plan is ${plan.state}, not waiting for a decision` } as const;
-    if (!plan.participants.includes(input.agent)) return { ok: false, status: 422, error: "that person is not part of this plan" } as const;
+    if (!membersOfPlan(plan).includes(input.agent)) return { ok: false, status: 422, error: "that person is not part of this plan" } as const;
+    // A trip is joined with a deposit: a yes without one would skip the pot, so only the trip engine may record it.
+    if (plan.kind === "trip" && input.choice === "accept" && plan.trip?.pot?.deposits[input.agent]?.status !== "confirmed") {
+      return { ok: false, status: 409, error: "a trip needs this person's pot deposit first" } as const;
+    }
     const ownCard = (await store.listCards({ planId: plan.id, forAgent: input.agent }))[0];
-    if (plan.decisions[input.agent] !== "pending" || (ownCard && ownCard.status !== "pending")) {
+    if (decisionsOf(plan)[input.agent] !== "pending" || (ownCard && ownCard.status !== "pending")) {
       return { ok: false, status: 409, error: "this person already decided" } as const;
     }
 
@@ -109,9 +127,9 @@ export function decide(
 
     // The person's own row first: it is the durable record, and no one else writes it.
     if (ownCard) await store.putCard({ ...ownCard, status });
-    await store.putPlan({ ...plan, decisions: { ...plan.decisions, [input.agent]: status }, updatedAt: at });
+    await store.putPlan({ ...withDecisions(plan, { ...decisionsOf(plan), [input.agent]: status }), updatedAt: at });
     await store.appendEvent(
-      row(plan, at, "human_decision", "human", accepted ? `${displayName(input.agent)} said yes to ${plan.activity?.title ?? "the plan"}` : `${displayName(input.agent)} passed on this one`, { agent: input.agent }),
+      row(plan, at, "human_decision", "human", accepted ? `${displayName(input.agent)} said yes to ${plan.activity?.title ?? "the plan"}` : `${displayName(input.agent)} passed on this one`, { agent: seatOf(input.agent) }),
     );
 
     const settled = (await reconcilePlan(store, plan.id, at)) ?? plan;
@@ -123,7 +141,7 @@ export function decide(
 // Once the plan is confirmed, this is also the moment the agents issue the calendar hold.
 export function recordHandoff(
   store: Store,
-  input: { planId: string; agent: AgentId; via: "whatsapp" | "copy" },
+  input: { planId: string; agent: MemberId; via: "whatsapp" | "copy" },
   options: Options = {},
 ): Promise<LifecycleResult<{ draft: string; plan: Plan }>> {
   return withLock(PLAN_LOCK, () => recordHandoffLocked(store, input, options));
@@ -131,7 +149,7 @@ export function recordHandoff(
 
 async function recordHandoffLocked(
   store: Store,
-  input: { planId: string; agent: AgentId; via: "whatsapp" | "copy" },
+  input: { planId: string; agent: MemberId; via: "whatsapp" | "copy" },
   options: Options,
 ): Promise<LifecycleResult<{ draft: string; plan: Plan }>> {
   const plan = await store.getPlan(input.planId);
@@ -142,7 +160,7 @@ async function recordHandoffLocked(
     input.via === "whatsapp"
       ? `${displayName(input.agent)} opened WhatsApp with the drafted message`
       : `${displayName(input.agent)} copied the drafted message`;
-  await store.appendEvent(row(plan, at, "handoff_opened", "human", text, { agent: input.agent }));
+  await store.appendEvent(row(plan, at, "handoff_opened", "human", text, { agent: seatOf(input.agent) }));
   const current = plan.state === "confirmed" ? await scheduleHold(store, plan, at) : plan;
   return { ok: true, value: { draft: plan.draft, plan: current } };
 }
@@ -224,14 +242,15 @@ async function runStep(store: Store, plan: Plan, step: RealStep): Promise<Lifecy
 
   const title = plan.activity?.title ?? "the plan";
   const when = describeWindow(plan.window);
-  const [first, second] = plan.participants;
+  const members = membersOfPlan(plan);
+  const withOthers = (member: MemberId) => namesOf(members.filter((other) => other !== member));
 
   if (step === "reminder") {
     await store.appendEvent(row(plan, at, "clock_advanced", "system", "Demo clock moved to two hours before the plan"));
-    for (const agent of [first, second]) {
-      await store.appendEvent(row(plan, at, "plan_state", "agent", `${displayName(agent)} reminded their person: ${title} with ${displayName(otherAgent(agent))}, ${when}`, { agent }));
+    for (const member of members) {
+      await store.appendEvent(row(plan, at, "plan_state", "agent", `${displayName(member)} reminded their person: ${title} with ${withOthers(member)}, ${when}`, { agent: seatOf(member) }));
     }
-    const next = transitionPlan(plan, "reminded", at, { note: "Reminder sent to both" });
+    const next = transitionPlan(plan, "reminded", at, { note: members.length === 2 ? "Reminder sent to both" : `Reminder sent to all ${members.length}` });
     await store.putPlan(next);
     return { ok: true, value: { clock, plan: next } };
   }
@@ -245,8 +264,8 @@ async function runStep(store: Store, plan: Plan, step: RealStep): Promise<Lifecy
   }
 
   await store.appendEvent(row(plan, at, "clock_advanced", "system", "Demo clock moved to the next morning"));
-  for (const agent of [first, second]) {
-    await store.appendEvent(row(plan, at, "plan_state", "agent", `${displayName(agent)} asked their person whether they made it to ${title} with ${displayName(otherAgent(agent))}`, { agent }));
+  for (const member of members) {
+    await store.appendEvent(row(plan, at, "plan_state", "agent", `${displayName(member)} asked their person whether they made it to ${title} with ${withOthers(member)}`, { agent: seatOf(member) }));
   }
   const next = transitionPlan(plan, "followed_up", at, { note: "Asked about next month" });
   await store.putPlan(next);

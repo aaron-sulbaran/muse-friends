@@ -16,21 +16,21 @@ const bubbles = (snapshot: UiSnapshot, role: "a" | "b") =>
 describe("who the other person is called", () => {
   it("is your friend when nobody has said, on either side, and never a Muse's name", () => {
     const names = namesFor(at("scheduled"));
-    expect(names.human).toEqual({ aaron: unnamedFriend, lisa: unnamedFriend });
-    expect(names.muse).toEqual({ aaron: "Sprout", lisa: "Mochi" });
+    expect(names.human).toEqual({ aaron: unnamedFriend, lisa: unnamedFriend, kai: "Kai" });
+    expect(names.muse).toEqual({ aaron: "Sprout", lisa: "Mochi", kai: "Pebble" });
     for (const human of Object.values(names.human)) expect(MUSE_NAMES).not.toContain(human);
   });
 
   it("is Michelle on the simulated friend's side, and still your friend on the judge's", () => {
     const names = namesFor(at("scheduled", { simulatedFriend: true }));
-    expect(names.human).toEqual({ aaron: unnamedFriend, lisa: "Michelle" });
+    expect(names.human).toEqual({ aaron: unnamedFriend, lisa: "Michelle", kai: "Kai" });
     expect(names.muse.lisa).toBe("Michelle's Muse");
   });
 
   it("passes a real name through unchanged, from onboarding or a second phone", () => {
     const names = namesFor(at("scheduled", { humans: { aaron: "Jordan", lisa: "Riley" } }));
-    expect(names.human).toEqual({ aaron: "Jordan", lisa: "Riley" });
-    expect(namesFor(at("scheduled", { simulatedFriend: true, humans: { aaron: "Jordan" } })).human).toEqual({ aaron: "Jordan", lisa: "Michelle" });
+    expect(names.human).toEqual({ aaron: "Jordan", lisa: "Riley", kai: "Kai" });
+    expect(namesFor(at("scheduled", { simulatedFriend: true, humans: { aaron: "Jordan" } })).human).toEqual({ aaron: "Jordan", lisa: "Michelle", kai: "Kai" });
   });
 
   it("treats a blank name as no name", () => {

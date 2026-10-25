@@ -1,6 +1,6 @@
 import { enforceSharePolicy } from "@/lib/policy";
 import { isSubsetOfBlocks } from "@/lib/agent/windows";
-import { categoriesInMessage, isCategoryAllowed, MAX_WINDOW_HOURS, type AgentId, type MessageRecord, type SharePolicy, type Window } from "@/lib/protocol";
+import { categoriesInMessage, isCategoryAllowed, MAX_WINDOW_HOURS, type MemberId, type MessageRecord, type SharePolicy, type Window } from "@/lib/protocol";
 import { PRIVATE_STRINGS } from "@/lib/seed/fixtures";
 import { getPersona } from "@/lib/seed/personas";
 
@@ -9,7 +9,7 @@ import { getPersona } from "@/lib/seed/personas";
 
 const HOUR_MS = 3_600_000;
 
-export function policyBetween(policies: SharePolicy[], owner: AgentId, friend: AgentId): SharePolicy | null {
+export function policyBetween(policies: SharePolicy[], owner: MemberId, friend: MemberId): SharePolicy | null {
   return policies.find((policy) => policy.owner === owner && policy.friend === friend) ?? null;
 }
 
@@ -29,12 +29,12 @@ export function policyViolations(records: MessageRecord[], policies: SharePolicy
 }
 
 // Every window a message carries sits inside the sender's free blocks and is at most MAX_WINDOW_HOURS long.
-export function windowViolations(records: MessageRecord[], freeBy: Record<AgentId, Window[]>): string[] {
+export function windowViolations(records: MessageRecord[], freeBy: Partial<Record<MemberId, Window[]>>): string[] {
   const out: string[] = [];
   for (const { message } of records) {
     for (const window of message.windows ?? []) {
       const label = `#${message.seq} ${message.from} window ${window.start}`;
-      if (!isSubsetOfBlocks(window, freeBy[message.from])) out.push(`${label} is outside ${message.from}'s free blocks`);
+      if (!isSubsetOfBlocks(window, freeBy[message.from] ?? [])) out.push(`${label} is outside ${message.from}'s free blocks`);
       if (Date.parse(window.end) - Date.parse(window.start) > MAX_WINDOW_HOURS * HOUR_MS) out.push(`${label} is longer than ${MAX_WINDOW_HOURS} hours`);
     }
   }

@@ -339,7 +339,9 @@ describe("the table screen reads a judge's room", () => {
 
     expect(await (await json("")).json()).toEqual({ marker: "demo room" });
     expect(await (await json("?room=demo")).json()).toEqual({ marker: "demo room" });
-    expect(await (await json("?room=abc123")).json()).toEqual({ marker: "demo room" });
+    // A phone's room id is no longer the demo room: it answers with that room's own (here empty) stage.
+    expect(await (await json("?room=abc123")).json()).not.toHaveProperty("marker");
+    expect(await (await json("?room=Not-Valid")).json()).toEqual({ marker: "demo room" });
 
     const judge = await json(`?room=${code}`);
     expect(judge.status).toBe(200);
