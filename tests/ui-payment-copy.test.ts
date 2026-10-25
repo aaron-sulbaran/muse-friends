@@ -111,7 +111,7 @@ describe("the payment and handoff strings", () => {
     expect(mine.length).toBeGreaterThan(20);
     const values = mine.flatMap(([, value]) => (typeof value === "function" ? [(value as (...args: string[]) => string)("A", "B", "C")] : [value]));
     for (const value of values) {
-      expect(value).not.toMatch(/—|–/);
+      expect(value).not.toMatch(/\u2014|\u2013/);
       expect(value).not.toMatch(/\p{Extended_Pictographic}/u);
     }
   });
