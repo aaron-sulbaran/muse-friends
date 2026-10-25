@@ -4,7 +4,7 @@ import { CircleDashed } from "lucide-react";
 import { useState } from "react";
 import type { ChatItem } from "@/lib/ui/chat";
 import { postTripJoin } from "@/lib/ui/actions";
-import { answerWord, money, personOf, servedBy, tripDates, type GroupLine } from "@/lib/ui/group";
+import { answerWord, money, personOf, servedBy, TRIP_BOOKING_ROWS, tripDates, type GroupLine } from "@/lib/ui/group";
 import type { AvatarMood, MemberId, UiTrip } from "@/lib/ui/types";
 import { capital } from "@/lib/ui/tokens";
 import { CheckMark } from "./CheckMark";
@@ -126,6 +126,71 @@ function OpenCard({ trip }: { trip: UiTrip }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * Sprout books the trip after the pot, one row at a time: each row says what it is finding, then turns into what it
+ * found, with Muse's check. Everything on it comes from the itinerary the three put money in for, and it says plainly that
+ * the booking is simulated.
+ */
+function BookingCard({ trip, done }: { trip: UiTrip; done: number }) {
+  const plan = trip.itinerary!;
+  const flight = plan.lines.find((line) => line.kind === "flight");
+  const stay = plan.lines.find((line) => line.kind === "stay");
+  const days = plan.lines.filter((line) => line.kind === "excursion");
+  const dates = tripDates(trip);
+  const rows: Record<(typeof TRIP_BOOKING_ROWS)[number], { label: string; finding: string; found: string; detail: string }> = {
+    flight: { label: "Flight", finding: `Finding flights for ${dates}`, found: flight?.label ?? "Flight", detail: flight ? `${money(flight.cost)} each, held` : "Held" },
+    stay: { label: "Hotel", finding: "Finding a hotel that works for all three", found: stay?.label ?? "Hotel", detail: stay ? `${money(stay.cost)} each, held` : "Held" },
+    dates: { label: "Dates", finding: "Holding the dates on everyone's calendar", found: dates, detail: "On all three calendars" },
+    days: {
+      label: "Days",
+      finding: "Planning the days",
+      found: days.map((line) => line.label).join("; ") || "Free days",
+      detail: days.length > 0 ? `${money(days.reduce((sum, line) => sum + line.cost, 0))} each, reserved` : "Nothing reserved",
+    },
+  };
+  const complete = done >= TRIP_BOOKING_ROWS.length;
+  return (
+    <section className={cardShell} aria-live="polite">
+      <div className="flex items-center justify-between gap-2">
+        <CardLabel>{complete ? "Trip booked" : "Booking the trip"}</CardLabel>
+        <span className="rounded-full bg-group px-1.5 py-px text-[11px] font-semibold leading-[14px] text-muted">Simulated booking</span>
+      </div>
+      <h3 className="mt-0.5 text-[21px] font-bold leading-[26px]">{trip.title}</h3>
+      <ul className="mt-3 divide-y divide-bezel-line">
+        {TRIP_BOOKING_ROWS.slice(0, Math.min(done + 1, TRIP_BOOKING_ROWS.length)).map((key, index) => {
+          const row = rows[key];
+          const found = index < done;
+          return (
+            <li key={key} className="flex animate-row-in items-start gap-2.5 py-2.5">
+              {found ? (
+                <CheckMark className="mt-0.5 size-4" />
+              ) : (
+                <CircleDashed className="mt-0.5 size-4 shrink-0 animate-spin text-accent [animation-duration:2s]" strokeWidth={1.75} aria-hidden="true" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-semibold leading-[18px] text-muted">{row.label}</p>
+                {found ? (
+                  <>
+                    <p className="text-[15px] font-semibold leading-5">{row.found}</p>
+                    <p className="text-[13px] leading-[18px] text-muted">{row.detail}</p>
+                  </>
+                ) : (
+                  <p className="text-[15px] leading-5 text-muted">{row.finding}...</p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {complete ? (
+        <p className="mt-1 text-[12px] leading-4 text-muted">
+          {money(plan.total)} per person in all, {trip.pot ? `${money(trip.pot.target)} held in the pot. ` : ""}Prices are {trip.seededLabel.toLowerCase()}; no real tickets or rooms were bought.
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -303,7 +368,7 @@ export function GroupAvatars({ trip, mood, viewer }: { trip: UiTrip; mood: Avata
   );
 }
 
-type GroupItemKind = Extract<ChatItem, { kind: "group-line" | "trip-question" | "trip-budget" | "trip-itinerary" | "trip-open" | "trip-pot" }>;
+type GroupItemKind = Extract<ChatItem, { kind: "group-line" | "trip-question" | "trip-budget" | "trip-itinerary" | "trip-open" | "trip-pot" | "trip-booking" }>;
 
 export function isGroupItem(item: ChatItem): item is GroupItemKind {
   return item.kind === "group-line" || item.kind.startsWith("trip-");
@@ -324,5 +389,7 @@ export function GroupItem({ item, readOnly, onChanged }: { item: GroupItemKind; 
       return <OpenCard trip={item.trip} />;
     case "trip-pot":
       return <PotCard item={item} readOnly={readOnly} onChanged={onChanged} />;
+    case "trip-booking":
+      return <BookingCard trip={item.trip} done={item.done} />;
   }
 }

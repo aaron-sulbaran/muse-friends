@@ -30,6 +30,8 @@ export type ChatItem =
   | { kind: "trip-itinerary"; id: string; trip: UiTrip }
   | { kind: "trip-open"; id: string; trip: UiTrip }
   | { kind: "trip-pot"; id: string; planId: string; trip: UiTrip; answerable: MemberId[]; viewer: MemberId; state: PlanState }
+  // After the pot: Sprout books the trip row by row; `done` rows are filled, the next one is being found.
+  | { kind: "trip-booking"; id: string; trip: UiTrip; done: number }
   | { kind: "payment-card"; id: string; payment: UiPayment; side: "payer" | "payee"; friendName: string; friendMuse: string }
   | { kind: "settle-card"; id: string; planId: string; offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>; friendName: string; friendMuse: string; museName: string }
   | { kind: "outcome-replies"; id: string; planId: string }
@@ -104,7 +106,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
     : null;
   // A trip is one group thread, people and Muses together, with its own cards (lib/ui/group.ts).
   if (plan?.kind === "trip" && plan.trip) {
-    const thread = tripThread(snapshot, role);
+    const thread = tripThread(snapshot, role, options.tripBooking ?? 0);
     return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status: thread.status, mood: thread.mood, group: groupView, items: thread.items };
   }
   // Who the plan is "with", as this phone says it: the friend in a pair, the other two in a plan for three.

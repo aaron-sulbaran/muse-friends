@@ -42,6 +42,8 @@ export const FRIEND_REPLY_DELAY_MS = 6000;
 export type ThreadOptions = {
   /** False while the friend's answer to the handoff is still being "typed": the line is left out until the phone's own timer says so. */
   friendReplied?: boolean;
+  /** How many of the trip's booking steps this phone shows yet (lib/ui/use-trip-booking.ts); 0 or left out shows none. */
+  tripBooking?: number;
 };
 
 /** When the person handed the message off (the plan was scheduled): the moment the friend's answer is a reply to. */

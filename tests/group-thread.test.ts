@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { confirmJoin, driveTrip, recordAnswer, startTrip, type TripPlayers } from "@/lib/agent/trip";
 import { JsonStore } from "@/lib/store/json";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
-import { answerText, cardsOnPhone, tripDates, tripOwners, tripThread, tripWithNames } from "@/lib/ui/group";
+import { answerText, cardsOnPhone, TRIP_BOOKING_STEPS, tripDates, tripOwners, tripThread, tripWithNames } from "@/lib/ui/group";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 import type { Role, UiSnapshot } from "@/lib/ui/types";
 import { installFakeModel, removeFakeModel } from "./helpers/fakeModel";
@@ -104,6 +104,39 @@ describe("the thread after the proposal", () => {
     const view = viewForRole(await ui(), "a");
     expect(texts(view.items)).toContain("All three of you are in. $1,260 is in the pot. Nothing is booked.");
     expect(view.status).toEqual({ glyph: "done", text: "all three are in" });
+  });
+
+  it("after all three are in, Sprout books the trip row by row with no tap, and says the booking is simulated", async () => {
+    await runToTheJudge();
+    await confirmJoin(store, { planId, member: "aaron" }, { wallNow });
+    const snapshot = await ui();
+    // No steps yet: the thread ends where it did, on everyone being in.
+    expect(viewForRole(snapshot, "a").items.some((item) => item.kind === "trip-booking")).toBe(false);
+
+    const at = (steps: number) => viewForRole(snapshot, "a", { tripBooking: steps });
+    expect(at(1).items.at(-1)).toMatchObject({ kind: "trip-booking", done: 0 });
+    expect(at(1).status).toEqual({ glyph: "thinking", text: "Sprout is booking the trip" });
+    expect(texts(at(1).items).at(-1)).toBe("Everyone's in, so I'm lining it up now: the flight, then the hotel, then the dates and the days.");
+    expect(at(3).items.find((item) => item.kind === "trip-booking")).toMatchObject({ done: 2 });
+    expect(at(TRIP_BOOKING_STEPS - 1).items.find((item) => item.kind === "trip-booking")).toMatchObject({ done: 4 });
+
+    const done = at(TRIP_BOOKING_STEPS);
+    // Kai's Muse says the step-free stay works for Kai, then Sprout says what was booked and that it is simulated.
+    expect(texts(done.items).slice(-2)).toEqual([
+      "Step-free rooms and a seated route all week. That works for Kai.",
+      `Booked for ${tripDates(snapshot.plan!.trip!)}, on all three calendars. This is a simulated booking with seeded prices; nothing real was bought.`,
+    ]);
+    expect(done.items.at(-1)).toMatchObject({ kind: "collapsed", text: "Done. Nothing else to do until July." });
+    expect(done.status).toEqual({ glyph: "done", text: "trip booked" });
+    // Michelle's phone books the same trip, from her side.
+    expect(viewForRole(snapshot, "b", { tripBooking: TRIP_BOOKING_STEPS }).items.find((item) => item.kind === "trip-booking")).toMatchObject({ done: 4 });
+    // More steps than there are change nothing.
+    expect(viewForRole(snapshot, "a", { tripBooking: 99 }).items).toEqual(done.items);
+  });
+
+  it("does not book before everyone is in", async () => {
+    await runToTheJudge();
+    expect(viewForRole(await ui(), "a", { tripBooking: TRIP_BOOKING_STEPS }).items.some((item) => item.kind === "trip-booking")).toBe(false);
   });
 
   it("is told from Michelle's side on her phone: her Muse is hers, Sprout belongs to the organizer, and no card asks her", async () => {
