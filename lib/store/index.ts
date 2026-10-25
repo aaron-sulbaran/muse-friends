@@ -1,6 +1,7 @@
 import type {
   ActivityEvent,
   AgentId,
+  MemberId,
   BusyBlock,
   DemoClock,
   MessageRecord,
@@ -26,7 +27,7 @@ export interface Store {
   // Threads, keyed by contextId.
   getThread(contextId: string): Promise<Thread | null>;
   putThread(thread: Thread): Promise<void>;
-  listThreads(filter?: { agent?: AgentId }): Promise<Thread[]>;
+  listThreads(filter?: { agent?: MemberId }): Promise<Thread[]>;
 
   // Messages, ordered by contextId then seq. Appending the same (contextId, seq) twice is a no-op,
   // which keeps inbox retries idempotent.
@@ -44,10 +45,10 @@ export interface Store {
 
   // Recommendation cards, keyed by id; one per human per plan.
   putCard(card: Recommendation): Promise<void>;
-  listCards(filter?: { planId?: string; forAgent?: AgentId }): Promise<Recommendation[]>;
+  listCards(filter?: { planId?: string; forAgent?: MemberId }): Promise<Recommendation[]>;
 
   // Share policies, keyed by (owner, friend). A missing policy means tier "off".
-  getPolicy(owner: AgentId, friend: AgentId): Promise<SharePolicy | null>;
+  getPolicy(owner: MemberId, friend: MemberId): Promise<SharePolicy | null>;
   putPolicy(policy: SharePolicy): Promise<void>;
   listPolicies(): Promise<SharePolicy[]>;
 
@@ -74,7 +75,7 @@ export interface Store {
 
   // Busy blocks added from the controls, merged into the persona's calendar by get_my_calendar.
   addBusy(block: BusyBlock): Promise<void>;
-  listBusy(agent?: AgentId): Promise<BusyBlock[]>;
+  listBusy(agent?: MemberId): Promise<BusyBlock[]>;
 
   // The demo clock the plan lifecycle runs on.
   getClock(): Promise<DemoClock>;

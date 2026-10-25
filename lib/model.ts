@@ -124,6 +124,9 @@ export type AgentTurnOptions = {
   // The turn is only done once one of these succeeded (for example send_to_friend_agent). A reply
   // with no tool call before that gets one nudge, then the turn fails. Omit when prose is fine.
   requiredTools?: string[];
+  // How many successful calls to required tools finish the turn (default 1). A coordinator that has to
+  // answer two friends in one turn needs 2.
+  requiredSuccesses?: number;
   // End the turn as soon as a required tool succeeded, skipping the closing prose call. Default true.
   finishOnRequired?: boolean;
   nudge?: string;
@@ -219,6 +222,8 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
   const history: ResponseInput = [...initial];
   let pending: ResponseInput = initial;
   let previousResponseId: string | undefined;
+  const needed = options.requiredSuccesses ?? 1;
+  let successes = 0;
   let requiredSatisfied = required.size === 0;
   let nudged = false;
   let finalText = "";
@@ -323,7 +328,10 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
         ok,
         error: ok ? undefined : JSON.stringify(output).slice(0, 200),
       });
-      if (ok && required.has(call.name)) requiredSatisfied = true;
+      if (ok && required.has(call.name)) {
+        successes += 1;
+        if (successes >= needed) requiredSatisfied = true;
+      }
       outputs.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(output) });
     }
 

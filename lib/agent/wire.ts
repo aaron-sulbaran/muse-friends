@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { AGENT_IDS, ModelProof, PolicyStamp, Redaction, type AgentId, type TaskState } from "@/lib/protocol";
+import { MEMBER_IDS, ModelProof, PolicyStamp, Redaction, type MemberId, type TaskState } from "@/lib/protocol";
 import { validateIncoming } from "@/lib/policy";
 import { getPersona, displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
@@ -8,14 +8,14 @@ import type { AgentRuntimeContext } from "./context";
 import { ownFreeBlocks } from "./calendar";
 import { commitMessageCore } from "./inbound";
 import { withLock } from "./lock";
-import { newId } from "./ids";
+import { newId, seatOf } from "./ids";
 import { toCentralIso } from "./windows";
 
 // The wire between the two agents: a bearer-authenticated HTTP inbox per agent. The bearer token
 // names the sender. Tokens come from AGENT_TOKEN_AARON / AGENT_TOKEN_LISA when set, otherwise they
 // are derived from MODEL_API_KEY, so a public deployment needs no extra secret to stay closed.
 
-export function agentToken(agent: AgentId): string {
+export function agentToken(agent: MemberId): string {
   const configured = process.env[`AGENT_TOKEN_${agent.toUpperCase()}`];
   if (configured) return configured;
   return createHmac("sha256", process.env.MODEL_API_KEY ?? "muse-friends-local-dev").update(`agent:${agent}`).digest("hex");
@@ -28,10 +28,10 @@ function sameToken(a: string, b: string): boolean {
 }
 
 // The agent a bearer header belongs to, or null.
-export function authenticateSender(header: string | null): AgentId | null {
+export function authenticateSender(header: string | null): MemberId | null {
   const match = /^Bearer\s+(.+)$/i.exec(header ?? "");
   if (!match) return null;
-  return AGENT_IDS.find((agent) => sameToken(match[1], agentToken(agent))) ?? null;
+  return MEMBER_IDS.find((agent) => sameToken(match[1], agentToken(agent))) ?? null;
 }
 
 // What travels in the POST body: the wire message plus the sender's policy stamp and redaction,
@@ -56,7 +56,7 @@ export type ReceiveResult =
 
 export async function receiveMessage(
   store: Store,
-  input: { recipient: AgentId; sender: AgentId; envelope: unknown; wallNow?: () => number },
+  input: { recipient: MemberId; sender: MemberId; envelope: unknown; wallNow?: () => number },
 ): Promise<ReceiveResult> {
   const envelope = Envelope.safeParse(input.envelope);
   if (!envelope.success) return { ok: false, status: 400, error: `Invalid envelope. ${z.prettifyError(envelope.error)}` };
@@ -99,7 +99,7 @@ export async function receiveMessage(
         at: toCentralIso(now),
         kind: "message_rejected",
         actor: "system",
-        agent: input.recipient,
+        agent: seatOf(input.recipient),
         contextId: contextId || undefined,
         planId: plan?.id,
         text: `${displayName(input.recipient)}'s inbox rejected a message from ${displayName(input.sender)} (${check.status}): ${check.error}`.slice(0, 240),
@@ -123,7 +123,7 @@ export async function receiveMessage(
 }
 
 // Sends an outgoing message to the friend's inbox over HTTP, as the sender.
-export function httpDeliver(origin: string, sender: AgentId): NonNullable<AgentRuntimeContext["deliver"]> {
+export function httpDeliver(origin: string, sender: MemberId): NonNullable<AgentRuntimeContext["deliver"]> {
   return async ({ record, redaction }) => {
     const url = `${origin}/api/agents/${record.message.to}/inbox`;
     try {
@@ -143,7 +143,7 @@ export function httpDeliver(origin: string, sender: AgentId): NonNullable<AgentR
 }
 
 // Same wire without the network, for tests and for running agents in one process.
-export function localDeliver(store: Store, sender: AgentId, onAccepted?: (result: Extract<ReceiveResult, { ok: true }>) => void): NonNullable<AgentRuntimeContext["deliver"]> {
+export function localDeliver(store: Store, sender: MemberId, onAccepted?: (result: Extract<ReceiveResult, { ok: true }>) => void): NonNullable<AgentRuntimeContext["deliver"]> {
   return async ({ record, redaction }) => {
     const result = await receiveMessage(store, { recipient: record.message.to, sender, envelope: { message: record.message, stamp: record.stamp, redaction, proof: record.proof } });
     if (!result.ok) return { ok: false, status: result.status, error: result.error };

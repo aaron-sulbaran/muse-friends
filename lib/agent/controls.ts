@@ -3,6 +3,7 @@ import {
   CATEGORIES,
   SharePolicy,
   type AgentId,
+  type MemberId,
   type BusyBlock,
   type RecordedRun,
   type Redaction,
@@ -28,7 +29,7 @@ const nowIso = (options: Options) => toCentralIso(options.wallNow?.() ?? Date.no
 // affects messages sent from then on.
 export function setSharePolicy(
   store: Store,
-  input: { owner: AgentId; friend: AgentId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
+  input: { owner: MemberId; friend: MemberId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
   options: Options = {},
 ): Promise<LifecycleResult<{ policy: SharePolicy; replayed: Redaction[] }>> {
   return withLock(PLAN_LOCK, () => setSharePolicyLocked(store, input, options));
@@ -36,7 +37,7 @@ export function setSharePolicy(
 
 async function setSharePolicyLocked(
   store: Store,
-  input: { owner: AgentId; friend: AgentId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
+  input: { owner: MemberId; friend: MemberId; tier?: ShareTier; categories?: Partial<Record<(typeof CATEGORIES)[number], boolean>> },
   options: Options,
 ): Promise<LifecycleResult<{ policy: SharePolicy; replayed: Redaction[] }>> {
   if (input.owner === input.friend) return { ok: false, status: 422, error: "a person cannot share with themselves" };

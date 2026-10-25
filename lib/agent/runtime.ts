@@ -1,5 +1,5 @@
 import { runAgentTurn, type TurnResult } from "@/lib/model";
-import { type ActivityEvent, type AgentId, type Plan, type Signal } from "@/lib/protocol";
+import { type ActivityEvent, type AgentId, type MemberId, type Plan, type Signal } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
@@ -85,7 +85,7 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
 
 // The receiving agent's turn after a message lands in its inbox: read the thread, see which of the
 // friend's windows are also free (computed here), and answer through send_to_friend_agent.
-export async function runInboxTurn(options: RuntimeOptions & { agent: AgentId; contextId: string }): Promise<TurnResult> {
+export async function runInboxTurn(options: RuntimeOptions & { agent: MemberId; contextId: string }): Promise<TurnResult> {
   const { store, agent, contextId } = options;
   // A thread that ended (agreed, declined, or hit the cap) gets no further turn and no model call.
   const current = await store.getThread(contextId);

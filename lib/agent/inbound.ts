@@ -15,7 +15,7 @@ import { canTransition, transitionPlan } from "@/lib/plans";
 import type { Store } from "@/lib/store";
 import { toCentralIso, windowHash, describeWindow } from "./windows";
 import { buildCards } from "./cards";
-import { newId } from "./ids";
+import { newId, seatOf } from "./ids";
 import { passedOver } from "./thread";
 
 // Committing a message is the receiving side of the wire: it persists the message, advances the
@@ -69,7 +69,7 @@ export async function commitMessageCore(store: Store, record: MessageRecord, red
 
   const events: ActivityEvent[] = [];
   const event = (kind: ActivityEvent["kind"], actor: ActivityEvent["actor"], text: string, extra: Partial<ActivityEvent> = {}) =>
-    events.push({ id: newId("evt"), at, kind, actor, contextId: message.contextId, planId: plan.id, agent: message.from, text, ...extra });
+    events.push({ id: newId("evt"), at, kind, actor, contextId: message.contextId, planId: plan.id, agent: seatOf(message.from), text, ...extra });
 
   let nextPlan = plan;
   let cards: Recommendation[] = [];
@@ -104,7 +104,7 @@ export async function commitMessageCore(store: Store, record: MessageRecord, red
     nextPlan = { ...nextPlan, draft: buildCards(nextPlan, at).find((card) => card.draft)?.draft };
     cards = buildCards(nextPlan, at);
     for (const card of cards) {
-      event("card_created", "agent", `Card for ${displayName(card.forAgent)}: ${card.forAgent === nextPlan.initiator ? `reach out to ${displayName(card.friend)}` : `${displayName(card.friend)} is about to reach out`}`, { agent: card.forAgent });
+      event("card_created", "agent", `Card for ${displayName(card.forAgent)}: ${card.forAgent === nextPlan.initiator ? `reach out to ${displayName(card.friend)}` : `${displayName(card.friend)} is about to reach out`}`, { agent: seatOf(card.forAgent) });
     }
   } else if (message.state === "rejected" && nextPlan.state === "negotiating") {
     nextPlan = transitionPlan(nextPlan, "dropped", at, { note: "A decline ended the thread", dropReason });
@@ -143,8 +143,8 @@ async function createPlan(store: Store, message: AgentMessage, at: string): Prom
   const plan: Plan = {
     id: newId("plan"),
     contextId: message.contextId,
-    initiator: message.from,
-    participants: [message.from, message.to],
+    initiator: seatOf(message.from) ?? "aaron",
+    participants: [seatOf(message.from) ?? "aaron", seatOf(message.to) ?? "lisa"],
     state: "detected",
     decisions: { aaron: "pending", lisa: "pending" },
     history: [{ state: "detected", at }],

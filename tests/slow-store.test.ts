@@ -45,7 +45,7 @@ function intent(contextId: string) {
   });
 }
 
-async function postToInbox(id: "lisa" | "aaron", body: unknown, sender: "aaron" | "lisa") {
+async function postToInbox(id: "lisa" | "aaron" | "kai", body: unknown, sender: "aaron" | "lisa" | "kai") {
   const { POST } = await import("@/app/api/agents/[id]/inbox/route");
   return POST(new Request(`http://localhost:3001/api/agents/${id}/inbox`, { method: "POST", headers: bearer(sender), body: JSON.stringify(body) }), {
     params: Promise.resolve({ id }),
