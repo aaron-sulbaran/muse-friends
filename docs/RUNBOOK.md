@@ -165,6 +165,27 @@ It takes 15 pictures: for the phone at 390 by 844 (device scale 2) on `/a` and o
 
 **Verified (Sun Oct 25, about 4:50am):** against production on `708076f`, 15 pictures in 40 seconds, no write request attempted, the demo room unchanged before and after (plan confirmed, 3 messages, simulated friend on). Against a local server the same. `tests/shots.test.ts` (18 tests) drives the whole run with a fake browser and network: the fresh room id on every page, a state answer per picture, writes swallowed and none sent, a failed picture reported and carried past, the Chrome fallback, no click anywhere in the code.
 
+## Phone rooms
+
+Every call a phone makes carries `?room=<id>` (`lib/ui/room.ts`). Until this change only `/api/state` read it, so every judge who scanned the QR into `/a?room=<id>`, and every Invite pair, acted on the one demo room. Now `withRoom(request, body, { mint }, handler)` in `app/api/_lib/room.ts` resolves the store for the call's room, from the query or from `room` in the body (the query wins):
+
+| The call names | What it gets |
+|---|---|
+| nothing, empty, or `demo` | The demo room exactly as before: its store, the HTTP inbox between the agents, `after`. The gate, the stage and `demo:http` use this and nothing in their path changed. |
+| an id that is not 4 to 24 lowercase letters and digits | 400 `bad_room` |
+| a keyless judge code (7 characters, while the judge key is set) | 403 `judge_room`: that room belongs to its `/j` link |
+| any other valid id | A room of its own: its own store, saved whole as one document in the `byom_rooms` table under `p_<id>` (an in-memory map locally), alive for 2 hours |
+
+A phone room is **made on its first write that may make one**: a reel (`POST /api/signals`) or a control (`POST /api/controls`, including the simulated friend switch). New rooms are capped at 60 an hour across everyone (`PHONE_ROOMS_PER_HOUR`; counted by the `p_` prefix, so judge rooms and links do not use it up), 429 `room_cap` with `Retry-After`. Any other call to a room that does not exist (decision, handoff, outcome, settle, simulated friend answer, payments confirm and decline, busy, clock, chat, draft, the calendar hold) answers 404 `no_such_room`. The exception is `GET /api/state`: a room that has not been made yet shows the **empty stage** (built, not saved), because a phone that has just scanned the QR has written nothing and its page needs a state to draw its start card.
+
+**Routes that are room-aware:** `/api/signals`, `/api/controls` (Reset and the simulated friend switch act on that room only, and the sharing and payments switches too), `/api/plans/[id]/decision`, `/draft` (the draft and the handoff), `/outcome`, `/settle`, `/busy`, `/hold.ics`, `/api/simulated-friend`, `/api/clock`, `/api/payments/[id]/confirm` and `/decline`, `/api/chat` and `/api/state`. Per-room run caps are keyed by the room id. **Not room-aware, on purpose:** `/api/replay` (a recording), `/api/proof/leak` (the stage's), the cron sweep (the demo plan), the agents' inbox (a room does not use it), and the plan of three and the trip (`scenario: "group"` or `"trip"` in a room answers 409, and `/api/plans/[id]/member-decision`, `/api/simulated-member`, `/api/trip/answer` and `/api/trip/join` stay on the demo room), because the in-process conversation runs two agents, not a coordinator with three seats.
+
+**How the agents run in a room.** The inbox is a route of its own with no way to know the room and no memory shared with the request that started the run, so in a room the two agents run in one process and hand each other their messages directly (`localDeliver`, the same validation the inbox uses), and `converse` runs the turns those messages cause. The reel starts that job after the response, under the room's lock and on the room's latest saved state, saving as it goes, which is why the phone sees the conversation fill in through `/api/state?room=<id>`.
+
+**Limits.** A room is loaded and saved whole, and two writes to one room at the same moment are serialized by a lock that exists inside one server instance only; across instances the last save wins. A room expires 2 hours after it is made (404 after that, and the next reel or control makes a new one). The new room copies the demo room's wallet accounts (so no new sandbox customers are made per room) at their starting balance with a ledger of its own.
+
+**Verified (Sun Oct 25, about 5:45am, local server on the JSON store, live Muse Spark):** a room made with the simulated friend on ran a reel to `awaiting_humans` in about 24 seconds, visible in `/api/state?room=<id>` as it filled in, while a second room made beside it started its own run and the demo room stayed empty; the same plan id in the demo room answered 404; Reset on one room left the other. Michelle's answer failed with the model's 404 outage while I was testing, so the walk stopped at the judge's accept (awaiting Michelle); that is the model, not rooms. `tests/rooms.test.ts` (27 tests) covers two rooms side by side, a reset in one, the demo store and its file unchanged by writes with a room id, every refusal, the cap, jobs after the response, the lock, and the state read. **Not verified:** two server instances writing to one room, and a phone doing the whole walk in a room on production.
+
 ## Regenerating the QR code
 
 Run this whenever the production address changes, then commit `public/qr.svg`. It last changed on Sat Oct 24 evening, when `musefriends.tech` went live; before that it encoded the vercel.app address.
