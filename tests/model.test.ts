@@ -34,6 +34,15 @@ describe("runAgentTurn (stateless, the default)", () => {
     expect(second[3]).toMatchObject({ type: "function_call_output", call_id: "call_1_0", output: JSON.stringify({ free: [] }) });
   });
 
+  it("tells each handler which model call asked for it", async () => {
+    installFakeModel([{ calls: [{ name: "get_my_calendar", args: {} }] }, { text: "ok" }]);
+    const metas: unknown[] = [];
+    await runAgentTurn({ ...base, handlers: { get_my_calendar: async (_args, meta) => (metas.push(meta), {}) } });
+    expect(metas).toEqual([
+      { responseId: "resp_1", model: "muse-spark-1.3", call: expect.objectContaining({ responseId: "resp_1", inputTokens: 10, outputTokens: 5, reasoningTokens: 2, toolNames: ["get_my_calendar"] }) },
+    ]);
+  });
+
   it("sends function tools with strict false and no tool_choice", async () => {
     const fake = installFakeModel([{ text: "ok" }]);
     await runAgentTurn({ ...base, handlers: {} });

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { AGENT_IDS, PolicyStamp, Redaction, type AgentId, type TaskState } from "@/lib/protocol";
+import { AGENT_IDS, ModelProof, PolicyStamp, Redaction, type AgentId, type TaskState } from "@/lib/protocol";
 import { validateIncoming } from "@/lib/policy";
 import { getPersona, displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
@@ -39,6 +39,7 @@ export const Envelope = z.strictObject({
   message: z.unknown(),
   stamp: PolicyStamp,
   redaction: Redaction.nullable(),
+  proof: ModelProof.optional(),
 });
 
 export type ReceiveResult =
@@ -89,7 +90,7 @@ export async function receiveMessage(
     return { ok: false, status: check.status, error: check.error };
   }
 
-  await commitMessage(store, { message: check.message, stamp: envelope.data.stamp, delivery: "delivered", httpStatus: 202 }, envelope.data.redaction);
+  await commitMessage(store, { message: check.message, stamp: envelope.data.stamp, proof: envelope.data.proof, delivery: "delivered", httpStatus: 202 }, envelope.data.redaction);
   return {
     ok: true,
     status: 202,
@@ -106,7 +107,7 @@ export function httpDeliver(origin: string, sender: AgentId): NonNullable<AgentR
       const response = await fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${agentToken(sender)}` },
-        body: JSON.stringify({ message: record.message, stamp: record.stamp, redaction }),
+        body: JSON.stringify({ message: record.message, stamp: record.stamp, redaction, proof: record.proof }),
         signal: AbortSignal.timeout(30_000),
       });
       if (response.status === 202 || response.status === 200) return { ok: true };
@@ -121,7 +122,7 @@ export function httpDeliver(origin: string, sender: AgentId): NonNullable<AgentR
 // Same wire without the network, for tests and for running agents in one process.
 export function localDeliver(store: Store, sender: AgentId, onAccepted?: (result: Extract<ReceiveResult, { ok: true }>) => void): NonNullable<AgentRuntimeContext["deliver"]> {
   return async ({ record, redaction }) => {
-    const result = await receiveMessage(store, { recipient: record.message.to, sender, envelope: { message: record.message, stamp: record.stamp, redaction } });
+    const result = await receiveMessage(store, { recipient: record.message.to, sender, envelope: { message: record.message, stamp: record.stamp, redaction, proof: record.proof } });
     if (!result.ok) return { ok: false, status: result.status, error: result.error };
     onAccepted?.(result);
     return { ok: true };

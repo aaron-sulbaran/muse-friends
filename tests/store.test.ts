@@ -40,6 +40,17 @@ describe("JsonStore", () => {
     expect(await store.listMessages()).toHaveLength(1);
   });
 
+  it("rewrites a stored message in place, keeping its position", async () => {
+    const store = new JsonStore(null);
+    await store.replaceAll(recordedSnapshot());
+    const [, second] = await store.listMessages();
+    await store.replaceMessage({ ...second, stamp: { ...second.stamp, removed: ["location"] } });
+    const messages = await store.listMessages();
+    expect(messages).toHaveLength(6);
+    expect(messages[1].stamp.removed).toEqual(["location"]);
+    expect(messages.map((record) => record.message.seq)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
   it("keeps the rejected-window ledger free of duplicates", async () => {
     const store = new JsonStore(null);
     await store.addRejectedWindow("ctx", "w_1");

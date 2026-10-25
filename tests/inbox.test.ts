@@ -272,6 +272,25 @@ describe("routes", () => {
     expect((await store.getPlanByContext(body.contextId))?.state).toBe("detected");
   });
 
+  it("stops starting runs once a room has used its cap, until reset", async () => {
+    process.env.MAX_RUNS_PER_ROOM = "2";
+    try {
+      const { POST } = await import("@/app/api/signals/route");
+      const start = () => POST(new Request("http://localhost:3001/api/signals", { method: "POST", body: "{}" }));
+      expect((await start()).status).toBe(202);
+      expect((await start()).status).toBe(202);
+      const blocked = await start();
+      expect(blocked.status).toBe(429);
+      expect((await blocked.json()).error).toContain("used its 2 runs");
+      const { getStore } = await import("@/lib/store");
+      const { resetDemo } = await import("@/lib/agent/controls");
+      await resetDemo(await getStore());
+      expect((await start()).status).toBe(202);
+    } finally {
+      delete process.env.MAX_RUNS_PER_ROOM;
+    }
+  });
+
   it("rejects an unknown scenario", async () => {
     const { POST } = await import("@/app/api/signals/route");
     const response = await POST(new Request("http://localhost:3001/api/signals", { method: "POST", body: JSON.stringify({ scenario: "ski-trip" }) }));

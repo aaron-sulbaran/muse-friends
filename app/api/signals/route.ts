@@ -10,13 +10,21 @@ import { getStore } from "@/lib/store";
 // responding. Seeded and fictional; the caption is read by Muse Spark live.
 export const maxDuration = 300;
 
+const DEFAULT_MAX_RUNS_PER_ROOM = 40;
+
 const Body = z.strictObject({ scenario: z.literal("shawarma").default("shawarma") });
 
 export async function POST(request: Request) {
   const body = Body.safeParse(await request.json().catch(() => ({})));
   if (!body.success) return Response.json({ error: z.prettifyError(body.error) }, { status: 400 });
 
+  // The public URL spends model credits on every run: cap runs per room. Reset clears the count.
   const store = await getStore();
+  const cap = Number(process.env.MAX_RUNS_PER_ROOM ?? DEFAULT_MAX_RUNS_PER_ROOM);
+  if ((await store.listSignals()).length >= cap) {
+    return Response.json({ error: `This room has used its ${cap} runs. Reset the demo to start fresh.` }, { status: 429 });
+  }
+
   const signal = { ...rawShawarmaSignal(), id: newId("sig") };
   const { contextId, planId } = await injectSignal(store, signal);
 

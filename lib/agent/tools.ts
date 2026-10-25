@@ -115,13 +115,13 @@ export function buildTools(ctx: AgentRuntimeContext): { tools: ToolDefinition[];
         agent,
         contextId: ctx.contextId,
         planId: plan?.id,
-        text: `${displayName(agent)} read the reel caption: ${parsed.data.place}${parsed.data.area ? `, ${parsed.data.area}` : ""}${parsed.data.hours ? `, ${parsed.data.hours.toLowerCase()}` : ""} (extracted by the caption model)`,
+        text: `${displayName(agent)} read the reel caption: ${parsed.data.place}${parsed.data.area ? `, ${parsed.data.area}` : ""}${parsed.data.hours ? `, ${parsed.data.hours.toLowerCase()}` : ""} (extracted from caption)`,
       };
       await store.appendEvent(row);
       return { ok: true, saved: parsed.data, free_hint: plan?.window ? describeWindow(plan.window) : undefined };
     },
 
-    send_to_friend_agent: (raw) => sendToFriend(ctx, raw),
+    send_to_friend_agent: (raw, meta) => sendToFriend(ctx, raw, meta),
   };
 
   return { tools, handlers };
