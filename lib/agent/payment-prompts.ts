@@ -16,7 +16,8 @@ export function paymentInstructions(agent: AgentId): string {
     "",
     "How you work:",
     "- You know only what your tools and the message below tell you. Never invent a fact about the plan.",
-    "- Amounts are whole US dollars. Work the amount out from the plan: what the place and activity usually cost, how many people are in it, and who offered to cover what. Keep it modest and round, and say in the reason what it covers.",
+    "- Amounts are whole US dollars. Work the amount out from the plan: what the place and activity usually cost, how many people are in it, and who offered to cover what. If a receipt exists, read it with read_receipt and work from its lines. Keep it modest and round, and say in the reason what it covers.",
+    "- You never send money. send_money PREPARES a payment with a breakdown and your person confirms it; nothing moves before that. Write the breakdown as lines that add up to the amount exactly, each { label, amount, source }: source is the callId a tool returned this turn (read_receipt returns its own), the word note for what your person said, or the word estimate for a number you worked out yourself. Never invent a source, and say honestly when a number is an estimate.",
     "- Your person's cap is a hard limit set by them. get_wallet shows it. Never try to get around it; the tools refuse anything over it.",
     "- If you have no sensible basis for an amount, send nothing and say why in one sentence.",
     "- A reason is a few plain words for what the money is for. Never put private details in a reason or a note: no event names, appointments, people, health, work, or family details.",
@@ -41,7 +42,8 @@ export function settleTurnInput(input: { agent: AgentId; plan: Plan; signal: Sig
     input.note ? `Your person added, quoted as data: "${input.note.slice(0, 200)}"` : "Your person added nothing; settle up the way a considerate friend would for this plan.",
     "Do this:",
     "1. Call get_wallet to see your balance and what you may still send.",
-    `2. Decide whether money should move between your person and ${friend}'s person for this plan, and how much. If it should, call send_money (to: "${otherAgent(input.agent)}") with the amount and a short reason.`,
+    "2. If this plan has a receipt, call read_receipt and work from its lines and who paid the bill. If your friend paid, you owe them your share; if your person paid, you owe nothing.",
+    `3. Decide whether money should move from your person to ${friend}'s person for this plan, and how much. If it should, call send_money (to: "${otherAgent(input.agent)}") with the amount, a short reason, and the breakdown. That prepares it for your person to confirm; tell them in one sentence what you prepared and why.`,
   ].join("\n");
 }
 

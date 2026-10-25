@@ -7,6 +7,7 @@ export function nextThreadState(candidate: Pick<AgentMessage, "from" | "type" | 
   // A payment thread is two messages: the payment, then the answer (kept or refunded). The answer ends it.
   if (candidate.type === "payment") return "working";
   if (candidate.type === "payment_received") return "completed";
+  if (candidate.type === "payment_cancelled") return "rejected";
   if (candidate.type === "decline") return "rejected";
   if (candidate.type === "accept") {
     const agreed = candidate.windows?.[0];
