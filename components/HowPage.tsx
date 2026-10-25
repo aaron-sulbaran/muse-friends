@@ -135,9 +135,10 @@ export function HowPage() {
         </Link>
 
         <header className="mt-4 flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-card bg-linear-to-b from-surface to-stage-end px-4 py-8 text-center">
-          {/* The brand kit's wordmark, a fixed vector asset. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/wordmark/muse-friends-wordmark.svg" alt="Muse Friends" className="h-9 w-auto" />
+          {/* The stage header's text lockup. */}
+          <span className="text-[36px] font-bold leading-none tracking-[-0.02em]" aria-label="Muse Friends">
+            Muse <span className="text-accent-dot">Friends</span>
+          </span>
           <h1 className="text-[32px] font-bold leading-[38px]">{howCopy.title}</h1>
           <p className="text-[15px] leading-[22px] text-muted">{howCopy.subtitle}</p>
           <div className="mt-1 flex items-end gap-3" aria-hidden="true">
