@@ -3,7 +3,7 @@
 // (lib/nessie.ts, NessieWithLedger): two fictional customers with a checking account each, a withdrawal from one,
 // the matching deposit into the other, and a refund back. It asserts on what the app relies on:
 //
-//   the Nessie RECORDS   every write is read back by id (the account's withdrawals list, GET /deposits/{id}) and must carry
+//   the Nessie RECORDS   every write is read back by id (GET /withdrawal/{id}, singular, and GET /deposits/{id}) and must carry
 //                        the amount we sent; its status is compared with the one we sent
 //   OUR ledger           the balances the app shows (wallet chip, payment cards): 50, 43 and 57, then 50 again
 //
@@ -84,7 +84,7 @@ async function checkRecord(label, read, id, amount) {
 
 const withdrawal = await client.withdraw(a, { amount: 7, description: "Muse nessie-check payment" });
 check(withdrawal.error === null, `withdraw $7 from the payer${withdrawal.error ? ` (${withdrawal.error})` : ""}`);
-if (withdrawal.error === null) await checkRecord("withdrawal", (id) => http.getWithdrawal(a, id), withdrawal.data.id, 7);
+if (withdrawal.error === null) await checkRecord("withdrawal", (id) => http.getWithdrawal(id), withdrawal.data.id, 7);
 check((await ours(a)) === 43, `our ledger: the payer is at $43 (${await ours(a)})`);
 
 const deposit = await client.deposit(b, { amount: 7, description: "Muse nessie-check received" });
@@ -110,7 +110,7 @@ const probe = await http.withdraw(a, { amount: 1, description: "Muse nessie-chec
 if (probe.error !== null) {
   console.log(`  probe: status "executed" is refused by the sandbox (${probe.error}); the app stays on "${TRANSACTION_STATUS}"`);
 } else {
-  const record = await http.getWithdrawal(a, probe.data.id);
+  const record = await http.getWithdrawal(probe.data.id);
   const moved = (await sandbox(a)) !== staticA;
   console.log(`  probe: status "executed" is accepted (the record reads "${record.data?.status ?? "?"}"); the sandbox balance ${moved ? "MOVED" : "did not move"}. The app stays on "${TRANSACTION_STATUS}"`);
   await http.deposit(a, { amount: 1, description: "Muse nessie-check status probe undone" });

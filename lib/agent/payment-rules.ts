@@ -30,7 +30,7 @@ export type PaymentView = {
   depositId?: string;
   balanceBefore?: number;
   balanceAfter?: number;
-  // The tools the payer's Muse called on the way to the payment, from the proof on the message.
+  // The tools the payer's Muse called on the way to the payment, then the friend's Muse's tools on the answer, from the proofs on the messages.
   toolCalls?: ToolCallProof[];
   at: string;
 };
@@ -65,6 +65,8 @@ export function paymentsFrom(records: MessageRecord[]): PaymentView[] {
       view.depositId = payment.depositId;
       view.balanceBefore = payment.balanceBefore;
       view.balanceAfter = payment.balanceAfter;
+      // The friend's Muse answered in a turn of its own: its tools (get_wallet, then accept_payment or decline_payment) follow the payer's.
+      if (proof?.toolCalls) view.toolCalls = [...(view.toolCalls ?? []), ...proof.toolCalls];
     }
   }
   return [...views.values()];

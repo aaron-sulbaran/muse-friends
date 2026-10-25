@@ -1,4 +1,5 @@
 import { categoryLabel } from "./tokens";
+import { simulatedFriend } from "./tokens";
 import type { AgentId, Category, TimeWindow, UiMessage, UiSnapshot } from "./types";
 
 /** Every time the UI shows is Central, matching the event schedule. */
@@ -139,8 +140,9 @@ export type Names = {
 };
 
 /** Every visible name comes from the snapshot's persona display names, never from the internal ids. */
-export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "standIn">): Names {
-  const { standIn } = snapshot;
+export function namesFor(snapshot: Pick<UiSnapshot, "sides"> & { standIn?: UiSnapshot["standIn"]; simulatedFriend?: boolean }): Names {
+  // A full snapshot says who stands in; a caller with only the room's flag (a wallet history) still gets Michelle.
+  const standIn = snapshot.standIn ?? (snapshot.simulatedFriend ? { person: simulatedFriend.human, muse: simulatedFriend.muse } : null);
   return {
     muse: { aaron: snapshot.sides.aaron, lisa: standIn ? standIn.muse : snapshot.sides.lisa },
     human: { aaron: snapshot.sides.aaron, lisa: standIn ? standIn.person : snapshot.sides.lisa },

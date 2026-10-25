@@ -4,6 +4,7 @@ import { paymentsEnabled } from "@/lib/agent/wallets";
 import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { CONTACTS, getContact, isMutual } from "@/lib/seed/contacts";
+import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
 import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiRefusal, UiSnapshot, UiWallet } from "./types";
@@ -212,10 +213,10 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
   }));
 }
 
-function toNotes(state: StateSnapshot, rename: (text: string) => string): UiNote[] {
+function toNotes(state: StateSnapshot, rename: (text: string) => string, payments: UiPayment[]): UiNote[] {
   const followUps = new Map(state.plans.filter((plan) => plan.target !== undefined).map((plan) => [plan.id, plan]));
   return state.events.flatMap((event): UiNote[] => {
-    const text = rename(event.text);
+    const text = rename(describeNote(event.text, payments));
     const followUp = event.planId ? followUps.get(event.planId) : undefined;
     if (followUp && event.kind === "signal_received") return [{ id: event.id, kind: "contact_chosen", at: event.at, text }];
     if (followUp && isRefused(followUp) && event.kind === "plan_state") return [{ id: event.id, kind: "contact_refused", at: event.at, text }];
@@ -316,6 +317,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
   const standIn = standInOf(state, plan);
   const rename = renameFor(standIn);
   const messages = toUiMessages(state, rename);
+  const payments = paymentsOf(state);
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
@@ -325,7 +327,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     standIn,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: [...reelSourceNotes(state), ...toNotes(state, rename)].sort((first, second) => first.at.localeCompare(second.at)),
+    notes: [...reelSourceNotes(state), ...toNotes(state, rename, payments)].sort((first, second) => first.at.localeCompare(second.at)),
     contacts: CONTACTS.map((contact) => ({
       id: contact.id,
       name: contact.displayName,
@@ -347,16 +349,18 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     reel: reelFor(state, overlay.liveReel ?? null),
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
-    wallets: { aaron: walletFor("aaron", state), lisa: walletFor("lisa", state) },
-    payments: paymentsOf(state),
+    wallets: { aaron: walletFor("aaron", state, rename), lisa: walletFor("lisa", state, rename) },
+    payments,
     paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
     sandbox: sandboxFor(state),
   };
 }
 
-function walletFor(owner: AgentId, state: StateSnapshot): UiWallet | null {
+// The wallet is named for the person at that seat, as the rest of the screen says it ("Michelle's wallet" when the
+// simulated friend plays side b); the Nessie record keeps the seed's nickname.
+function walletFor(owner: AgentId, state: StateSnapshot, rename: (text: string) => string): UiWallet | null {
   const wallet = state.room.wallets?.[owner];
-  return wallet ? { balance: wallet.balance, nickname: wallet.nickname, source: wallet.source, accountId: wallet.accountId } : null;
+  return wallet ? { balance: wallet.balance, nickname: rename(wallet.nickname), source: wallet.source, accountId: wallet.accountId } : null;
 }
 
 function paymentsScopeFor(owner: AgentId, state: StateSnapshot): PaymentsSettings {
@@ -368,7 +372,19 @@ function sandboxFor(state: StateSnapshot): UiSnapshot["sandbox"] {
   const wallets = Object.values(state.room.wallets ?? {});
   const connected = wallets.length > 0 && wallets.every((wallet) => wallet.source === "nessie");
   const enabled = paymentsEnabled();
-  return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, local ledger" };
+  return {
+    enabled,
+    connected,
+    text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, local ledger",
+    // Only true of the real sandbox: its transactions are real records, but the balance field on its accounts never follows them.
+    ...(enabled && connected ? { balanceNote: "The sandbox records each payment but never changes an account's own balance, so Muse keeps the balances shown here." } : {}),
+  };
+}
+
+/** The plan a payment belongs to, as far as naming it goes: its title and window. */
+function planNamed(planId: string, state: StateSnapshot): Pick<UiPlan, "activityTitle" | "window"> | null {
+  const plan = state.plans.find((candidate) => candidate.id === planId);
+  return plan ? { activityTitle: plan.activity?.title ?? "the plan", window: plan.window ?? null } : null;
 }
 
 const dollars = (amount: number) => (amount < 0 ? `-$${-amount}` : `$${amount}`);
@@ -429,7 +445,7 @@ function toUiPayment(view: PaymentView, proposal?: PaymentProposal): UiPayment {
     ...(view.depositId ? { depositId: view.depositId } : {}),
     ...(view.balanceBefore !== undefined ? { balanceBefore: view.balanceBefore } : {}),
     ...(view.balanceAfter !== undefined ? { balanceAfter: view.balanceAfter } : {}),
-    ...(view.toolCalls ? { toolCalls: view.toolCalls } : {}),
+    ...(toolCallsOf({ toolCalls: view.toolCalls }) ? { toolCalls: toolCallsOf({ toolCalls: view.toolCalls }) } : {}),
     at: view.at,
   };
   if (!proposal) return base;
@@ -450,5 +466,10 @@ function paymentsOf(state: StateSnapshot): UiPayment[] {
   const byId = new Map<string, UiPayment>();
   for (const proposal of Object.values(proposals)) byId.set(proposal.paymentId, fromProposal(proposal));
   for (const view of sent) byId.set(view.paymentId, toUiPayment(view, proposals[view.paymentId]));
-  return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at));
+  return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at)).map((payment) => named(payment, planNamed(payment.planId, state)));
+}
+
+/** A payment with the plan's event and day in front of its reason, for the cards and the Activity row. */
+function named(payment: UiPayment, plan: Pick<UiPlan, "activityTitle" | "window"> | null): UiPayment {
+  return { ...payment, description: describePayment(payment.reason, plan), ...(plan ? { planLabel: eventLabel(plan) } : {}) };
 }

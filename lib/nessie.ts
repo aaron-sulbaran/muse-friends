@@ -144,16 +144,10 @@ export class NessieHttp implements NessieClient {
     return this.create(`/accounts/${encodeURIComponent(accountId)}/deposits`, { medium: "balance", transaction_date: today(), status: input.status ?? TRANSACTION_STATUS, amount: input.amount, description: input.description.slice(0, 120) });
   }
 
-  // The transaction records, read back: what the sandbox actually stored. The sandbox has no GET /withdrawals/{id}
-  // (the gateway answers 403 "Missing Authentication Token"; checked live), so a withdrawal is found in its account's list.
-  async getWithdrawal(accountId: string, id: string): Promise<NessieResult<NessieTransaction>> {
-    const result = await this.request("GET", `/accounts/${encodeURIComponent(accountId)}/withdrawals`);
-    if (result.error !== null) return fail(result.error);
-    if (!Array.isArray(result.data)) return fail("the sandbox answered in a shape we do not know");
-    const row = result.data.find((candidate) => typeof candidate === "object" && candidate !== null && (candidate as { _id?: unknown })._id === id);
-    if (row === undefined) return fail("no such withdrawal on that account");
-    const parsed = TransactionBody.safeParse(row);
-    return parsed.success ? ok({ id: parsed.data._id, amount: parsed.data.amount, status: parsed.data.status ?? "", description: parsed.data.description ?? "" }) : fail("the sandbox answered in a shape we do not know");
+  // The transaction records, read back by id: what the sandbox actually stored. The sandbox spells the withdrawal route
+  // in the singular (GET /withdrawal/{id}); the plural form is answered with 403 "Missing Authentication Token" (checked live).
+  getWithdrawal(id: string): Promise<NessieResult<NessieTransaction>> {
+    return this.readTransaction(`/withdrawal/${encodeURIComponent(id)}`);
   }
 
   getDeposit(id: string): Promise<NessieResult<NessieTransaction>> {

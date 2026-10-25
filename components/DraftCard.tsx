@@ -3,11 +3,14 @@
 import { useEffect, useState } from "react";
 import { copy } from "@/lib/ui/copy";
 import { whatsAppUrl } from "@/lib/ui/handoff";
+import { CheckMark } from "./CheckMark";
 
 type Props = {
   draft: string;
   /** Called when the person takes the draft away, by either route. */
   onHandoff: (via: "whatsapp" | "copy") => void;
+  /** WhatsApp was already opened, for a card drawn after the fact. */
+  initiallyOpened?: boolean;
 };
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -22,10 +25,12 @@ async function copyToClipboard(text: string): Promise<boolean> {
 /**
  * The drafted message and the handoff. The agent drafts; the person opens
  * WhatsApp, picks the contact, and presses send. Copy is the fallback when the
- * link does not open.
+ * link does not open. Once WhatsApp was opened the card says so and keeps the
+ * link as Open again.
  */
-export function DraftCard({ draft, onHandoff }: Props) {
+export function DraftCard({ draft, onHandoff, initiallyOpened = false }: Props) {
   const [copied, setCopied] = useState(false);
+  const [opened, setOpened] = useState(initiallyOpened);
 
   useEffect(() => {
     if (!copied) return;
@@ -43,6 +48,12 @@ export function DraftCard({ draft, onHandoff }: Props) {
   return (
     <section aria-label="Draft message" className="max-w-[92%] animate-card-in rounded-card bg-surface p-4 shadow-float">
       <p className="rounded-group bg-group px-3.5 py-3 text-[16px] leading-[22px]">{draft}</p>
+      {opened ? (
+        <p className="mt-3 flex items-center gap-1.5 text-[13px] font-semibold leading-[18px]" aria-live="polite">
+          <CheckMark />
+          {copy.draftHandedOff}
+        </p>
+      ) : null}
       <div className="mt-3 grid grid-cols-2 gap-2.5">
         <button
           type="button"
@@ -55,10 +66,13 @@ export function DraftCard({ draft, onHandoff }: Props) {
           href={whatsAppUrl(draft)}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => onHandoff("whatsapp")}
+          onClick={() => {
+            setOpened(true);
+            onHandoff("whatsapp");
+          }}
           className="whitespace-nowrap rounded-full bg-accent px-3 py-2.5 text-center text-[15px] font-semibold text-white transition-[filter] hover:brightness-110 active:brightness-90"
         >
-          {copy.draftOpenWhatsApp}
+          {opened ? copy.draftOpenAgain : copy.draftOpenWhatsApp}
         </a>
       </div>
     </section>
