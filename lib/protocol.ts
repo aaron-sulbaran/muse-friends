@@ -873,10 +873,13 @@ export type Wallet = z.infer<typeof Wallet>;
 export const AVAILABILITY_MAX_WINDOWS = 8;
 export const AVAILABILITY_MIN_MINUTES = 60;
 export const FEELS_MAX = 120;
+export const NAME_MAX = 24;
 export const TypedAvailability = z.strictObject({
   windows: z.array(Window).min(1).max(AVAILABILITY_MAX_WINDOWS),
   // One line in the person's own words. It is interests: it reaches the friend's Muse only if interests are shared.
   feels: z.string().min(1).max(FEELS_MAX).optional(),
+  // The person's first name, when they gave one: the other phone and the thread say it instead of "your friend".
+  name: z.string().min(1).max(NAME_MAX).optional(),
   at: IsoDateTime,
 });
 export type TypedAvailability = z.infer<typeof TypedAvailability>;

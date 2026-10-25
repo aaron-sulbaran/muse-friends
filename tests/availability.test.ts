@@ -79,6 +79,18 @@ describe("POST /api/availability", () => {
     expect((await store.getRoom()).availability?.aaron?.windows).toEqual([TUE]);
   });
 
+  it("keeps a first name, one line, and a name over 24 characters is refused", async () => {
+    await post({ side: "b", windows: [SAT], name: "  Mi\nchelle " });
+    expect((await store.getRoom()).availability?.lisa?.name).toBe("Mi chelle");
+    const response = await post({ side: "b", windows: [SAT], name: "x".repeat(25) });
+    expect(response.status).toBe(400);
+    expect((await messageOf(response)).error?.message).toMatch(/name to 24 characters or fewer/);
+    expect((await post({ side: "b", windows: [SAT], name: 7 })).status).toBe(400);
+    // A later call without a name takes it away, like the line.
+    await post({ side: "b", windows: [SAT] });
+    expect((await store.getRoom()).availability?.lisa?.name).toBeUndefined();
+  });
+
   it("turns the line into one line, and takes an empty one as none", async () => {
     await post({ side: "a", windows: [TUE], feels: "  wiped\nfrom   midterms\t " });
     expect((await store.getRoom()).availability?.aaron?.feels).toBe("wiped from midterms");
@@ -315,6 +327,17 @@ describe("the snapshot", () => {
     expect(forRole(snapshot, "c")).not.toHaveProperty("typedAvailability");
     expect(JSON.stringify(forRole(snapshot, "a"))).not.toContain("ready for anything");
     expect(JSON.stringify(forRole(snapshot, "b"))).not.toContain("midterms");
+  });
+
+  it("puts the names in humans for every role, since the other phone saying the name is the point", async () => {
+    expect(await ui()).not.toHaveProperty("humans");
+    await saveAvailability(store, "aaron", { windows: [TUE], name: "Dana" }, "2026-10-25T14:00:00-05:00");
+    await saveAvailability(store, "lisa", { windows: [SAT] }, "2026-10-25T14:00:00-05:00");
+    const snapshot = await ui();
+    expect(snapshot.humans).toEqual({ aaron: "Dana" });
+    for (const role of [null, "a", "b", "c"]) expect(forRole(snapshot, role).humans, String(role)).toEqual({ aaron: "Dana" });
+    await saveAvailability(store, "lisa", { windows: [SAT], name: "Mo" }, "2026-10-25T14:00:00-05:00");
+    expect((await ui()).humans).toEqual({ aaron: "Dana", lisa: "Mo" });
   });
 
   it("drops the whole field for a role when its own seat typed nothing", async () => {
