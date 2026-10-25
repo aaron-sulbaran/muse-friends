@@ -152,6 +152,13 @@ export const copy = {
   simulatedClock: "Simulated clock",
   simulatedFriendBanner: "Simulated friend, fictional, played by a model",
 
+  // The opening moment after onboarding (D26): the reel arrives, Sprout reads it, and the offer lands.
+  openingSenderLine: (friend: string) => `${friend} sent you a reel`,
+  openingTeammateReel: "A teammate's reel, read live from Instagram",
+  openingOffer: (friend: string, when: string) => `You and ${friend} are both free ${when}. Want me to set it up?`,
+  openingPlanTitle: (place: string, friend: string) => `${place} with ${friend}`,
+  openingSetItUp: "Set it up",
+
   // The thread with the friend (D32): who said what, and which Muse belongs to which person.
   threadMuseOf: (owner: string) => `${owner}'s Muse`,
   threadYourMuse: "your Muse",
