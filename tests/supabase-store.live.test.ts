@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { StateSnapshot } from "@/lib/protocol";
-import { recordedSnapshot, shawarmaRun } from "@/lib/seed/fixtures";
+import { recordedSnapshot, seedSnapshot, shawarmaRun } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
 import { createSupabaseStore } from "@/lib/store/supabase";
 
@@ -50,7 +50,12 @@ describe.skipIf(!live)("supabase store against the real project", () => {
         auth: { persistSession: false, autoRefreshToken: false },
       })
     : null!;
-  const source = suffixIds(recordedSnapshot()) as ReturnType<typeof recordedSnapshot>;
+  const base = recordedSnapshot();
+  const source = {
+    ...(suffixIds(base) as ReturnType<typeof recordedSnapshot>),
+    // The ledger is keyed by contextId, so its keys carry the run suffix too.
+    rejectedWindows: Object.fromEntries(Object.entries(base.rejectedWindows).map(([contextId, hashes]) => [`${contextId}${runId}`, hashes])),
+  };
   const thread = source.threads[0];
 
   async function cleanup() {
@@ -72,8 +77,18 @@ describe.skipIf(!live)("supabase store against the real project", () => {
   beforeAll(cleanup);
   afterAll(async () => {
     await cleanup();
-    console.log(`supabase store latency per call (ms), run ${runId}`);
-    console.table(timings);
+    const byCall = new Map<string, number[]>();
+    for (const { call, ms } of timings) byCall.set(call, [...(byCall.get(call) ?? []), ms]);
+    const summary = [...byCall.entries()].map(([call, values]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return { call, count: values.length, medianMs: sorted[Math.floor(sorted.length / 2)], maxMs: sorted[sorted.length - 1] };
+    });
+    const all = timings.map((entry) => entry.ms).sort((a, b) => a - b);
+    process.stdout.write(
+      `\nsupabase store latency per call (ms), run ${runId}, ${all.length} calls, median ${all[Math.floor(all.length / 2)]}, p95 ${all[Math.floor(all.length * 0.95)]}, max ${all[all.length - 1]}\n` +
+        summary.map((row) => `  ${row.call.padEnd(34)} n=${String(row.count).padEnd(3)} median=${String(row.medianMs).padEnd(4)} max=${row.maxMs}`).join("\n") +
+        "\n",
+    );
   });
 
   it("starts seeded: a room, a clock, and the default policies, whether or not anyone ran a reset", async () => {
@@ -106,6 +121,13 @@ describe.skipIf(!live)("supabase store against the real project", () => {
     await timed("appendMessage (duplicate)", () => store.appendMessage(source.messages[0]));
     const messages = await timed("listMessages", () => store.listMessages(thread.contextId));
     expect(messages).toEqual(source.messages);
+
+    // A privacy toggle replays a message in place: same id and position, new stamp.
+    const replayed = { ...source.messages[1], stamp: { ...source.messages[1].stamp, removed: ["location" as const], passed: [] } };
+    await timed("replaceMessage", () => store.replaceMessage(replayed));
+    const afterReplace = await store.listMessages(thread.contextId);
+    expect(afterReplace).toHaveLength(source.messages.length);
+    expect(afterReplace[1]).toEqual(replayed);
 
     const plan = source.plans[0];
     await timed("putPlan", () => store.putPlan(plan));
@@ -171,14 +193,21 @@ describe.skipIf(!live)("supabase store against the real project", () => {
     expect(snapshot.rejectedWindows[thread.contextId]).toEqual(source.rejectedWindows[thread.contextId]);
   });
 
-  it.skipIf(!allowWipe)("replaces everything from a snapshot and keeps recorded runs", async () => {
+  it.skipIf(!allowWipe)("replaces everything from a snapshot, keeps recorded runs, and restores the seed", async () => {
     const before = await store.listRecordedRuns();
-    const seed = recordedSnapshot();
-    await timed("replaceAll", () => store.replaceAll(seed));
-    const after = await store.snapshot();
-    expect(after.threads).toEqual(seed.threads);
-    expect(after.messages).toEqual(seed.messages);
-    expect(after.rejectedWindows).toEqual(seed.rejectedWindows);
-    expect((await store.listRecordedRuns()).length).toBe(before.length);
+    const recorded = recordedSnapshot();
+    try {
+      await timed("replaceAll", () => store.replaceAll(recorded));
+      const after = await timed("snapshot (after replaceAll)", () => store.snapshot());
+      expect(after.threads).toEqual(recorded.threads);
+      expect(after.messages).toEqual(recorded.messages);
+      expect(after.rejectedWindows).toEqual(recorded.rejectedWindows);
+      expect((await store.listRecordedRuns()).length).toBe(before.length);
+    } finally {
+      await timed("replaceAll (restore seed)", () => store.replaceAll(seedSnapshot()));
+    }
+    const restored = await store.snapshot();
+    expect(restored.threads).toEqual([]);
+    expect(restored.policies).toEqual(seedSnapshot().policies);
   });
 });

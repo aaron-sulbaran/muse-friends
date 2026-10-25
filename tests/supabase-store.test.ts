@@ -116,6 +116,18 @@ describe("createSupabaseStore reads and writes", () => {
     expect((await store.listMessages()).map((record) => record.message.seq)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
+  it("replaces a message in place, unlike an append that ignores duplicates", async () => {
+    const { client, calls } = fakeClient();
+    const store = createSupabaseStore({ client, ...unseeded });
+    const [record] = recordedSnapshot().messages;
+    await store.appendMessage(record);
+    await store.replaceMessage({ ...record, stamp: { ...record.stamp, removed: ["location"] } });
+    const [append, replace] = upsertsTo(calls, "messages");
+    const optionsOf = (call: Call) => call.args[call.steps.indexOf("upsert")][1] as Record<string, unknown>;
+    expect(optionsOf(append)).toMatchObject({ onConflict: "context_id,seq", ignoreDuplicates: true });
+    expect(optionsOf(replace)).toEqual({ onConflict: "context_id,seq" });
+  });
+
   it("refuses a malformed snapshot before it reaches the database", async () => {
     const { client, calls } = fakeClient();
     const store = createSupabaseStore({ client, ...unseeded });

@@ -121,6 +121,19 @@ export function createSupabaseStore(options: SupabaseStoreOptions = {}): Store {
           ),
       );
     },
+    async replaceMessage(record) {
+      // Unlike appendMessage this overwrites: a privacy toggle replays a message under the new
+      // policy and it keeps its id and position. A message not stored yet is simply added.
+      unwrap(
+        "replaceMessage",
+        await db
+          .from("messages")
+          .upsert(
+            { context_id: record.message.contextId, seq: record.message.seq, data: record },
+            { onConflict: "context_id,seq" },
+          ),
+      );
+    },
     async listMessages(contextId) {
       let query = db.from("messages").select("data");
       if (contextId) query = query.eq("context_id", contextId);
