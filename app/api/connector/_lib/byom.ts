@@ -1,26 +1,29 @@
 import { randomBytes } from "node:crypto";
 import { after } from "next/server";
 import { z } from "zod";
-import { ownFreeBlocks, CALENDAR_SET_BY_ROOM } from "@/lib/agent/calendar";
+import { CALENDAR_SET_BY_ROOM } from "@/lib/agent/calendar";
 import { refundRun, reserveRun } from "@/lib/agent/caps";
 import { newId, otherAgent } from "@/lib/agent/ids";
 import { decide } from "@/lib/agent/lifecycle";
 import { withLock } from "@/lib/agent/lock";
 import { injectSignal, runInboxTurn, runSignalTurn } from "@/lib/agent/runtime";
 import { localDeliver } from "@/lib/agent/wire";
-import { describeWindow, intersectWindows, toCentralIso, toMs } from "@/lib/agent/windows";
+import { describeWindow, toCentralIso, toMs } from "@/lib/agent/windows";
 import type { AgentId, Plan, Signal, StateSnapshot, Window } from "@/lib/protocol";
 import { CALENDAR_RANGE, displayName, rawShawarmaSignal } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import { JsonStore } from "@/lib/store/json";
 import { michelleDecides } from "@/lib/ui/friend";
 import { persistingStore } from "./room-store";
+import { presetWindows, SLOT_PRESET_NAMES } from "./presets";
 import { defaultRoomRepo, ROOM_CAP_WINDOW_MS, ROOM_TTL_MS, RoomStorageError, type RoomRepo } from "./rooms";
 
 // "Bring your own Muse": a judge's own Muse starts a plan, watches two agents agree on it, and answers
 // as the person on Sprout's side. Everything here runs in a room of its own: a fresh in-memory Store per
 // plan, saved as one document in the room repository, never the demo store and never the demo room.
 // Sprout is the judge's side (role a); Mochi is the simulated friend, fictional and played by a model.
+// The only things a judge's Muse can send are a preset name, a plan id and accept or decline: no free
+// text, no windows of its own, nothing about the person.
 
 const YOU: AgentId = "aaron";
 const FRIEND: AgentId = "lisa";
@@ -28,9 +31,6 @@ const FRIEND: AgentId = "lisa";
 // Caps for one room key, shared by every plan a judge starts: the model calls these runs make count
 // against the same hourly run budget as the stage (lib/agent/caps.ts), under a key of their own.
 const RUN_BUDGET_KEY = "byom";
-const MAX_DAYS_AHEAD = 7;
-const WAKING_START_HOUR = 9;
-const WAKING_END_HOUR = 22;
 const STALLED_AFTER_MS = 4 * 60 * 1000;
 
 export type Failure = {
@@ -38,12 +38,11 @@ export type Failure = {
   status: 400 | 403 | 404 | 409 | 422 | 429 | 502 | 503;
   code: string;
   message: string;
-  hint?: unknown;
   retryAfterSeconds?: number;
 };
 export type Outcome<T> = { ok: true; value: T } | Failure;
 
-function fail(status: Failure["status"], code: string, message: string, extra: Partial<Pick<Failure, "hint" | "retryAfterSeconds">> = {}): Failure {
+function fail(status: Failure["status"], code: string, message: string, extra: Partial<Pick<Failure, "retryAfterSeconds">> = {}): Failure {
   return { ok: false, status, code, message, ...extra };
 }
 
@@ -97,71 +96,23 @@ async function guarded<T>(work: () => Promise<T>): Promise<Outcome<T>> {
 // Input
 // ---------------------------------------------------------------------------
 
-const FreeWindow = z.object({
-  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "day must be a date like 2026-10-27"),
-  start: z.string().regex(/^([01]\d|2[0-3]):00$/, "start must be a whole hour like 18:00 on a 24 hour clock"),
-  end: z.string().regex(/^([01]\d|2[0-3]):00$/, "end must be a whole hour like 20:00 on a 24 hour clock"),
-});
-
-export const StartPlanInput = z.object({
-  reel_hint: z.string().max(140, "reel_hint is at most 140 characters").optional(),
-  free_windows: z
-    .array(FreeWindow)
-    .min(1, "send at least one free window")
-    .max(3, "send at most 3 free windows"),
+export const StartPlanInput = z.strictObject({
+  slots: z.enum(SLOT_PRESET_NAMES, { error: `slots must be one of: ${SLOT_PRESET_NAMES.join(", ")}` }),
 });
 export type StartPlanInput = z.infer<typeof StartPlanInput>;
 
-export const CheckPlanInput = z.object({ planId: z.string().min(1, "planId is required") });
-export const RespondInput = z.object({ planId: z.string().min(1, "planId is required"), decision: z.enum(["accept", "decline"]) });
-
-const centralEvent = (day: string, hour: string) => Date.parse(`${day}T${hour}:00-05:00`);
-
-// Date.parse rolls 2026-02-31 forward to March, so the calendar date is checked on its own.
-function isRealDate(day: string): boolean {
-  const [year, month, date] = day.split("-").map(Number);
-  const check = new Date(Date.UTC(year, month - 1, date));
-  return check.getUTCFullYear() === year && check.getUTCMonth() === month - 1 && check.getUTCDate() === date;
-}
-
-// The free windows, checked in code: real dates, whole hours inside waking hours, in the next 7 days and
-// inside the demo calendar's week, not in the past, and not overlapping each other.
-export function parseFreeWindows(input: StartPlanInput["free_windows"], nowMs: number): Outcome<Window[]> {
-  const windows: Window[] = [];
-  for (const [index, entry] of input.entries()) {
-    const label = `free_windows[${index}]`;
-    if (!isRealDate(entry.day)) return fail(422, "bad_window", `${label}: ${entry.day} is not a real date`);
-    const start = centralEvent(entry.day, entry.start);
-    const end = centralEvent(entry.day, entry.end);
-    const startHour = Number(entry.start.slice(0, 2));
-    const endHour = Number(entry.end.slice(0, 2));
-    if (endHour <= startHour) return fail(422, "bad_window", `${label}: end must be after start on the same day`);
-    if (startHour < WAKING_START_HOUR || endHour > WAKING_END_HOUR) {
-      return fail(422, "bad_window", `${label}: windows must sit between ${String(WAKING_START_HOUR).padStart(2, "0")}:00 and ${WAKING_END_HOUR}:00`);
-    }
-    if (end <= nowMs) return fail(422, "window_in_past", `${label}: that window has already ended`);
-    if (start > nowMs + MAX_DAYS_AHEAD * 24 * 3_600_000) return fail(422, "window_too_far", `${label}: windows must start within the next ${MAX_DAYS_AHEAD} days`);
-    if (start < toMs(CALENDAR_RANGE.start) || end > toMs(CALENDAR_RANGE.end)) {
-      return fail(422, "outside_calendar", `${label}: the demo calendar covers Sun Oct 25 to Sat Oct 31 (US Central), and that window is outside it`);
-    }
-    windows.push({ start: toCentralIso(start), end: toCentralIso(end) });
-  }
-  windows.sort((a, b) => toMs(a.start) - toMs(b.start));
-  for (let index = 1; index < windows.length; index += 1) {
-    if (toMs(windows[index].start) < toMs(windows[index - 1].end)) return fail(422, "windows_overlap", "free windows must not overlap each other");
-  }
-  return { ok: true, value: windows };
-}
+export const CheckPlanInput = z.object({ planId: z.string().min(1, "planId is required").max(64, "planId is too long") });
+export const RespondInput = z.object({ planId: z.string().min(1, "planId is required").max(64, "planId is too long"), decision: z.enum(["accept", "decline"]) });
 
 // ---------------------------------------------------------------------------
 // The room
 // ---------------------------------------------------------------------------
 
-// A judge's Sprout is free in exactly the windows typed and busy otherwise: one marker block says the
-// room sets the whole calendar (the persona's seeded events stay out), then the gaps are busy blocks.
-async function seedRoomCalendar(store: Store, windows: Window[]): Promise<void> {
-  const marker = { id: CALENDAR_SET_BY_ROOM, title: "Calendar set by the person", start: CALENDAR_RANGE.start, end: toCentralIso(toMs(CALENDAR_RANGE.start) + 60_000), private: true };
-  await store.addBusy({ agent: YOU, event: marker });
+// A person is free in exactly the preset's windows and busy otherwise: one marker block says the room sets
+// the whole calendar (the persona's seeded events stay out), then the gaps are busy blocks.
+async function seedRoomCalendar(store: Store, agent: AgentId, windows: Window[]): Promise<void> {
+  const marker = { id: `${CALENDAR_SET_BY_ROOM}_${agent}`, title: "Calendar set by the room", start: CALENDAR_RANGE.start, end: toCentralIso(toMs(CALENDAR_RANGE.start) + 60_000), private: true };
+  await store.addBusy({ agent, event: marker });
   const gaps: Window[] = [];
   let cursor = toMs(CALENDAR_RANGE.start);
   for (const window of windows) {
@@ -170,24 +121,13 @@ async function seedRoomCalendar(store: Store, windows: Window[]): Promise<void> 
   }
   if (cursor < toMs(CALENDAR_RANGE.end)) gaps.push({ start: toCentralIso(cursor), end: CALENDAR_RANGE.end });
   for (const [index, gap] of gaps.entries()) {
-    await store.addBusy({ agent: YOU, event: { id: `room_busy_${index}`, title: "Busy", start: gap.start, end: gap.end, private: true } });
+    await store.addBusy({ agent, event: { id: `room_busy_${agent}_${index}`, title: "Busy", start: gap.start, end: gap.end, private: true } });
   }
 }
 
-function judgeSignal(hint: string | undefined, nowMs: number): Signal {
-  const seeded = rawShawarmaSignal();
-  const clean = hint?.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
-  return {
-    ...seeded,
-    id: newId("sig", nowMs),
-    media: clean ? { ...seeded.media, caption: clean } : seeded.media,
-    provenance: {
-      ...seeded.provenance,
-      note: clean
-        ? "A hint typed by a judge through the connector, shaped like Instagram Graph API media fields; nothing is pulled from Instagram."
-        : seeded.provenance.note,
-    },
-  };
+// Always the seeded, fictional reel: nothing a judge sends can change what the agents read.
+function judgeSignal(nowMs: number): Signal {
+  return { ...rawShawarmaSignal(), id: newId("sig", nowMs) };
 }
 
 // Both agents in one process: Sprout reads the reel and opens, each message is committed through the same
@@ -211,33 +151,36 @@ export type StartPlanView = {
   state: "negotiating";
   you: string;
   friend: string;
+  slots: string;
+  // Sprout's free windows for the preset, the fictional ones printed on /connect.
   free_windows: Array<{ start: string; end: string; label: string }>;
-  reel_hint: "used" | "not given" | "ignored: this server does not take free text";
   expires_in_minutes: number;
   how_to_check: string;
 };
 
 export async function startPlan(raw: unknown, deps: ByomDeps): Promise<Outcome<StartPlanView>> {
+  // Free text and windows of the person's own are refused outright, with a message that says what to send.
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const extra = Object.keys(raw).filter((key) => key !== "slots");
+    if (extra.length > 0) {
+      return fail(400, "bad_input", `start_plan takes only slots (${SLOT_PRESET_NAMES.join(", ")}). It does not accept ${extra.map((key) => `"${key}"`).join(", ")}: send no free text and no windows of your own, only a preset name.`);
+    }
+  }
   const parsed = StartPlanInput.safeParse(raw);
-  if (!parsed.success) return fail(400, "bad_input", z.prettifyError(parsed.error));
+  if (!parsed.success) return fail(400, "bad_input", `slots is required and must be one of: ${SLOT_PRESET_NAMES.join(", ")}.`);
   const now = deps.now();
-  const windows = parseFreeWindows(parsed.data.free_windows, now);
-  if (!windows.ok) return windows;
+  const windows = presetWindows(parsed.data.slots, now);
+  if (windows.sprout.length === 0 || windows.mochi.length === 0) {
+    return fail(422, "slots_expired", "That preset's calendar has already passed. The station's fictional week is over.");
+  }
 
-  // The room: a fresh in-memory store with the simulated friend on, the clock at real now, and Sprout's calendar.
+  // The room: a fresh in-memory store with the simulated friend on, the clock at real now, and both calendars.
   const store = new JsonStore(null);
   const nowIso = toCentralIso(now);
   await store.putRoom({ id: "demo", simulatedFriend: true, resetCount: 0, updatedAt: nowIso });
   await store.setClock({ now: nowIso });
-  await seedRoomCalendar(store, windows.value);
-
-  // Cheap in code, before a single model call: is there any time Mochi could also do?
-  const mochiFree = await ownFreeBlocks(store, FRIEND);
-  if (intersectWindows(windows.value, mochiFree).length === 0) {
-    const horizon = now + MAX_DAYS_AHEAD * 24 * 3_600_000;
-    const suggestions = mochiFree.filter((block) => toMs(block.end) > now && toMs(block.start) < horizon).slice(0, 6).map((block) => ({ ...block, label: describeWindow(block) }));
-    return fail(422, "no_overlap_with_mochi", "None of those windows is a time Mochi could also do. Try one of the times in hint.mochi_is_free.", { hint: { mochi_is_free: suggestions } });
-  }
+  await seedRoomCalendar(store, YOU, windows.sprout);
+  await seedRoomCalendar(store, FRIEND, windows.mochi);
 
   const guard = await guarded(async () => {
     await deps.repo.purgeExpired(now);
@@ -250,11 +193,7 @@ export async function startPlan(raw: unknown, deps: ByomDeps): Promise<Outcome<S
   const slot = reserveRun(RUN_BUDGET_KEY, now);
   if (!slot.ok) return fail(429, "runs_paused", slot.text, { retryAfterSeconds: slot.budget.retryAfterSeconds ?? 60 });
 
-  // Free text is the one thing a judge could put personal details in. BYOM_ALLOW_HINT=0 drops it: the hint
-  // is never stored or read, and the answer says so.
-  const hintAllowed = process.env.BYOM_ALLOW_HINT !== "0";
-  const hint = hintAllowed ? parsed.data.reel_hint : undefined;
-  const signal = judgeSignal(hint, now);
+  const signal = judgeSignal(now);
   const { contextId } = await injectSignal(store, signal, () => now);
   const roomKey = `room_${randomBytes(12).toString("base64url")}`;
   const created = await guarded(async () => deps.repo.create(roomKey, await store.snapshot(), now));
@@ -283,8 +222,8 @@ export async function startPlan(raw: unknown, deps: ByomDeps): Promise<Outcome<S
       state: "negotiating",
       you: displayName(YOU),
       friend: `${displayName(FRIEND)} (a fictional friend played by a model)`,
-      free_windows: windows.value.map((window) => ({ ...window, label: describeWindow(window) })),
-      reel_hint: hint?.trim() ? "used" : parsed.data.reel_hint?.trim() && !hintAllowed ? "ignored: this server does not take free text" : "not given",
+      slots: parsed.data.slots,
+      free_windows: windows.sprout.map((window) => ({ ...window, label: describeWindow(window) })),
       expires_in_minutes: ROOM_TTL_MS / 60_000,
       how_to_check: `Sprout (your Muse's side) and Mochi are negotiating now. Call check_plan with planId "${roomKey}" in about 15 seconds. It says "negotiating" until they agree, then "awaiting_you" with the agreed time and a drafted message. Then ask the person, and call respond with decision "accept" or "decline".`,
     },
@@ -326,7 +265,6 @@ export type PlanView = {
   whatsapp_draft: string | null;
   whatsapp_link: string | null;
   dropped_reason: string | null;
-  hint?: unknown;
   next: string;
 };
 
@@ -342,7 +280,7 @@ function planView(roomKey: string, snapshot: StateSnapshot, nowMs: number): Plan
   const ageMs = nowMs - toMs(plan.createdAt);
   if (plan.state === "dropped") {
     state = "dropped";
-    next = plan.dropReason === "no_overlap" ? "They found no time that works for both. Start a new plan with different free windows." : "This plan ended. Start a new plan if the person wants to try again.";
+    next = plan.dropReason === "no_overlap" ? "They found no time that works for both. Start a new plan, with the same or another slots preset." : "This plan ended. Start a new plan if the person wants to try again.";
   } else if (plan.state === "awaiting_humans") {
     if (youDecided === "pending") {
       state = "awaiting_you";
@@ -413,12 +351,7 @@ export async function checkPlan(raw: unknown, deps: ByomDeps): Promise<Outcome<P
     const flushed = await guarded(() => opened.value.flush());
     if (!flushed.ok) return flushed;
     const snapshot = await opened.value.store.snapshot();
-    const view = planView(roomKey, snapshot, deps.now());
-    if (view.dropped_reason === "no_overlap") {
-      const mochiFree = await ownFreeBlocks(opened.value.store, FRIEND);
-      view.hint = { mochi_is_free: mochiFree.slice(0, 6).map((block) => ({ ...block, label: describeWindow(block) })) };
-    }
-    return { ok: true, value: view } as const;
+    return { ok: true, value: planView(roomKey, snapshot, deps.now()) } as const;
   });
 }
 
