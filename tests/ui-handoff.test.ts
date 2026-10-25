@@ -21,15 +21,31 @@ describe("the calendar row", () => {
     expect(html).not.toContain(CHECK);
   });
 
-  it("reads Added to your calendar with the check and a secondary Change plans after the Google link was tapped", () => {
-    const html = renderToStaticMarkup(createElement(HoldRow, { ...hold, initiallyAdded: "google" }));
-    expect(text(html)).toContain("Added to your calendar");
+  it("collapses to a one-row confirmation after the Google link was tapped: the blue check, On your calendar, the plan, and Change plans", () => {
+    const html = renderToStaticMarkup(createElement(HoldRow, { ...hold, when: "Tue 6 to 8 PM", initiallyAdded: "google" }));
+    expect(text(html)).toContain("On your calendar");
+    expect(text(html)).toContain("Shawarma with Michelle, Tue 6 to 8 PM");
     expect(text(html)).toContain("Change plans");
     expect(html).toContain(CHECK);
+    expect(html).not.toContain("lucide-calendar-plus");
     expect(text(html)).not.toContain(copy.holdGoogle);
+    expect(text(html)).not.toContain(copy.holdAction);
+    // The done-card row: radius 18, the soft shadow, at least 56px tall, the check at 20px, Change plans as a 28px pill.
+    expect(html).toContain("rounded-[18px]");
+    expect(html).toContain("min-h-14");
+    expect(html).toContain("shadow-[0_2px_10px_rgba(0,0,0,0.06)]");
+    expect(html).toContain("size-5");
+    expect(html).toContain("h-7");
+    expect(html).not.toContain("rounded-card");
   });
 
-  it("keeps the second tap working: the status is the same link, so it opens the event again", () => {
+  it("names just the plan when it has no time to say", () => {
+    const html = renderToStaticMarkup(createElement(HoldRow, { ...hold, initiallyAdded: "ics" }));
+    expect(text(html)).toContain("Shawarma with Michelle");
+    expect(text(html)).not.toMatch(/Shawarma with Michelle, /);
+  });
+
+  it("keeps the second tap working: the check and title are the same link, so it opens the event again", () => {
     const google = renderToStaticMarkup(createElement(HoldRow, { ...hold, initiallyAdded: "google" }));
     expect(google).toContain(`href="${attr(googleUrl)}"`);
     const ics = renderToStaticMarkup(createElement(HoldRow, { ...hold, initiallyAdded: "ics" }));

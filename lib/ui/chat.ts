@@ -1,6 +1,6 @@
 import { copy, onboardingCopy } from "./copy";
 import { googleCalendarUrl } from "./gcal";
-import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, listOf, namesFor } from "./format";
+import { daySeparatorFor, formatSpokenHour, formatWindow, formatWindowSpoken, listOf, namesFor } from "./format";
 import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib/seed/past-signals";
 import type { OnboardingState } from "./onboarding";
 import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
@@ -35,7 +35,7 @@ export type ChatItem =
   | { kind: "outcome-replies"; id: string; planId: string }
   | { kind: "collapsed"; id: string; text: string; check?: boolean }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
-  | { kind: "hold-row"; id: string; title: string; planId: string; googleUrl: string | null }
+  | { kind: "hold-row"; id: string; title: string; when: string; planId: string; googleUrl: string | null }
   | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend" | "plan-trip"; friendName: string }
   | { kind: "contact-entry"; id: string }
   | { kind: "onboarding-friends"; id: string }
@@ -234,6 +234,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
           kind: "hold-row",
           id: "hold-row",
           title: copy.holdTitle(plan.activityTitle, withWhom),
+          when: formatWindow(plan.window),
           planId: plan.id,
           googleUrl: googleCalendarUrl({
             title: copy.holdTitle(plan.activityTitle, withWhom),

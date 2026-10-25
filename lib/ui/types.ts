@@ -312,6 +312,8 @@ export type UiSnapshot = {
   recording?: UiRecording;
   /** True when side b is played by the model instead of a second human. */
   simulatedFriend: boolean;
+  /** While she is simulated: the id of the model that plays her, from the proof on her latest model-played message, else the configured model. */
+  simulatedFriendModel?: string;
   /**
    * Who side b's person is when it is not the Muse's own persona: the simulated friend, or the contact the
    * person chose to follow up with. Their name replaces the persona's in sentences, and they get an initial disc.

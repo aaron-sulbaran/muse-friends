@@ -74,7 +74,7 @@ export const copy = {
   holdTitle: (activity: string, friend: string) => `${activity} with ${friend}`,
   holdAction: "Add to calendar",
   holdGoogle: "Add to Google Calendar",
-  holdAdded: "Added to your calendar",
+  holdOnCalendar: "On your calendar",
   holdChangePlans: "Change plans",
   /** A person's own words to the friend; the Muse never sends it. */
   changePlansDraft: "Hey, can we change our plans?",
@@ -242,6 +242,8 @@ export const copy = {
   replayStart: "Watch a recorded run",
   simulatedClock: "Simulated clock",
   simulatedFriendBanner: "Simulated friend, fictional, played by a model",
+  // With the model named: "Muse Spark 1.3", or the fallback that actually answered.
+  simulatedFriendBannerModel: (model: string) => `Simulated friend, fictional, played by ${model}`,
 
   // The opening moment after onboarding (D26): the reel arrives, Sprout reads it, and the offer lands.
   openingSenderLine: (friend: string) => `${capital(friend)} sent you a reel`,

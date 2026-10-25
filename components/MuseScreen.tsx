@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
 import { discInitials, formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
+import { modelLabel } from "@/lib/ui/model-name";
 import { postChat, postDecision, postHandoff, postPrivacy, postReplan, postSignal, postSimulatedFriendSwitch, type Result } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import { runInProgress } from "@/lib/ui/entry";
@@ -291,7 +292,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "outcome-replies":
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
-        return <HoldRow planId={item.planId} role={role} title={item.title} googleUrl={item.googleUrl} disabled={readOnly} />;
+        return <HoldRow planId={item.planId} role={role} title={item.title} when={item.when} googleUrl={item.googleUrl} disabled={readOnly} />;
       case "payment-card":
         return <PaymentCard payment={item.payment} side={item.side} friendName={item.friendName} friendMuse={item.friendMuse} onOpen={onOpenPayment} />;
       case "settle-card":
@@ -322,7 +323,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       {simulated && role === "b" ? (
         <p className="flex shrink-0 items-center justify-center gap-2 bg-group px-4 py-2 text-center text-[13px] font-semibold">
           <SimulatedFriendDisc size={20} />
-          {copy.simulatedFriendBanner}
+          {snapshot.simulatedFriendModel ? copy.simulatedFriendBannerModel(modelLabel(snapshot.simulatedFriendModel)) : copy.simulatedFriendBanner}
         </p>
       ) : null}
       {tab === "chat" ? (
