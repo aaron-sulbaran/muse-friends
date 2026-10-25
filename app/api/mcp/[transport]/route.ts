@@ -14,7 +14,7 @@ const mcpHandler = createMcpHandler(
       {
         title: "Get Muse Friends status",
         description:
-          "Reports that the Muse Friends service is reachable, which connector account this key belongs to, and a count summary of the stored threads, messages, plans, cards, and activity events. Takes no arguments and changes nothing.",
+          "Reports whether the Muse Friends service and its store are reachable, which connector account this key belongs to, and counts of the stored threads, messages, plans, cards, and activity events (never their content). Takes no arguments and changes nothing.",
         inputSchema: z.object({}),
       },
       async (_args, ctx) => {

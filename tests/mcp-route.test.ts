@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/mcp/route";
 
@@ -22,13 +25,21 @@ async function readRpcResult(response: Response) {
 }
 
 describe("POST /api/mcp", () => {
+  const shared = globalThis as typeof globalThis & { __museStore?: unknown };
+
   beforeEach(() => {
     vi.stubEnv("MCP_TOKEN_A", tokenA);
     vi.stubEnv("MCP_TOKEN_B", tokenB);
+    // The tool reads whatever store getStore() returns; keep it the local JSON store in a temp file
+    // so no test can reach the production store or the demo room.
+    vi.stubEnv("STORE", "json");
+    vi.stubEnv("STORE_PATH", path.join(mkdtempSync(path.join(tmpdir(), "muse-mcp-")), "store.json"));
+    delete shared.__museStore;
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    delete shared.__museStore;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
@@ -58,6 +69,7 @@ describe("POST /api/mcp", () => {
     const message = await readRpcResult(response);
     const status = JSON.parse(message.result.content[0].text);
     expect(status).toMatchObject({ ok: true, service: "muse-friends", account: "b" });
+    expect(status.store).toEqual({ kind: "json", threads: 0, messages: 0, plans: 0, cards: 0, events: 0 });
   });
 
   it("accepts the token in x-api-key too", async () => {
@@ -65,6 +77,16 @@ describe("POST /api/mcp", () => {
     expect(response.status).toBe(200);
     const status = JSON.parse((await readRpcResult(response)).result.content[0].text);
     expect(status.account).toBe("a");
+  });
+
+  it("never writes a key into the logs", async () => {
+    await rpc(callGetStatus, { authorization: `Bearer ${tokenA}` });
+    await rpc(callGetStatus, { authorization: `Bearer ${"c".repeat(48)}` });
+    const logged = JSON.stringify(vi.mocked(console.log).mock.calls);
+    expect(logged).not.toContain(tokenA);
+    expect(logged).not.toContain("c".repeat(48));
+    expect(logged).toContain("accepted=true");
+    expect(logged).toContain("accepted=false");
   });
 
   it("lists exactly one tool", async () => {
