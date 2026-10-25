@@ -39,7 +39,7 @@ export function Stage() {
   const names = snapshot ? namesFor(snapshot) : null;
 
   return (
-    <div className="flex min-h-(--stage-h,100dvh) flex-col bg-linear-to-b from-surface to-stage-end">
+    <div className="flex h-(--stage-h,100dvh) flex-col overflow-hidden bg-linear-to-b from-surface to-stage-end">
       <TopBar snapshot={snapshot} />
       {showPaused ? (
         <PausedNotice
@@ -51,9 +51,7 @@ export function Stage() {
           className="mx-12 mb-2"
         />
       ) : null}
-      <main
-        style={{ "--chrome": showPaused ? "152px" : "104px" } as React.CSSProperties}
-        className="grid h-[calc(var(--stage-h,100dvh)-var(--chrome))] flex-none grid-cols-[minmax(0,1fr)_minmax(440px,520px)_minmax(0,1fr)] gap-10 px-12 pb-4">
+      <main className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(440px,520px)_minmax(0,1fr)] gap-10 px-12 pb-4">
         <div className="min-h-0">
           {snapshot ? (
             <FitPhone label={`${names?.muse.aaron ?? "Sprout"}'s side`}>
