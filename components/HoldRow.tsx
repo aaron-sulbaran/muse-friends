@@ -34,10 +34,9 @@ export function HoldRow({ planId, role, title, googleUrl, when, disabled = false
   const [added, setAdded] = useState<CalendarRoute | null>(initiallyAdded ?? null);
   const icsHref = `/api/plans/${planId}/hold.ics?role=${role}`;
   const taken = added === "google" && googleUrl ? "google" : added === "ics" ? "ics" : null;
-  // The swap waits one tick, so the browser follows the link that was tapped before the buttons are replaced.
-  const take = (route: CalendarRoute) => {
-    setTimeout(() => setAdded(route), 0);
-  };
+  // The row swaps its buttons once one is tapped. Swapping inside the click detaches the tapped link before the
+  // browser follows it (and "Change plans", the WhatsApp link, can land under the pointer), so wait a tick.
+  const markAdded = (route: CalendarRoute) => setTimeout(() => setAdded(route), 0);
 
   if (taken && !disabled) {
     const detail = when ? `${title}, ${when}` : title;
@@ -91,11 +90,11 @@ export function HoldRow({ planId, role, title, googleUrl, when, disabled = false
           </>
         ) : (
           <>
-            <a href={icsHref} download="hold.ics" onClick={() => take("ics")} className={`${pill} hover:bg-bubble-muse`}>
+            <a href={icsHref} download="hold.ics" onClick={() => markAdded("ics")} className={`${pill} hover:bg-bubble-muse`}>
               {copy.holdAction}
             </a>
             {googleUrl ? (
-              <a href={googleUrl} target="_blank" rel="noopener noreferrer" onClick={() => take("google")} className={`${pill} hover:bg-bubble-muse`}>
+              <a href={googleUrl} target="_blank" rel="noopener noreferrer" onClick={() => markAdded("google")} className={`${pill} hover:bg-bubble-muse`}>
                 {copy.holdGoogle}
               </a>
             ) : null}
