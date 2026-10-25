@@ -9,6 +9,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
   contact_chosen: { icon: Users, title: "Asked to follow up" },
   contact_refused: { icon: UserMinus, title: "Did not reach out", plain: true },
   busy_added: { icon: CalendarX, title: "Marked a time busy" },
+  reel_source: { icon: Film, title: "Where the reel came from" },
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */

@@ -22,6 +22,8 @@ export type PastSignal = {
   image?: string;
   /** The reel's address. An instagram.com reel address shows as Instagram's embed; anything else keeps the card. */
   permalink?: string;
+  /** True when this reel was read live from its owner's Instagram instead of seeded. */
+  live?: boolean;
   /** The friend's side of the share, read by side a ("Michelle sent you ..."). */
   sentLine: (friend: string) => string;
   /** The same share as side b sees it. */

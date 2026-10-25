@@ -111,7 +111,7 @@ export type UiRefusal = { id: string; at: string; contactName: string; text: str
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "contact_chosen" | "contact_refused";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "contact_chosen" | "contact_refused" | "reel_source";
   at: string;
   text: string;
 };
@@ -125,6 +125,9 @@ export type SharingSettings = {
   tier: ShareTier;
   categories: Record<Category, boolean>;
 };
+
+/** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
+export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
 
 export type UiSnapshot = {
   /** The demo clock, ISO. */
@@ -148,6 +151,8 @@ export type UiSnapshot = {
   /** The latest time the gate refused to start, while no plan is running; null otherwise. */
   refusal: UiRefusal | null;
   plan: UiPlan | null;
+  /** The demo reel read live from Instagram, or null for the seeded one. */
+  reel: UiReel | null;
   followThrough: {
     /** Plans that happened: the only thing the counter counts. */
     events: FollowThroughEvent[];

@@ -207,7 +207,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} onPaused={onPaused} />;
       case "reel-card":
-        return <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={copy.reelLabel} />;
+        return <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={item.live ? copy.reelLiveLabel : copy.reelLabel} />;
       case "agreed-line":
         // On the stage, Activity already sits between the phones; a phone on its own opens it as a sheet.
         return standalone ? <AgreedLine first={item.first} second={item.second} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
