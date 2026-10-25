@@ -99,6 +99,10 @@ describe("AgentMessage", () => {
       expect(parse({ type: "counter", windows: undefined, reason: "no_overlap" }).success).toBe(true);
     });
 
+    it("decline can say the friend is not interested", () => {
+      expect(parse({ type: "decline", windows: undefined, reason: "not_interested" }).success).toBe(true);
+    });
+
     it("decline carries no windows", () => {
       expect(parse({ type: "decline", windows: undefined, reason: "no_overlap" }).success).toBe(true);
       expect(parse({ type: "decline", windows: [tuesday] }).success).toBe(false);

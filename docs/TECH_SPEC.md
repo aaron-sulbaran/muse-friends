@@ -1,6 +1,6 @@
 # Muse Friends: technical spec
 
-Status: draft v2, Sat Oct 24, 2026, after the feasibility research. Product requirements are in [PRD.md](PRD.md); requirement ids (R1 and so on) refer to it.
+Status: v2.1, Sat Oct 24, 2026. Smoke tests 1 to 3 passed on live Muse Spark at 8:45pm (ping 1.9s; tool called 10 of 10 times, zod accepted 9 first try and 1 after one repair). Product requirements are in [PRD.md](PRD.md); requirement ids (R1 and so on) refer to it.
 
 ## Stack
 
@@ -108,11 +108,11 @@ Tools:
 | `surface_to_human(planId, card)` | Creates a recommendation card for this agent's human |
 | `update_plan(planId, transition)` | Moves the plan through its lifecycle |
 
-The runtime drives each turn with the Responses API, as one `previous_response_id` chain:
+The runtime drives each turn with the Responses API in stateless mode, which Meta recommends and which measured far faster on Oct 24: 0.3 to 1.0 seconds per follow-up call, against 9 to 12.5 seconds for a `previous_response_id` chain (n=11, any output size).
 
-1. The first `client.responses.create` call sends the system prompt as `instructions`, the tools, `reasoning: { effort: "low" }`, and the thread history rebuilt from the Store as input.
-2. For each `function_call` in the response, the runtime runs the handler and returns a `function_call_output` with the same `call_id`.
-3. Every follow-up call sends only those new items plus `previous_response_id`, and resends `instructions`, `tools`, and the reasoning effort, because the chain does not carry them. A just-finished response can briefly answer a chain call with a `400` or `404`; retry after a short pause.
+1. The first `client.responses.create` call sends the system prompt as `instructions`, the tools, `reasoning: { effort: "low" }`, `store: false`, `include: ["reasoning.encrypted_content"]`, and the thread history rebuilt from the Store as input.
+2. For each `function_call` in the response, the runtime runs the handler and appends a `function_call_output` with the same `call_id`.
+3. Every follow-up call replays the previous output items, including the encrypted reasoning items, plus the new outputs as input, and resends `instructions`, `tools`, and the reasoning effort. If a replayed reasoning item is rejected with a `400`, the runtime drops the reasoning items and retries once. `MODEL_CHAIN_MODE=chain` switches to the `previous_response_id` chain for comparison only.
 4. A response with no `function_call` ends the turn.
 
 Temperature stays unset. Tool arguments are not guaranteed to validate, so every handler zod-parses its own arguments, and a failure goes back to the model as tool output so it can repair the call. The message schema is the parameters of the `send_to_friend_agent` tool (see Protocol); those parameter schemas omit `strict: true`, since optional fields cannot satisfy it, and the zod parse is the enforcement. `text.format` is not used with tools.
@@ -158,7 +158,7 @@ detected -> negotiating -> awaiting_humans -> confirmed -> scheduled -> reminded
 Smoke tests, in this order, once `MODEL_API_KEY` is set (test 6 needs no key and can run in parallel):
 
 1. **Billing and latency.** `POST https://api.meta.ai/v1/responses` with `Authorization: Bearer $MODEL_API_KEY` and `{"model":"muse-spark-1.3","input":"ping","reasoning":{"effort":"low"}}`. Pass: `200` with text; record the seconds. A `402 billing_not_configured` blocks everything after it.
-2. **Tool loop.** Declare `get_my_calendar`, return a `function_call_output`, and chain with `previous_response_id`, resending `instructions`, `tools`, and the effort. Pass: parseable JSON arguments, and final text on the second call; a brief `400` or `404` on chaining retries cleanly.
+2. **Tool loop.** Declare `get_my_calendar`, return a `function_call_output`, and make the follow-up call stateless (`store: false`, reasoning items replayed), resending `instructions`, `tools`, and the effort. Pass: parseable JSON arguments, and final text on the second call in about a second. Measured Oct 24: stateless median 1.3 seconds for the two-call turn; the `previous_response_id` chain median 11.0 seconds.
 3. **Message as tool arguments.** Declare `send_to_friend_agent` with the message schema and run it 10 times. Pass: the model calls the tool every time and zod parses the arguments (or repairs them in one re-prompt). Try `text.format` plus tools once; the design does not depend on it. `zodTextFormat` is unverified; the fallback is `z.toJSONSchema`.
 4. **Inbox end to end.** Two agents, the seeded scenario from the PRD. Pass: the inbox answers `202` before the model returns; the thread reaches `awaiting_humans` in 4 messages; no `504`.
 5. **Privacy gate.** Seed a private event title and a location-off category. Pass: no private string in any delivered message; the redaction is logged; an invented window is dropped.
