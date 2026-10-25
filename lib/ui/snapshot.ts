@@ -6,7 +6,7 @@ import { displayName } from "@/lib/seed/personas";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiSnapshot, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -298,6 +298,13 @@ export function forRole(snapshot: UiSnapshot, role: string | null | undefined): 
   return { ...snapshot, chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked") };
 }
 
+/** The latest caption read: what the model found, not the sentence the timeline says about it. */
+function reelReadFor(state: StateSnapshot): UiReelRead | null {
+  const extracted = state.signals.findLast((signal) => signal.extracted !== undefined)?.extracted;
+  if (!extracted || (!extracted.place && !extracted.area && !extracted.hours)) return null;
+  return { place: extracted.place ?? null, area: extracted.area ?? null, hours: extracted.hours ?? null };
+}
+
 export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnapshot {
   const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
@@ -321,6 +328,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     inFlight: deriveInFlight(state, plan),
     budget: overlay.budget ?? null,
     reel: reelFor(state, overlay.liveReel ?? null),
+    reelRead: reelReadFor(state),
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
     wallets: { aaron: walletFor("aaron", state), lisa: walletFor("lisa", state) },

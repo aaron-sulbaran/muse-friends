@@ -48,7 +48,8 @@ export function settleOffer(
 ): SettleOffer {
   if (!plan || !snapshot.sandbox.enabled) return { kind: "hidden" };
   if (plan.state === "detected" || plan.state === "negotiating" || plan.state === "awaiting_humans" || plan.state === "dropped") return { kind: "hidden" };
-  if (snapshot.payments.some((payment) => payment.planId === plan.id && payment.status === "sent")) return { kind: "waiting" };
+  // A payment waiting on the friend, or a proposal still waiting on the person (or failed and retryable), is the one open payment.
+  if (snapshot.payments.some((payment) => payment.planId === plan.id && (payment.status === "sent" || payment.status === "proposed" || payment.status === "failed"))) return { kind: "waiting" };
   const scope = snapshot.paymentsScope[agent];
   const event = plan.activityTitle ? eventLabel({ activityTitle: plan.activityTitle, window: plan.window ?? null }) : null;
   return scope.enabled && scope.cap > 0 ? { kind: "ready", cap: scope.cap, event } : { kind: "turn_on", event };
@@ -102,15 +103,10 @@ function splitText(split: SplitFacts | undefined): string {
   return `receipt ${formatDollars(split.receiptTotal)}, split ${WAYS[split.ways] || split.ways} ways`;
 }
 
-/** The settle card's sentence for a payment that has an amount: who is asking, how much, why, and what the cap allows. */
-export function proposalSentence(input: { friend: string; amount: number; reason: string; cap: number; breakdown?: SplitFacts }): string {
-  return `${input.friend}'s Muse is asking for ${formatDollars(input.amount)}, ${input.reason} (${splitText(input.breakdown)}). Your Muse can send up to ${formatDollars(input.cap)} without asking again.`;
-}
-
-/** The settle card's sentence before any payment has an amount: what is being settled, and how far the cap lets the Muse go. */
+/** The settle card's sentence before any payment has an amount: what is being settled, that the person is asked first, and the cap. */
 export function settleDetailFor(input: { cap: number; event: string | null | undefined; friendMuse: string }): string {
   const share = input.event ? `your share of ${input.event}` : "your share";
-  return `Your Muse will work out ${share} and can send up to ${formatDollars(input.cap)} without asking again. ${input.friendMuse} accepts it or sends it back.`;
+  return `Your Muse works out ${share} and asks you before anything is sent, up to ${formatDollars(input.cap)}. ${input.friendMuse} accepts it or sends it back.`;
 }
 
 /** The line that sits above the ledger's JSON in the payment drawer: who paid whom, how much, what for, where it stands. */

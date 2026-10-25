@@ -1,6 +1,7 @@
 import { CalendarX, Film, MessageCircle, Receipt, Shield, ShieldAlert, TriangleAlert, Undo2, Wallet, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
+import { ToolsCalled } from "./ToolsCalled";
 
 const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string }> = {
   caption_extracted: { icon: Film, title: "Read the reel caption" },
@@ -35,6 +36,7 @@ export function ActivityNote({ note }: { note: UiNote }) {
             <span className="shrink-0 text-[12px] leading-4 text-muted">{formatTimeWithSeconds(note.at)}</span>
           </span>
           <span className="mt-0.5 block text-[13px] leading-[18px] text-muted">{note.text}</span>
+          {note.toolCalls && note.toolCalls.length > 0 ? <ToolsCalled calls={note.toolCalls} /> : null}
         </span>
       </div>
     </li>

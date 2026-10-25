@@ -139,6 +139,37 @@ describe("a Muse's private word to its own person", () => {
   });
 });
 
+describe("your private conversation with your Muse", () => {
+  const chat = [
+    { id: "chat_1", from: "user" as const, text: "Why Tuesday and not Thursday?", at: "2026-10-25T14:01:00-05:00" },
+    { id: "chat_2", from: "muse" as const, text: "Class runs until 9 on Thursday.", at: "2026-10-25T14:01:01-05:00", replyTo: "chat_1" },
+  ];
+  const asked = { ...agreed(), chat };
+
+  it("shows your question on your side, and its answer as an aside from your Muse, both only for you", () => {
+    const lines = threadLines(asked, "a").filter((line) => line.id.startsWith("thread-chat-"));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ sender: { kind: "you" }, onlyYou: true, to: "Sprout", text: "Why Tuesday and not Thursday?" });
+    expect(lines[1]).toMatchObject({ sender: { kind: "your-muse", name: "Sprout" }, onlyYou: true, text: "Class runs until 9 on Thursday." });
+    expect(lines[1].to).toBeUndefined();
+  });
+
+  it("puts them where they happened among the Muses' turns", () => {
+    const early = { ...asked, chat: chat.map((entry) => ({ ...entry, at: entry.at.replace("14:01", "14:00").replace(":00-05", ":15-05") })) };
+    const ids = threadLines(early, "a").map((line) => line.id);
+    expect(ids.indexOf("thread-msg_shawarma_002")).toBeLessThan(ids.indexOf("thread-chat-chat_1"));
+    expect(ids.indexOf("thread-chat-chat_1")).toBeLessThan(ids.indexOf("thread-msg_shawarma_005"));
+  });
+
+  it("never shows a chat on the other phone", () => {
+    expect(threadLines(asked, "b").some((line) => line.id.startsWith("thread-chat-"))).toBe(false);
+  });
+
+  it("is empty until the first question", () => {
+    expect(threadLines({ ...agreed(), chat: [] }, "a").some((line) => line.id.startsWith("thread-chat-"))).toBe(false);
+  });
+});
+
 describe("runs of the same sender", () => {
   const line = (kind: ThreadLine["sender"]["kind"], name: string): ThreadLine => ({ id: `${kind}-${name}`, sender: { kind, name, owner: "x" }, text: "t" });
 

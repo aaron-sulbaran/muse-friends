@@ -41,6 +41,8 @@ describe("GET /api/state?role=", () => {
     const body = JSON.parse(text);
     expect(body.chat).toEqual([]);
     expect(body.notes.some((note: { kind: string }) => note.kind === "chat_asked")).toBe(false);
+    // Only the chat is taken out: the rest of the snapshot (the reel read, the wallets, the plan) is still there.
+    for (const key of ["reelRead", "wallets", "payments", "plan", "sharing", "reel"]) expect(body, key).toHaveProperty(key);
   });
 
   it("keeps the full view for the stage and the gate (no role) and for side a", async () => {
