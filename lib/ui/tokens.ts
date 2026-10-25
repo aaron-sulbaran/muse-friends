@@ -57,5 +57,5 @@ export const lifecycleSteps: ReadonlyArray<{ state: Exclude<PlanState, "dropped"
   { state: "scheduled", label: "On calendar" },
   { state: "reminded", label: "Reminded" },
   { state: "happened", label: "Happened" },
-  { state: "followed_up", label: "Again?" },
+  { state: "followed_up", label: "Made it?" },
 ];

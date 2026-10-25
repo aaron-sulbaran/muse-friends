@@ -4,6 +4,8 @@ import { advanceClock, decide, recordHandoff } from "@/lib/agent/lifecycle";
 import { SHAWARMA_PLAN_ID, recordedSnapshot } from "@/lib/seed/fixtures";
 import { JsonStore } from "@/lib/store/json";
 import { viewForRole } from "@/lib/ui/chat";
+import { ruleChoice } from "@/lib/ui/next-idea";
+import { recordOutcome } from "@/lib/ui/outcome";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 
 const live = { mode: "live" } as const;
@@ -35,7 +37,10 @@ describe("the UI over Lane A's real lifecycle and controls", () => {
     await advanceClock(store, { step: "next_day" });
     const followedUp = await ui(store);
     expect(followedUp.plan?.state).toBe("followed_up");
-    expect(followedUp.followThrough.events).toHaveLength(1);
+    expect(followedUp.followThrough.events).toHaveLength(0);
+    const answered = await recordOutcome(store, { planId: SHAWARMA_PLAN_ID, role: "a", result: "went" }, { chooser: async () => ruleChoice() });
+    expect(answered.ok).toBe(true);
+    expect((await ui(store)).followThrough.events).toHaveLength(1);
   });
 
   it("shows the sharing replay in place: same message, withheld stamp, card says place kept private", async () => {
