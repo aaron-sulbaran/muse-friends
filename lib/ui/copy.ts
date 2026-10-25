@@ -126,5 +126,21 @@ export const copy = {
     gotIt: "Got it",
     turnOnAnytime: "Turn it on anytime in Sharing.",
     needsFriends: (friend: string) => `Want to plan this with ${friend}? That needs Friends.`,
+
+    // Screen 2: who can the Muse talk to.
+    whoTitle: "Who can your Muse talk to?",
+    whoLine: "Close friends share more. Friends share less. Nobody is added unless you add them.",
+    syncTitle: "Sync your close friends from Instagram",
+    syncLine: "Brings in the Close Friends list you made there. Seeded for this demo.",
+    pickTitle: "Pick friends",
+    pickLine: "Choose people one by one.",
+    notTold: "They are not told which group they are in.",
+    syncedTitle: "Your close friends",
+    seededChip: "Seeded for this demo",
+    syncedLine: "From the Close Friends list you made on Instagram. Change anyone.",
+    onCloseFriends: "On your Instagram Close Friends",
+    back: "Back",
+    continue: "Continue",
+    whoOf: (friend: string) => `Who ${friend} is to you`,
   },
 } as const;

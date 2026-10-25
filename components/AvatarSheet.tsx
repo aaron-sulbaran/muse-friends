@@ -4,8 +4,9 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { postPrivacy, type PrivacyChange } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import type { Category, ShareTier, SharingSettings } from "@/lib/ui/types";
+import type { Category, SharingSettings } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
+import { TierControl } from "./TierControl";
 
 type Props = {
   /** The Muse whose sharing this is, and the friend it is shared with. */
@@ -18,12 +19,6 @@ type Props = {
   onChanged: () => void;
   onClose: () => void;
 };
-
-const tiers: ReadonlyArray<{ value: ShareTier; label: string }> = [
-  { value: "close", label: "Close friend" },
-  { value: "friend", label: "Friend" },
-  { value: "off", label: "Off" },
-];
 
 const categories: ReadonlyArray<{ value: Category; label: string; fixedOn?: string }> = [
   { value: "food", label: "Food and places" },
@@ -98,27 +93,14 @@ export function AvatarSheet({ museName, friendMuseName, sharing, onOpenActivity,
           </button>
         </header>
 
-        <fieldset className="mt-5">
-          <legend className="sr-only">Who {friendMuseName} is to {museName}</legend>
-          <div className="flex gap-1 rounded-full bg-group p-1">
-            {tiers.map(({ value, label }) => (
-              <label key={value} className="flex-1">
-                <input
-                  type="radio"
-                  name="tier"
-                  value={value}
-                  checked={sharing.tier === value}
-                  disabled={pending || value === "off"}
-                  onChange={() => change({ tier: value })}
-                  className="peer sr-only"
-                />
-                <span className="block cursor-pointer rounded-full px-2 py-1.5 text-center text-[13px] font-semibold text-muted transition-colors peer-checked:bg-surface peer-checked:text-ink peer-checked:shadow-float peer-disabled:cursor-default peer-disabled:opacity-50 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
-                  {label}
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <div className="mt-5">
+          <TierControl
+            value={sharing.tier}
+            onChange={(tier) => change({ tier })}
+            label={`Who ${friendMuseName} is to ${museName}`}
+            disabled={(tier) => pending || tier === "off"}
+          />
+        </div>
 
         <ul className="mt-3 divide-y divide-bezel-line">
           {categories.map(({ value, label, fixedOn }) => (

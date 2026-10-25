@@ -1,0 +1,51 @@
+"use client";
+
+import { useId } from "react";
+import type { ShareTier } from "@/lib/ui/types";
+
+type Props = {
+  value: ShareTier;
+  onChange: (tier: ShareTier) => void;
+  /** The group's accessible name, e.g. who a friend is to the person. Read out, never shown. */
+  label: string;
+  /** Tighter padding, for a control inside every row of a list. */
+  compact?: boolean;
+  /** Tiers that cannot be picked right now (the avatar sheet keeps Off out of reach in the demo). */
+  disabled?: (tier: ShareTier) => boolean;
+};
+
+export const TIER_OPTIONS: ReadonlyArray<{ value: ShareTier; label: string }> = [
+  { value: "close", label: "Close friend" },
+  { value: "friend", label: "Friend" },
+  { value: "off", label: "Off" },
+];
+
+/** The three-way "Close friend, Friend, Off" control: the avatar sheet's, and one per row of the friends list. */
+export function TierControl({ value, onChange, label, compact = false, disabled }: Props) {
+  const group = useId();
+  return (
+    <fieldset>
+      <legend className="sr-only">{label}</legend>
+      <div className="flex gap-1 rounded-full bg-group p-1">
+        {TIER_OPTIONS.map((option) => (
+          <label key={option.value} className="flex-1">
+            <input
+              type="radio"
+              name={group}
+              value={option.value}
+              checked={value === option.value}
+              disabled={disabled?.(option.value) ?? false}
+              onChange={() => onChange(option.value)}
+              className="peer sr-only"
+            />
+            <span
+              className={`block cursor-pointer rounded-full px-2 text-center text-[13px] font-semibold text-muted transition-colors peer-checked:bg-surface peer-checked:text-ink peer-checked:shadow-float peer-disabled:cursor-default peer-disabled:opacity-50 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent ${compact ? "py-1" : "py-1.5"}`}
+            >
+              {option.label}
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
