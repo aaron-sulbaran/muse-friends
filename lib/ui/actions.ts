@@ -46,6 +46,21 @@ export function postGroupSignal() {
   return post("/api/signals", { scenario: "group" });
 }
 
+/** "Make this happen" for the group chat that never left the chat: Sprout plans a trip months out for three (lib/agent/trip.ts). */
+export function postTripSignal() {
+  return post("/api/signals", { scenario: "trip" });
+}
+
+/** A person answers the trip's bounded question: yes, no, or their own limit in whole dollars. */
+export function postTripAnswer(planId: string, member: MemberId, answer: "yes" | "no" | "limit", limit?: number) {
+  return post("/api/trip/answer", { planId, member, answer, ...(limit === undefined ? {} : { limit }) });
+}
+
+/** A person confirms their own pot deposit and joins ("in"), or passes ("out"). Money moves only on "in". */
+export function postTripJoin(planId: string, member: MemberId, choice: "in" | "out") {
+  return post("/api/trip/join", { planId, member, choice });
+}
+
 /** Pebble has no phone, so the coordinator's phone answers for them. Any member can be named; the server refuses a second answer. */
 export function postMemberDecision(planId: string, member: MemberId, choice: "accept" | "decline") {
   return post(`/api/plans/${planId}/member-decision`, { member, choice });

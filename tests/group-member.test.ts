@@ -7,7 +7,7 @@ import { decide } from "@/lib/agent/lifecycle";
 import type { Plan } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { JsonStore } from "@/lib/store/json";
-import { memberDecides, memberInstructions } from "@/lib/ui/group";
+import { memberDecides, memberInstructions } from "@/lib/ui/group-players";
 import { installFakeModel, removeFakeModel } from "./helpers/fakeModel";
 
 // Kai, the third person of a plan for three, is played by a model when one judge plays alone: the same shape as

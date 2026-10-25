@@ -14,7 +14,7 @@ export function useSimulatedFriend(snapshot: UiSnapshot | null, onChanged: () =>
   useSimulatedMember(snapshot, onChanged, enabled, onPaused);
   const asked = useRef(new Set<string>());
   const plan = snapshot?.plan ?? null;
-  const waiting = enabled && snapshot?.simulatedFriend === true && plan?.state === "awaiting_humans" && plan.decisions.b === "pending";
+  const waiting = enabled && snapshot?.simulatedFriend === true && plan?.state === "awaiting_humans" && plan.decisions.b === "pending" && plan.kind !== "trip";
   const planId = waiting ? plan.id : null;
 
   useEffect(() => {

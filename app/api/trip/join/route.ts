@@ -3,7 +3,7 @@ import { z } from "zod";
 import { confirmJoin, declineJoin, driveTrip } from "@/lib/agent/trip";
 import { MemberId } from "@/lib/protocol";
 import { getStore } from "@/lib/store";
-import { modelPlayers } from "@/lib/ui/group";
+import { modelPlayers } from "@/lib/ui/group-players";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;

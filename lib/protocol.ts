@@ -532,9 +532,11 @@ export type TripItinerary = z.infer<typeof TripItinerary>;
 
 export const TripDeposit = z.strictObject({
   amount: TripMoney,
-  status: z.enum(["proposed", "confirmed", "declined", "failed"]),
+  // refunded: the person had put it in, then the plan was dropped and the pot gave it back.
+  status: z.enum(["proposed", "confirmed", "declined", "failed", "refunded"]),
   withdrawalId: Id.optional(),
   depositId: Id.optional(),
+  refundId: Id.optional(),
   error: z.string().max(160).optional(),
   at: IsoDateTime.optional(),
 });

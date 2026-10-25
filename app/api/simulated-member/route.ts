@@ -3,7 +3,7 @@ import { z } from "zod";
 import { reserveRun } from "@/lib/agent/caps";
 import { decide } from "@/lib/agent/lifecycle";
 import { getStore } from "@/lib/store";
-import { memberDecides } from "@/lib/ui/group";
+import { memberDecides } from "@/lib/ui/group-players";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     return plan && plan.state === "awaiting_humans" && plan.group?.decisions[member] === "pending" ? plan : null;
   };
   if (!(await store.getRoom()).simulatedFriend) return refuse("This room has real people, so Kai answers from the coordinator's phone", 409);
+  if ((await store.getPlan(planId))?.kind === "trip") return refuse("A trip's people answer through the trip", 409);
   if (!(await waiting())) return refuse("Nothing is waiting on Kai", 409);
 
   // A beat longer than Michelle's, so the two answers land one after the other on the coordinator's screen.

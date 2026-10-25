@@ -14,7 +14,7 @@ type Props = {
   className?: string;
 };
 
-const characterOf = { aaron: "sprout", lisa: "mochi" } as const;
+const characterOf = { aaron: "sprout", lisa: "mochi", kai: "pebble" } as const;
 const moods: AvatarMood[] = ["idle", "thinking", "talking"];
 
 let preloaded = false;
@@ -29,7 +29,7 @@ function preloadLoops() {
 }
 
 /**
- * A Muse's character: Blender renders of Sprout and Mochi, bare, no circle and no tile. The header gets the loop for its
+ * A Muse's character: Blender renders of Sprout, Mochi and Pebble (Kai's Muse, in a plan for three), bare, no circle and no tile. The header gets the loop for its
  * mood (a still frame under reduced motion); everywhere else is the static portrait. Mochi is Michelle's Muse too, so
  * the simulated friend's side shows Mochi; Michelle herself, the person, is a PersonDisc.
  */
@@ -37,20 +37,6 @@ export function MuseAvatar({ agent, name = "Muse", size = 44, mood, className = 
   useEffect(() => {
     if (mood) preloadLoops();
   }, [mood]);
-
-  if (agent === "kai") {
-    // Pebble, the third friend of a group plan, has no render yet: an initial on a warm stone disc, never Michelle's grey.
-    return (
-      <span
-        aria-label={name}
-        role="img"
-        className={`inline-grid shrink-0 place-items-center rounded-full bg-pebble font-semibold text-ink ${className}`}
-        style={{ width: size, height: size, fontSize: size * 0.42 }}
-      >
-        {name.charAt(0)}
-      </span>
-    );
-  }
 
   const character = characterOf[agent];
   const image = (src: string) => (

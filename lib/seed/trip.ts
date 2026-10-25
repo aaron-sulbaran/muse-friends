@@ -17,14 +17,14 @@ export type TripPerson = {
   taste: string;
   /** A practical limit the plan has to respect, or null. */
   constraint: string | null;
-  /** The most this person would honestly spend per person on a trip like this. A simulated person never answers above it. */
+  /** The most this person would honestly spend on a flight. A simulated person never answers above it. */
   ceiling: number;
 };
 
 export const TRIP_PEOPLE: Record<MemberId, TripPerson> = {
-  aaron: { name: "You", muse: "Sprout", taste: "ramen and film photography", constraint: null, ceiling: 2000 },
-  lisa: { name: "Michelle", muse: "Mochi", taste: "food, every cuisine", constraint: null, ceiling: 2000 },
-  kai: { name: "Kai", muse: "Pebble", taste: "anime", constraint: "low mobility", ceiling: 1700 },
+  aaron: { name: "You", muse: "Sprout", taste: "ramen and film photography", constraint: null, ceiling: 1000 },
+  lisa: { name: "Michelle", muse: "Mochi", taste: "food, every cuisine", constraint: null, ceiling: 1000 },
+  kai: { name: "Kai", muse: "Pebble", taste: "anime", constraint: "low mobility", ceiling: 900 },
 };
 
 export function isSimulatedMember(value: string): value is SimulatedMember {
@@ -43,8 +43,8 @@ export const TRIP = {
   end: "2027-07-17T20:00:00-05:00",
   /** The group chat that never made it out of the chat, as the starting line of the thread. */
   opener: "We NEED to do Japan next summer.",
-  /** The bounded question's range: per person for the whole trip (flights, stay and activities). */
-  range: { low: 1600, high: 2000 },
+  /** The bounded question's range: what a flight may cost each person. */
+  range: { low: 800, high: 1000 },
   /** Up-front share of the itinerary total each person puts in the pot. */
   depositPercent: 25,
   /** What each person's seeded trip wallet starts with. Paper dollars on the demo's local ledger. */

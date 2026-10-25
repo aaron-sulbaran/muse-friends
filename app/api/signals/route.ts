@@ -10,7 +10,7 @@ import { getLiveReel } from "@/lib/instagram";
 import type { Signal } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
-import { modelPlayers } from "@/lib/ui/group";
+import { modelPlayers } from "@/lib/ui/group-players";
 
 // "Lisa sent Aaron a reel": injects the signal and starts the receiving agent's turn after responding.
 // The reel is read live from its owner's Instagram (lib/instagram.ts) when a token is set, else the seeded,

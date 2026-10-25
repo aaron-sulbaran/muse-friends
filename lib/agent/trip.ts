@@ -179,7 +179,7 @@ async function sendTrip(store: Store, input: SendInput, options: Options): Promi
 
 export function questionPrompt(plan: Plan): string {
   const range = plan.trip!.range;
-  return `Is ${money(range.low)} to ${money(range.high)} per person okay for the whole trip? Flights, stay and activities.`;
+  return `Is ${money(range.low)} to ${money(range.high)} for flights okay?`;
 }
 
 // Sprout asks each other member's Muse for its person's budget bound and one taste or constraint.
@@ -197,7 +197,7 @@ export async function askMembers(store: Store, planId: string, options: Options 
           from: GROUP_COORDINATOR,
           to: member,
           type: "trip_ask",
-          trip: { planId, prompt: `What is ${TRIP_PEOPLE[member].name}'s most for the whole trip, and one thing they want from it?`, range: plan.trip.range },
+          trip: { planId, prompt: `What is ${TRIP_PEOPLE[member].name}'s most for a flight, and one thing they want from the trip?`, range: plan.trip.range },
         },
         options,
       );
@@ -207,7 +207,7 @@ export async function askMembers(store: Store, planId: string, options: Options 
   });
 }
 
-const LIMIT_MIN = 100;
+const LIMIT_MIN = 300;
 const LIMIT_MAX = 20_000;
 
 // A person's answer to the bounded question: yes (the top of the range), no (the bottom), or their own limit. A
@@ -277,7 +277,7 @@ export function capOf(answers: TripState["answers"]): { amount: number; basis: s
   if (entries.length === 0) return null;
   const [member, lowest] = entries.reduce((best, entry) => (entry[1].limit < best[1].limit ? entry : best));
   const how = lowest.by === "person" ? "" : lowest.by === "seed" ? ", seeded answer" : ", played by a model";
-  return { amount: lowest.limit, basis: `The lowest ceiling: ${TRIP_PEOPLE[member].name}'s ${money(lowest.limit)}${how}` };
+  return { amount: lowest.limit, basis: `The lowest limit anyone gave: ${TRIP_PEOPLE[member].name}'s ${money(lowest.limit)}${how}` };
 }
 
 type Pick = { flight: string; stay: string; excursions: string[] };
@@ -297,7 +297,9 @@ export function checkItinerary(pick: Pick, cap: number, answers: TripState["answ
     return { ok: false, error: "Pick exactly 1 flight, 1 stay and 2 excursions." };
   }
   const total = items.reduce((sum, item) => sum + item.cost, 0);
-  if (total > cap) return { ok: false, error: `That comes to ${money(total)} per person, over the cap of ${money(cap)}. Pick cheaper items.` };
+  // The bounded question is about flights, so the cap bounds the flight; the rest of the outline is priced in the total.
+  const flight = items.find((item) => item.kind === "flight")!;
+  if (flight.cost > cap) return { ok: false, error: `The flight is ${money(flight.cost)}, over the flight cap of ${money(cap)}. Pick a cheaper flight.` };
   if (groupNeedsLowEffort(answers)) {
     const hard = items.filter((item) => item.effort !== "low");
     if (hard.length > 0) return { ok: false, error: `Someone in the group has low mobility. ${hard.map((item) => item.id).join(", ")} ask for walking or stairs. Pick low-effort items only.` };
@@ -346,22 +348,23 @@ const ComposeArgs = z.strictObject({
   flight: z.string().min(1).max(10),
   stay: z.string().min(1).max(10),
   excursions: z.array(z.string().min(1).max(10)).length(2),
-  rationale: z.string().min(1).max(220).describe("One plain sentence: which line serves which person's taste or limit. No prices that are not in the catalog."),
+  rationale: z.string().min(1).max(220).describe("One plain sentence naming the people each line is for (Michelle, Kai, Sprout's person), never catalog ids. No prices that are not in the catalog."),
   unknown: z.string().min(1).max(140).optional().describe("One thing you cannot do with this catalog, if any, said plainly"),
 });
 
 export const composeInstructions =
-  "You are Sprout, a Muse that coordinates a trip for three friends. You received each friend's Muse's answer: a ceiling per person, one taste, and maybe a limit. " +
-  "Pick the itinerary outline from the seeded catalog only: exactly 1 flight, 1 stay and 2 excursions, whose prices add up to no more than the cap, " +
+  "You are Sprout, a Muse that coordinates a trip for three friends. You received each friend's Muse's answer: a flight ceiling, one taste, and maybe a limit. " +
+  "Pick the itinerary outline from the seeded catalog only: exactly 1 flight, 1 stay and 2 excursions. The flight must cost no more than the cap, " +
   "that respects every limit and gives each friend's taste a line. Prices are seeded for the demo; nothing is booked and you never say it is. " +
+  "In the rationale name the friends each line is for in plain words, not catalog ids. " +
   "If something cannot be done with this catalog, say so in the unknown field instead of inventing it. Answer only by calling compose_itinerary.";
 
 function composeInput(plan: Plan & { trip: TripState }, cap: number): string {
   const people = (Object.entries(plan.trip.answers) as Array<[MemberId, TripAnswer]>)
-    .map(([member, answer]) => `- ${TRIP_PEOPLE[member].name} (Muse ${TRIP_PEOPLE[member].muse}): up to ${money(answer.limit)} per person; taste: ${answer.taste}${answer.constraint ? `; limit: ${answer.constraint}` : ""}`)
+    .map(([member, answer]) => `- ${TRIP_PEOPLE[member].name} (Muse ${TRIP_PEOPLE[member].muse}): up to ${money(answer.limit)} for a flight; taste: ${answer.taste}${answer.constraint ? `; limit: ${answer.constraint}` : ""}`)
     .join("\n");
   const catalog = CATALOG.map((item) => `${item.id} | ${item.kind} | ${item.label} | ${money(item.cost)} | serves: ${item.serves.join(", ") || "-"} | effort: ${item.effort}`).join("\n");
-  return `Trip: ${plan.trip.title}. Budget cap per person: ${money(cap)} (${plan.trip.cap?.basis ?? "lowest ceiling"}).\nThe group:\n${people}\n\nSeeded catalog (prices per person, fictional):\n${catalog}`;
+  return `Trip: ${plan.trip.title}. Flight cap per person: ${money(cap)} (${plan.trip.cap?.basis ?? "lowest ceiling"}).\nThe group:\n${people}\n\nSeeded catalog (prices per person, fictional):\n${catalog}`;
 }
 
 type Composition = { pick: Pick; composedBy: "model" | "fallback"; rationale: string; unknown?: string; proof?: MessageRecord["proof"] };
@@ -381,7 +384,7 @@ async function composeWithModel(plan: Plan & { trip: TripState }, cap: number): 
             flight: { type: "string", description: "A flight id, for example FL-1" },
             stay: { type: "string", description: "A stay id, for example ST-1" },
             excursions: { type: "array", items: { type: "string" }, description: "Exactly two excursion ids" },
-            rationale: { type: "string", description: "One sentence: which line serves which person" },
+            rationale: { type: "string", description: "One sentence naming the friends each line is for, not catalog ids" },
             unknown: { type: "string", description: "One thing the catalog cannot do, if any" },
           },
           required: ["flight", "stay", "excursions", "rationale"],
@@ -466,7 +469,7 @@ export async function proposeTrip(store: Store, planId: string, options: Options
     const at = toCentralIso(nowOf(options));
     const cap = capOf(plan.trip.answers)!;
     const withCap = await putTrip(store, plan, { cap }, at);
-    await store.appendEvent(row(withCap, at, "plan_state", "agent", `${displayName(GROUP_COORDINATOR)} set a budget cap of ${money(cap.amount)} per person. ${cap.basis}`));
+    await store.appendEvent(row(withCap, at, "plan_state", "agent", `${displayName(GROUP_COORDINATOR)} set a flight cap of ${money(cap.amount)} per person. ${cap.basis}`));
 
     // The model picks among the catalog and code checks it; when the model is down a code-built pick stands in, labeled.
     let composition: Composition | null = null;
@@ -478,9 +481,9 @@ export async function proposeTrip(store: Store, planId: string, options: Options
     if (!composition) {
       const pick = fallbackPick(cap.amount, plan.trip.answers);
       if (!pick) {
-        const dropped = transitionPlan({ ...withCap, trip: { ...withCap.trip!, unknowns: ["Nothing in the seeded catalog fits this cap and these limits."] } }, "dropped", at, { note: "No itinerary fits the cap", dropReason: "no_overlap" });
+        const dropped = transitionPlan({ ...withCap, trip: { ...withCap.trip!, unknowns: ["No flight in the seeded catalog fits this cap and these limits."] } }, "dropped", at, { note: "No itinerary fits the cap", dropReason: "no_overlap" });
         await store.putPlan(dropped);
-        await store.appendEvent(row(dropped, at, "plan_state", "system", `Trip dropped: nothing in the seeded catalog fits ${money(cap.amount)} per person with these limits`));
+        await store.appendEvent(row(dropped, at, "plan_state", "system", `Trip dropped: no flight in the seeded catalog fits ${money(cap.amount)} with these limits`));
         return { ok: false, error: "nothing in the seeded catalog fits", status: 422 } as const;
       }
       composition = { pick, composedBy: "fallback", rationale: "Built by code from the seeded catalog because the model did not answer: cheapest pick that fits every limit and serves the most tastes." };
@@ -496,7 +499,9 @@ export async function proposeTrip(store: Store, planId: string, options: Options
     const unknowns = [
       "Real prices, seats and rooms: I do not know them. Every price here is seeded for the demo, and nothing is booked.",
       ...(composition.unknown ? [composition.unknown] : []),
-      ...(!checked.lines.some((line) => line.serves.includes("film photography")) ? ["Film photography has no low-effort option in the seeded catalog, so it is not in the outline."] : []),
+      ...(!checked.lines.some((line) => line.serves.includes("film photography")) && !/film photo/i.test(composition.unknown ?? "")
+        ? ["Film photography has no low-effort option in the seeded catalog, so it is not in the outline."]
+        : []),
     ].slice(0, 4);
 
     const next = await putTrip(store, withCap, { itinerary, pot, unknowns }, at);
@@ -598,7 +603,40 @@ export async function declineJoin(store: Store, input: { planId: string; member:
   }
   const decided = await decide(store, { planId: input.planId, agent: input.member, choice: "decline" }, options);
   if (!decided.ok) return { ok: false, error: decided.error, status: decided.status };
-  return { ok: true, plan: decided.value.plan };
+  await refundPot(store, input.planId, options);
+  return { ok: true, plan: (await store.getPlan(input.planId)) ?? decided.value.plan };
+}
+
+// When a trip is dropped, whatever people had already put in goes back to their own wallets, from the pot: nothing stays
+// in a pot for a trip that is not happening. Idempotent, and safe to call again after a failure.
+export async function refundPot(store: Store, planId: string, options: Options = {}): Promise<void> {
+  await withLock(tripLock(planId), async () => {
+    const plan = await store.getPlan(planId);
+    if (!isTripPlan(plan) || plan.state !== "dropped" || !plan.trip.pot) return;
+    const pot = plan.trip.pot;
+    const ledger = new LocalLedger(roomLedger(store));
+    let deposits = { ...pot.deposits };
+    let wallets = { ...pot.wallets };
+    const at = toCentralIso(nowOf(options));
+    for (const member of plan.group.members) {
+      const deposit = deposits[member];
+      const wallet = wallets[member];
+      if (!deposit || deposit.status !== "confirmed" || !wallet) continue;
+      const taken = await ledger.withdraw(pot.potAccountId, { amount: deposit.amount, description: `Refund, ${plan.trip.title} was dropped` });
+      if (taken.error !== null) continue;
+      const returned = await ledger.deposit(wallet.accountId, { amount: deposit.amount, description: `Refund, ${plan.trip.title} was dropped` });
+      if (returned.error !== null) {
+        // Put it back in the pot so the ledger still adds up; the next call tries again.
+        await ledger.deposit(pot.potAccountId, { amount: deposit.amount, description: "Refund did not complete" });
+        continue;
+      }
+      const balance = await ledger.getAccount(wallet.accountId);
+      deposits = { ...deposits, [member]: { ...deposit, status: "refunded", refundId: returned.data.id, at } };
+      wallets = { ...wallets, [member]: { accountId: wallet.accountId, balance: balance.error === null ? balance.data.balance : wallet.balance } };
+      await store.appendEvent(row(plan, at, "payment_declined", "system", `${TRIP_PEOPLE[member].name}'s ${money(deposit.amount)} went back from the trip pot to their wallet: the trip was dropped (refund ${returned.data.id})`));
+    }
+    await putTrip(store, plan, { pot: { ...pot, deposits, wallets } }, at);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -624,7 +662,11 @@ export async function driveTrip(store: Store, planId: string, players: TripPlaye
     for (let step = 0; step < 4; step += 1) {
       const room = await store.getRoom();
       const plan = await store.getPlan(planId);
-      if (!isTripPlan(plan) || plan.state === "dropped" || plan.state === "confirmed") return;
+      if (isTripPlan(plan) && plan.state === "dropped") {
+        await refundPot(store, planId, options);
+        return;
+      }
+      if (!isTripPlan(plan) || plan.state === "confirmed") return;
       const simulated = room.simulatedFriend ? OTHER_MEMBERS : [];
 
       if (plan.state === "negotiating") {

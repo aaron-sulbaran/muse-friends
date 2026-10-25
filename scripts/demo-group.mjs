@@ -151,7 +151,8 @@ async function runTrip(label) {
   check(trip.cap?.amount === lowest, `the cap is the lowest ceiling, $${trip.cap?.amount} (${trip.cap?.basis})`);
   const itinerary = trip.itinerary;
   check(itinerary?.lines.length === 4, `a four-line itinerary: ${itinerary?.lines.map((l) => l.id).join(", ")} = $${itinerary?.total} per person, composed by ${itinerary?.composedBy}`);
-  check(itinerary?.total <= trip.cap?.amount, `the total is within the cap ($${itinerary?.total} <= $${trip.cap?.amount})`);
+  const flight = itinerary?.lines.find((l) => l.kind === "flight");
+  check(flight && flight.cost <= trip.cap?.amount, `the flight is within the flight cap ($${flight?.cost} <= $${trip.cap?.amount})`);
   check(itinerary?.lines.every((l) => l.source.startsWith(trip.seededLabel)), `every line says it is seeded (${trip.seededLabel})`);
   check(trip.unknowns.some((u) => /do not know/i.test(u)), `the coordinator says what it does not know: "${trip.unknowns[0]}"`);
   check(trip.pot && trip.pot.breakdown.every((b) => b.source) && trip.pot.perPerson > 0, `the pot proposes $${trip.pot?.perPerson} each, every breakdown line sourced`);

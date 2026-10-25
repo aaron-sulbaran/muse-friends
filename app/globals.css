@@ -28,6 +28,9 @@
   --color-bezel-line: #e4e6eb;
   --color-grey-disc: #d9dadd;
   --color-pebble: #e4d9c8;
+  --color-tint-sprout: #eaf7f0;
+  --color-tint-mochi: #f1ecfc;
+  --color-tint-pebble: #fbf4dc;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;

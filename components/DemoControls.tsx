@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { postClockAdvance, postGroupSignal, postLeakAttempt, postReset, postSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
+import { postClockAdvance, postGroupSignal, postLeakAttempt, postReset, postSignal, postTripSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
 import type { UiSnapshot } from "@/lib/ui/types";
 
@@ -40,6 +40,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
   };
   const loadReel = () => run(postSignal);
   const planForThree = () => run(postGroupSignal);
+  const planTrip = () => run(postTripSignal);
   const tryToLeak = async () => {
     setLeak({ running: true });
     const result = await postLeakAttempt();
@@ -49,9 +50,9 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
   const jump = () => run(postClockAdvance);
   const reset = () => run(postReset);
 
-  const actions = useRef({ loadReel, planForThree, tryToLeak, jump, reset, toggleReplay });
+  const actions = useRef({ loadReel, planForThree, planTrip, tryToLeak, jump, reset, toggleReplay });
   useEffect(() => {
-    actions.current = { loadReel, planForThree, tryToLeak, jump, reset, toggleReplay };
+    actions.current = { loadReel, planForThree, planTrip, tryToLeak, jump, reset, toggleReplay };
   });
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
       const key = event.key.toLowerCase();
       if (key === "s") void actions.current.loadReel();
       else if (key === "g") void actions.current.planForThree();
+      else if (key === "t") void actions.current.planTrip();
       else if (key === "l") void actions.current.tryToLeak();
       else if (key === "f") void actions.current.jump();
       else if (key === "0") void actions.current.reset();
@@ -76,6 +78,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
   const items: ReadonlyArray<{ label: string; key: string; run: () => void; disabled?: boolean }> = [
     { label: "Load the shawarma reel", key: "S", run: loadReel, disabled: planIsAlive || replaying },
     { label: copy.planForThree, key: "G", run: planForThree, disabled: planIsAlive || replaying },
+    { label: copy.planATrip, key: "T", run: planTrip, disabled: planIsAlive || replaying },
     { label: jumpLabel, key: "F", run: jump, disabled: !canJump || replaying },
     { label: replaying ? "Stop the replay" : "Replay a recorded run", key: "R", run: toggleReplay },
     { label: "Try to leak", key: "L", run: tryToLeak, disabled: replaying || (leak !== null && "running" in leak) },
