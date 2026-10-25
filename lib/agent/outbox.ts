@@ -14,6 +14,7 @@ import { getPersona } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { ToolMeta } from "@/lib/model";
 import type { AgentRuntimeContext } from "./context";
+import { scannedAs } from "./availability";
 import { ownFreeBlocks } from "./calendar";
 import { commitMessage } from "./inbound";
 import { describeCandidates, groupCandidates, planForContext } from "./group";
@@ -179,7 +180,7 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
     at,
   };
   const state = nextThreadState({ from: ctx.agent, type, windows }, prior);
-  const outcome = enforceSharePolicy({ message: { ...draft, state }, policy, sender, windowsDropped });
+  const outcome = enforceSharePolicy({ message: { ...draft, state }, policy, sender: await scannedAs(store, sender), windowsDropped });
 
   const final = AgentMessage.safeParse(outcome.message);
   if (!final.success) {

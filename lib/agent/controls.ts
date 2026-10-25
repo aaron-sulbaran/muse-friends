@@ -17,6 +17,7 @@ import {
 import { enforceSharePolicy } from "@/lib/policy";
 import { CALENDAR_RANGE, displayName, getPersona, seedSnapshot } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
+import { scannedAs } from "./availability";
 import type { LifecycleResult } from "./lifecycle";
 import { newId, seatOf } from "./ids";
 import { PLAN_LOCK, withLock } from "./lock";
@@ -79,12 +80,13 @@ async function setSharePolicyLocked(
   });
 
   const replayed: Redaction[] = [];
+  const owner = await scannedAs(store, getPersona(input.owner));
   for (const record of await store.listMessages()) {
     const { message } = record;
     if (message.from !== input.owner || message.to !== input.friend) continue;
     // Money already moved is history; a sharing switch does not rewrite a payment.
     if (isPaymentType(message.type)) continue;
-    const outcome = enforceSharePolicy({ message, policy, sender: getPersona(input.owner), windowsDropped: record.stamp.windowsDropped });
+    const outcome = enforceSharePolicy({ message, policy, sender: owner, windowsDropped: record.stamp.windowsDropped });
     if (outcome.removed.length === 0) continue;
 
     const rewritten = AgentMessage.safeParse(outcome.message);
@@ -204,9 +206,10 @@ export async function resetDemo(store: Store, input: { simulatedFriend?: boolean
 
 // Saves what is in the store as a Replay run.
 export async function recordCurrentRun(store: Store, input: { id: string; label: string }, options: Options = {}): Promise<RecordedRun> {
-  // A recording is shown to everyone, so the private chat with a Muse (D31) is not baked into it.
+  // A recording is shown to everyone, so the private chat with a Muse (D31) and what a person typed about their own
+  // week (the times they are free, how they feel) are not baked into it.
   const state = await store.snapshot();
-  const snapshot = { ...state, room: { ...state.room, chat: undefined }, events: state.events.filter((event) => event.kind !== "chat_asked") };
+  const snapshot = { ...state, room: { ...state.room, chat: undefined, availability: undefined }, events: state.events.filter((event) => event.kind !== "chat_asked") };
   const run: RecordedRun = { id: input.id, label: input.label, scenario: "shawarma", source: "live", recordedAt: nowIso(options), snapshot };
   await store.saveRecordedRun(run);
   return run;
