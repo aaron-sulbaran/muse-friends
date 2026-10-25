@@ -6,7 +6,7 @@ import type { OnboardingState } from "./onboarding";
 import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
 import { tripThread, type GroupLine } from "./group";
 import { capital, unnamedFriend } from "./tokens";
-import { threadLines, type ThreadLine, type ThreadOptions } from "./thread";
+import { threadLines, typingSender, type Sender, type ThreadLine, type ThreadOptions } from "./thread";
 import type { AgentId, AvatarMood, Decision, MemberId, PlanState, Role, UiPayment, UiPlan, UiSnapshot, UiTrip } from "./types";
 
 /*
@@ -19,6 +19,8 @@ export type ChatItem =
   | { kind: "separator"; id: string; day: string; time: string }
   | { kind: "bubble"; id: string; from: "muse" | "user"; text: string }
   | { kind: "thread-line"; id: string; line: ThreadLine }
+  /** A Muse is writing its next message: shown at the end of the exchange while a model call runs. */
+  | { kind: "thread-typing"; id: string; sender: Sender }
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
   | { kind: "reel-card"; id: string; poster: string; posterImage?: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; names: string[]; count: number }
@@ -158,7 +160,18 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
     }
   }
   // The Muses' turns that moved the plan, and each one's private word to its own person, land in the thread as they happen.
-  for (const line of thread) if (line.phase !== "after" && line.phase !== "reply") items.push({ kind: "thread-line", id: line.id, line });
+  // Once the plan is agreed and the hold is over, the exchange folds into the agreed line below; the asides stay.
+  const exchangeFolded = options.exchangeOpen === false && plan.state !== "detected" && plan.state !== "negotiating" && plan.state !== "dropped";
+  for (const line of thread) {
+    if (line.phase === "after" || line.phase === "reply") continue;
+    if (exchangeFolded && !line.onlyYou) continue;
+    items.push({ kind: "thread-line", id: line.id, line });
+  }
+  // While a Muse's model call runs, its typing bubble sits where its next message will land, with its chip and picture.
+  if (plan.state === "detected" || plan.state === "negotiating") {
+    const typing = typingSender(snapshot, role);
+    if (typing) items.push({ kind: "thread-typing", id: "thread-typing", sender: typing });
+  }
   const planContextIds = new Set(plan.group?.contextIds ?? [plan.contextId]);
   const agreedCount = snapshot.messages.filter((message) => planContextIds.has(message.contextId)).length;
   const agreedLine: ChatItem = {
