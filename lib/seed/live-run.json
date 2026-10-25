@@ -4,7 +4,7 @@
     "label": "Shawarma thread (recorded live on Muse Spark)",
     "scenario": "shawarma",
     "source": "live",
-    "recordedAt": "2026-10-24T21:38:23-05:00",
+    "recordedAt": "2026-10-24T22:04:37-05:00",
     "snapshot": {
       "room": {
         "id": "demo",
@@ -18,7 +18,7 @@
       "busy": [],
       "signals": [
         {
-          "id": "sig_mvn7x72bp8de",
+          "id": "sig_mvn8uyjx5p37",
           "kind": "reel_share",
           "from": "lisa",
           "to": "aaron",
@@ -46,15 +46,15 @@
             "area": "E 6th St",
             "cuisine": "shawarma",
             "hours": "Open until 9, closed Sundays",
-            "at": "2026-10-24T21:38:12-05:00"
+            "at": "2026-10-24T22:04:27-05:00"
           },
-          "receivedAt": "2026-10-24T21:38:10-05:00"
+          "receivedAt": "2026-10-24T22:04:25-05:00"
         }
       ],
       "threads": [
         {
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "initiator": "aaron",
           "participants": [
             "aaron",
@@ -62,15 +62,15 @@
           ],
           "state": "completed",
           "messageCount": 3,
-          "createdAt": "2026-10-24T21:38:19-05:00",
-          "updatedAt": "2026-10-24T21:38:23-05:00"
+          "createdAt": "2026-10-24T22:04:33-05:00",
+          "updatedAt": "2026-10-24T22:04:37-05:00"
         }
       ],
       "messages": [
         {
           "message": {
-            "id": "msg_mvn7xe1txwmn",
-            "contextId": "ctx_mvn7x72b8eka",
+            "id": "msg_mvn8v4admt39",
+            "contextId": "ctx_mvn8uyjxzgrl",
             "seq": 1,
             "from": "aaron",
             "to": "lisa",
@@ -96,8 +96,14 @@
               }
             ],
             "reason": "both_free",
-            "note": "Would love to try that garlic sauce with you!",
-            "at": "2026-10-24T21:38:19-05:00"
+            "note": "That garlic sauce looked amazing, would love to try it with you!",
+            "shared": {
+              "location": [
+                "East Austin",
+                "campus"
+              ]
+            },
+            "at": "2026-10-24T22:04:33-05:00"
           },
           "stamp": {
             "passed": [
@@ -109,29 +115,24 @@
           },
           "proof": {
             "model": "muse-spark-1.3",
-            "responseId": "resp_6add6b9b2bfcf7855be0437c",
-            "latencyMs": 7118,
-            "inputTokens": 4340,
-            "outputTokens": 2313,
-            "reasoningTokens": 2005
+            "responseId": "resp_6add71c1f0629539ebe249d1",
+            "latencyMs": 5457,
+            "inputTokens": 4264,
+            "outputTokens": 1830,
+            "reasoningTokens": 1525
           },
           "delivery": "delivered",
           "httpStatus": 202
         },
         {
           "message": {
-            "id": "msg_mvn7xfqjldm7",
-            "contextId": "ctx_mvn7x72b8eka",
+            "id": "msg_mvn8v5snf0kv",
+            "contextId": "ctx_mvn8uyjxzgrl",
             "seq": 2,
             "from": "lisa",
             "to": "aaron",
             "type": "accept",
             "state": "working",
-            "activity": {
-              "kind": "food",
-              "title": "Shawarma Point",
-              "place": "E 6th St"
-            },
             "windows": [
               {
                 "start": "2026-10-27T18:00:00-05:00",
@@ -139,8 +140,14 @@
               }
             ],
             "reason": "both_free",
-            "note": "Great, Tuesday works perfectly! Looking forward to it!",
-            "at": "2026-10-24T21:38:21-05:00"
+            "note": "Looking forward to trying it with you!",
+            "shared": {
+              "location": [
+                "East Austin",
+                "Hyde Park"
+              ]
+            },
+            "at": "2026-10-24T22:04:35-05:00"
           },
           "stamp": {
             "passed": [
@@ -152,19 +159,19 @@
           },
           "proof": {
             "model": "muse-spark-1.3",
-            "responseId": "resp_6add6b9d93503b73cbb1407a",
-            "latencyMs": 2182,
-            "inputTokens": 2489,
-            "outputTokens": 517,
-            "reasoningTokens": 297
+            "responseId": "resp_6add71c32956b154fab7498c",
+            "latencyMs": 1950,
+            "inputTokens": 2545,
+            "outputTokens": 545,
+            "reasoningTokens": 349
           },
           "delivery": "delivered",
           "httpStatus": 202
         },
         {
           "message": {
-            "id": "msg_mvn7xgvlrrqb",
-            "contextId": "ctx_mvn7x72b8eka",
+            "id": "msg_mvn8v79wdefn",
+            "contextId": "ctx_mvn8uyjxzgrl",
             "seq": 3,
             "from": "aaron",
             "to": "lisa",
@@ -172,8 +179,7 @@
             "state": "input-required",
             "activity": {
               "kind": "food",
-              "title": "Shawarma Point",
-              "place": "E 6th St"
+              "title": "Shawarma Point"
             },
             "windows": [
               {
@@ -182,8 +188,14 @@
               }
             ],
             "reason": "both_free",
-            "note": "Perfect, Tuesday it is! See you then!",
-            "at": "2026-10-24T21:38:23-05:00"
+            "note": "Great, see you Tuesday evening!",
+            "shared": {
+              "location": [
+                "East Austin",
+                "campus"
+              ]
+            },
+            "at": "2026-10-24T22:04:37-05:00"
           },
           "stamp": {
             "passed": [
@@ -195,11 +207,11 @@
           },
           "proof": {
             "model": "muse-spark-1.3",
-            "responseId": "resp_6add6b9f879fccfced5644a6",
-            "latencyMs": 1475,
-            "inputTokens": 2586,
-            "outputTokens": 500,
-            "reasoningTokens": 280
+            "responseId": "resp_6add71c5b944c8c9ee1d40b9",
+            "latencyMs": 1913,
+            "inputTokens": 2637,
+            "outputTokens": 535,
+            "reasoningTokens": 313
           },
           "delivery": "delivered",
           "httpStatus": 202
@@ -207,8 +219,8 @@
       ],
       "plans": [
         {
-          "id": "plan_mvn7x72buk33",
-          "contextId": "ctx_mvn7x72b8eka",
+          "id": "plan_mvn8uyjxp41a",
+          "contextId": "ctx_mvn8uyjxzgrl",
           "initiator": "aaron",
           "participants": [
             "aaron",
@@ -217,8 +229,7 @@
           "state": "followed_up",
           "activity": {
             "kind": "food",
-            "title": "Shawarma Point",
-            "place": "E 6th St"
+            "title": "Shawarma Point"
           },
           "window": {
             "start": "2026-10-27T18:00:00-05:00",
@@ -232,26 +243,26 @@
           "history": [
             {
               "state": "detected",
-              "at": "2026-10-24T21:38:10-05:00",
+              "at": "2026-10-24T22:04:25-05:00",
               "note": "Reel received"
             },
             {
               "state": "negotiating",
-              "at": "2026-10-24T21:38:19-05:00"
+              "at": "2026-10-24T22:04:33-05:00"
             },
             {
               "state": "awaiting_humans",
-              "at": "2026-10-24T21:38:23-05:00",
+              "at": "2026-10-24T22:04:37-05:00",
               "note": "Both agents accepted"
             },
             {
               "state": "confirmed",
-              "at": "2026-10-24T21:38:23-05:00",
+              "at": "2026-10-24T22:04:37-05:00",
               "note": "Both people said yes"
             },
             {
               "state": "scheduled",
-              "at": "2026-10-24T21:38:23-05:00",
+              "at": "2026-10-24T22:04:37-05:00",
               "note": "Calendar hold issued"
             },
             {
@@ -270,21 +281,20 @@
               "note": "Asked about next month"
             }
           ],
-          "createdAt": "2026-10-24T21:38:10-05:00",
+          "createdAt": "2026-10-24T22:04:25-05:00",
           "updatedAt": "2026-10-28T10:00:00-05:00"
         }
       ],
       "cards": [
         {
-          "id": "card_mvn7xgvnd63d",
-          "planId": "plan_mvn7x72buk33",
+          "id": "card_mvn8v79yuc0x",
+          "planId": "plan_mvn8uyjxp41a",
           "forAgent": "aaron",
           "friend": "lisa",
           "text": "You and Mochi both want to try Shawarma Point, and you're both free Tue 6 to 8pm. Reach out?",
           "activity": {
             "kind": "food",
-            "title": "Shawarma Point",
-            "place": "E 6th St"
+            "title": "Shawarma Point"
           },
           "window": {
             "start": "2026-10-27T18:00:00-05:00",
@@ -292,25 +302,24 @@
           },
           "draft": "Hey Mochi, Shawarma Point came up and Tue 6 to 8pm works for both of us. Want to go?",
           "status": "accepted",
-          "createdAt": "2026-10-24T21:38:23-05:00"
+          "createdAt": "2026-10-24T22:04:37-05:00"
         },
         {
-          "id": "card_mvn7xgvn3nyb",
-          "planId": "plan_mvn7x72buk33",
+          "id": "card_mvn8v79y7djc",
+          "planId": "plan_mvn8uyjxp41a",
           "forAgent": "lisa",
           "friend": "aaron",
           "text": "Sprout and you agreed on Shawarma Point, Tue 6 to 8pm. Expect a message from Sprout and confirm when it lands.",
           "activity": {
             "kind": "food",
-            "title": "Shawarma Point",
-            "place": "E 6th St"
+            "title": "Shawarma Point"
           },
           "window": {
             "start": "2026-10-27T18:00:00-05:00",
             "end": "2026-10-27T20:00:00-05:00"
           },
           "status": "accepted",
-          "createdAt": "2026-10-24T21:38:23-05:00"
+          "createdAt": "2026-10-24T22:04:37-05:00"
         }
       ],
       "policies": [
@@ -342,224 +351,224 @@
       "redactions": [],
       "events": [
         {
-          "id": "evt_mvn7x72byavr",
-          "at": "2026-10-24T21:38:10-05:00",
+          "id": "evt_mvn8uyjxa4w0",
+          "at": "2026-10-24T22:04:25-05:00",
           "kind": "signal_received",
           "actor": "human",
           "agent": "lisa",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Mochi shared a reel with Sprout: \"we should go!!\""
         },
         {
-          "id": "evt_mvn7x8k3i157",
-          "at": "2026-10-24T21:38:12-05:00",
+          "id": "evt_mvn8v02s1sg1",
+          "at": "2026-10-24T22:04:27-05:00",
           "kind": "caption_extracted",
           "actor": "agent",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Sprout read the reel caption: Shawarma Point, E 6th St, open until 9, closed Sundays (extracted from caption)"
         },
         {
-          "id": "evt_mvn7xe1vghg5",
-          "at": "2026-10-24T21:38:19-05:00",
+          "id": "evt_mvn8v4afprdp",
+          "at": "2026-10-24T22:04:33-05:00",
           "kind": "thread_opened",
           "actor": "agent",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Sprout opened a thread with Mochi"
         },
         {
-          "id": "evt_mvn7xe1vlc7t",
-          "at": "2026-10-24T21:38:19-05:00",
+          "id": "evt_mvn8v4af9u50",
+          "at": "2026-10-24T22:04:33-05:00",
           "kind": "message_sent",
           "actor": "agent",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
-          "messageId": "msg_mvn7xe1txwmn",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
+          "messageId": "msg_mvn8v4admt39",
           "text": "Sprout sent intent: Tue 6 to 8pm, Fri 4 to 6pm, Sat 6 to 8pm"
         },
         {
-          "id": "evt_mvn7xfql4wpe",
-          "at": "2026-10-24T21:38:21-05:00",
+          "id": "evt_mvn8v5spui7r",
+          "at": "2026-10-24T22:04:35-05:00",
           "kind": "message_sent",
           "actor": "agent",
           "agent": "lisa",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
-          "messageId": "msg_mvn7xfqjldm7",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
+          "messageId": "msg_mvn8v5snf0kv",
           "text": "Mochi sent accept: Tue 6 to 8pm"
         },
         {
-          "id": "evt_mvn7xgvn6xqz",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v79yccd4",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "message_sent",
           "actor": "agent",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
-          "messageId": "msg_mvn7xgvlrrqb",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
+          "messageId": "msg_mvn8v79wdefn",
           "text": "Sprout sent accept: Tue 6 to 8pm"
         },
         {
-          "id": "evt_mvn7xgvn0np4",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v79yrw22",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "plan_state",
           "actor": "system",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Sprout and Mochi agreed on Tue 6 to 8pm. Waiting on both people."
         },
         {
-          "id": "evt_mvn7xgvn949z",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v79ypo52",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "card_created",
           "actor": "agent",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Card for Sprout: reach out to Mochi"
         },
         {
-          "id": "evt_mvn7xgvn8vvf",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v79ytucm",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "card_created",
           "actor": "agent",
           "agent": "lisa",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Card for Mochi: Sprout is about to reach out"
         },
         {
-          "id": "evt_mvn7xgk8nzzu",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v72ghff9",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "human_decision",
           "actor": "human",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Sprout said yes to Shawarma Point"
         },
         {
-          "id": "evt_mvn7xgk88y5q",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v72gyyqx",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "human_decision",
           "actor": "human",
           "agent": "lisa",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Mochi said yes to Shawarma Point"
         },
         {
-          "id": "evt_mvn7xgk8ysul",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v72gkkul",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "plan_state",
           "actor": "system",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Plan confirmed by both people"
         },
         {
-          "id": "evt_mvn7xgk87csb",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v72gogf7",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "handoff_opened",
           "actor": "human",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Sprout opened WhatsApp with the drafted message"
         },
         {
-          "id": "evt_mvn7xgk8x2gl",
-          "at": "2026-10-24T21:38:23-05:00",
+          "id": "evt_mvn8v72g3vrq",
+          "at": "2026-10-24T22:04:37-05:00",
           "kind": "hold_issued",
           "actor": "system",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Calendar hold issued for Tue 6 to 8pm"
         },
         {
-          "id": "evt_mvr65uo0hwp0",
+          "id": "evt_mvr65uo0ban1",
           "at": "2026-10-27T16:00:00-05:00",
           "kind": "clock_advanced",
           "actor": "system",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Demo clock moved to two hours before the plan"
         },
         {
-          "id": "evt_mvr65uo08y02",
+          "id": "evt_mvr65uo0sz22",
           "at": "2026-10-27T16:00:00-05:00",
           "kind": "plan_state",
           "actor": "agent",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Sprout reminded their person: Shawarma Point with Mochi, Tue 6 to 8pm"
         },
         {
-          "id": "evt_mvr65uo0vkh4",
+          "id": "evt_mvr65uo0l60x",
           "at": "2026-10-27T16:00:00-05:00",
           "kind": "plan_state",
           "actor": "agent",
           "agent": "lisa",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Mochi reminded their person: Shawarma Point with Sprout, Tue 6 to 8pm"
         },
         {
-          "id": "evt_mvreqhs0romi",
+          "id": "evt_mvreqhs0qmuf",
           "at": "2026-10-27T20:00:00-05:00",
           "kind": "clock_advanced",
           "actor": "system",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Demo clock moved to the end of the plan"
         },
         {
-          "id": "evt_mvreqhs09qxz",
+          "id": "evt_mvreqhs0vvkl",
           "at": "2026-10-27T20:00:00-05:00",
           "kind": "followed_through",
           "actor": "human",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Sprout and Mochi got together for Shawarma Point"
         },
         {
-          "id": "evt_mvs8qqo0w05l",
+          "id": "evt_mvs8qqo0vrhx",
           "at": "2026-10-28T10:00:00-05:00",
           "kind": "clock_advanced",
           "actor": "system",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Demo clock moved to the next morning"
         },
         {
-          "id": "evt_mvs8qqo039k4",
+          "id": "evt_mvs8qqo0sqt5",
           "at": "2026-10-28T10:00:00-05:00",
           "kind": "plan_state",
           "actor": "agent",
           "agent": "aaron",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Sprout asked their person: want to do Shawarma Point with Mochi again next month?"
         },
         {
-          "id": "evt_mvs8qqo0h2ne",
+          "id": "evt_mvs8qqo0720i",
           "at": "2026-10-28T10:00:00-05:00",
           "kind": "plan_state",
           "actor": "agent",
           "agent": "lisa",
-          "contextId": "ctx_mvn7x72b8eka",
-          "planId": "plan_mvn7x72buk33",
+          "contextId": "ctx_mvn8uyjxzgrl",
+          "planId": "plan_mvn8uyjxp41a",
           "text": "Mochi asked their person: want to do Shawarma Point with Sprout again next month?"
         }
       ],
       "rejectedWindows": {
-        "ctx_mvn7x72b8eka": [
+        "ctx_mvn8uyjxzgrl": [
           "w_dfa91e53",
           "w_66c60d78"
         ]
@@ -567,11 +576,11 @@
     }
   },
   "privacyBeat": {
-    "owner": "aaron",
-    "friend": "lisa",
+    "owner": "lisa",
+    "friend": "aaron",
     "policyBefore": {
-      "owner": "aaron",
-      "friend": "lisa",
+      "owner": "lisa",
+      "friend": "aaron",
       "tier": "close",
       "categories": {
         "food": true,
@@ -582,8 +591,8 @@
       }
     },
     "policyAfter": {
-      "owner": "aaron",
-      "friend": "lisa",
+      "owner": "lisa",
+      "friend": "aaron",
       "tier": "close",
       "categories": {
         "food": true,
@@ -595,35 +604,28 @@
     },
     "before": {
       "message": {
-        "id": "msg_mvn7xe1txwmn",
-        "contextId": "ctx_mvn7x72b8eka",
-        "seq": 1,
-        "from": "aaron",
-        "to": "lisa",
-        "type": "intent",
+        "id": "msg_mvn8v5snf0kv",
+        "contextId": "ctx_mvn8uyjxzgrl",
+        "seq": 2,
+        "from": "lisa",
+        "to": "aaron",
+        "type": "accept",
         "state": "working",
-        "activity": {
-          "kind": "food",
-          "title": "Shawarma Point",
-          "place": "E 6th St"
-        },
         "windows": [
           {
             "start": "2026-10-27T18:00:00-05:00",
             "end": "2026-10-27T20:00:00-05:00"
-          },
-          {
-            "start": "2026-10-30T16:00:00-05:00",
-            "end": "2026-10-30T18:00:00-05:00"
-          },
-          {
-            "start": "2026-10-31T18:00:00-05:00",
-            "end": "2026-10-31T20:00:00-05:00"
           }
         ],
         "reason": "both_free",
-        "note": "Would love to try that garlic sauce with you!",
-        "at": "2026-10-24T21:38:19-05:00"
+        "note": "Looking forward to trying it with you!",
+        "shared": {
+          "location": [
+            "East Austin",
+            "Hyde Park"
+          ]
+        },
+        "at": "2026-10-24T22:04:35-05:00"
       },
       "stamp": {
         "passed": [
@@ -635,45 +637,33 @@
       },
       "proof": {
         "model": "muse-spark-1.3",
-        "responseId": "resp_6add6b9b2bfcf7855be0437c",
-        "latencyMs": 7118,
-        "inputTokens": 4340,
-        "outputTokens": 2313,
-        "reasoningTokens": 2005
+        "responseId": "resp_6add71c32956b154fab7498c",
+        "latencyMs": 1950,
+        "inputTokens": 2545,
+        "outputTokens": 545,
+        "reasoningTokens": 349
       },
       "delivery": "delivered",
       "httpStatus": 202
     },
     "after": {
       "message": {
-        "id": "msg_mvn7xe1txwmn",
-        "contextId": "ctx_mvn7x72b8eka",
-        "seq": 1,
-        "from": "aaron",
-        "to": "lisa",
-        "type": "intent",
+        "id": "msg_mvn8v5snf0kv",
+        "contextId": "ctx_mvn8uyjxzgrl",
+        "seq": 2,
+        "from": "lisa",
+        "to": "aaron",
+        "type": "accept",
         "state": "working",
-        "activity": {
-          "kind": "food",
-          "title": "Shawarma Point"
-        },
         "windows": [
           {
             "start": "2026-10-27T18:00:00-05:00",
             "end": "2026-10-27T20:00:00-05:00"
-          },
-          {
-            "start": "2026-10-30T16:00:00-05:00",
-            "end": "2026-10-30T18:00:00-05:00"
-          },
-          {
-            "start": "2026-10-31T18:00:00-05:00",
-            "end": "2026-10-31T20:00:00-05:00"
           }
         ],
         "reason": "both_free",
-        "note": "Would love to try that garlic sauce with you!",
-        "at": "2026-10-24T21:38:19-05:00"
+        "note": "Looking forward to trying it with you!",
+        "at": "2026-10-24T22:04:35-05:00"
       },
       "stamp": {
         "passed": [
@@ -686,98 +676,86 @@
       },
       "proof": {
         "model": "muse-spark-1.3",
-        "responseId": "resp_6add6b9b2bfcf7855be0437c",
-        "latencyMs": 7118,
-        "inputTokens": 4340,
-        "outputTokens": 2313,
-        "reasoningTokens": 2005
+        "responseId": "resp_6add71c32956b154fab7498c",
+        "latencyMs": 1950,
+        "inputTokens": 2545,
+        "outputTokens": 545,
+        "reasoningTokens": 349
       },
       "delivery": "delivered",
       "httpStatus": 202
     },
     "redaction": {
-      "id": "red_mvn7xgvpxeoz",
-      "contextId": "ctx_mvn7x72b8eka",
-      "messageId": "msg_mvn7xe1txwmn",
-      "from": "aaron",
-      "to": "lisa",
+      "id": "red_mvn8v7a1ntro",
+      "contextId": "ctx_mvn8uyjxzgrl",
+      "messageId": "msg_mvn8v5snf0kv",
+      "from": "lisa",
+      "to": "aaron",
       "removed": [
         "location"
       ],
-      "detail": "Policy for Sprout: the place and any location details were removed (replayed under the new setting).",
-      "at": "2026-10-24T21:38:23-05:00"
+      "detail": "Policy for Mochi: the place and any location details were removed (replayed under the new setting).",
+      "at": "2026-10-24T22:04:37-05:00"
     },
     "events": [
       {
-        "id": "evt_mvn7xgvp54z9",
-        "at": "2026-10-24T21:38:23-05:00",
+        "id": "evt_mvn8v7a1iix8",
+        "at": "2026-10-24T22:04:37-05:00",
         "kind": "policy_changed",
         "actor": "human",
-        "agent": "aaron",
-        "contextId": "ctx_mvn7x72b8eka",
-        "planId": "plan_mvn7x72buk33",
-        "text": "Sprout changed sharing with Mochi: location off"
+        "agent": "lisa",
+        "contextId": "ctx_mvn8uyjxzgrl",
+        "planId": "plan_mvn8uyjxp41a",
+        "text": "Mochi changed sharing with Sprout: location off"
       },
       {
-        "id": "evt_mvn7xgvpdydq",
-        "at": "2026-10-24T21:38:23-05:00",
+        "id": "evt_mvn8v7a1rspz",
+        "at": "2026-10-24T22:04:37-05:00",
         "kind": "redaction",
         "actor": "system",
-        "agent": "aaron",
-        "contextId": "ctx_mvn7x72b8eka",
-        "planId": "plan_mvn7x72buk33",
-        "messageId": "msg_mvn7xe1txwmn",
-        "redactionId": "red_mvn7xgvpxeoz",
-        "text": "Policy removed location from Sprout's intent"
-      },
-      {
-        "id": "evt_mvn7xgvq31e7",
-        "at": "2026-10-24T21:38:23-05:00",
-        "kind": "redaction",
-        "actor": "system",
-        "agent": "aaron",
-        "contextId": "ctx_mvn7x72b8eka",
-        "planId": "plan_mvn7x72buk33",
-        "messageId": "msg_mvn7xgvlrrqb",
-        "redactionId": "red_mvn7xgvq781g",
-        "text": "Policy removed location from Sprout's accept"
+        "agent": "lisa",
+        "contextId": "ctx_mvn8uyjxzgrl",
+        "planId": "plan_mvn8uyjxp41a",
+        "messageId": "msg_mvn8v5snf0kv",
+        "redactionId": "red_mvn8v7a1ntro",
+        "text": "Policy removed location from Mochi's accept"
       }
     ]
   },
   "stats": {
     "attempts": 2,
     "chosenAttempt": 2,
-    "timeToAgreementMs": 12720,
+    "timeToAgreementMs": 11306,
     "perMessage": [
       {
         "seq": 1,
         "from": "aaron",
         "type": "intent",
-        "arrivalMs": 9056,
-        "turnMs": 9056,
-        "callMs": 7118,
-        "outputTokens": 2313,
-        "reasoningTokens": 2005
+        "arrivalMs": 7435,
+        "turnMs": 7435,
+        "callMs": 5457,
+        "outputTokens": 1830,
+        "reasoningTokens": 1525
       },
       {
         "seq": 2,
         "from": "lisa",
         "type": "accept",
-        "arrivalMs": 11242,
-        "turnMs": 2186,
-        "callMs": 2182,
-        "outputTokens": 517,
-        "reasoningTokens": 297
+        "arrivalMs": 9388,
+        "turnMs": 1953,
+        "callMs": 1950,
+        "outputTokens": 545,
+        "reasoningTokens": 349
       },
       {
         "seq": 3,
         "from": "aaron",
         "type": "accept",
-        "arrivalMs": 12720,
-        "turnMs": 1478,
-        "callMs": 1475,
-        "outputTokens": 500,
-        "reasoningTokens": 280
+        "arrivalMs": 11306,
+        "turnMs": 1918,
+        "callMs": 1913,
+        "outputTokens": 535,
+        "reasoningTokens": 313
       }
     ]
   }

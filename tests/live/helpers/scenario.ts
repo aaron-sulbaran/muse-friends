@@ -113,7 +113,12 @@ export async function runScenario(store: JsonStore, label: string, options: { to
   const beforeToggle = await store.snapshot();
   const requested = options.toggleOwner ?? "aaron";
   const owner: AgentId | null =
-    requested === "auto" ? (beforeToggle.messages.find(hasLocation)?.message.from ?? null) : requested;
+    requested === "auto"
+      ? // The demo's switch is on Mochi's side, so prefer her message; fall back to whoever shared a location.
+        (beforeToggle.messages.find((record) => record.message.from === "lisa" && hasLocation(record))?.message.from ??
+          beforeToggle.messages.find(hasLocation)?.message.from ??
+          null)
+      : requested;
   let replayed = 0;
   let privacyBeat: PrivacyBeat | null = null;
   if (owner) {

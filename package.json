@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "demo:run": "vitest run --config vitest.live.config.mts tests/live/demo.live.ts --reporter=verbose",
-    "demo:record": "vitest run --config vitest.live.config.mts tests/live/record.live.ts --reporter=verbose"
+    "demo:record": "vitest run --config vitest.live.config.mts tests/live/record.live.ts --reporter=verbose",
+    "demo:http": "node scripts/demo-http.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
