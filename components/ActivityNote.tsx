@@ -16,6 +16,8 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string }> = {
   payment_proposed: { icon: Wallet, title: "Payment prepared" },
   payment_cancelled: { icon: Undo2, title: "Payment declined by its person" },
   receipt_read: { icon: Receipt, title: "Read a receipt" },
+  // Lane B shows the tools under this row (UiNote.toolCalls) and pairs it with the answer in UiSnapshot.chat.
+  chat_asked: { icon: MessageCircle, title: "You asked your Muse" },
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */
