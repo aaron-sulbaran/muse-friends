@@ -4,18 +4,20 @@ import { BatteryFull, Shield, Signal, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
-import { formatStatusBarTime } from "@/lib/ui/format";
+import { formatStatusBarTime, namesFor } from "@/lib/ui/format";
 import { postDecision, postHandoff } from "@/lib/ui/actions";
+import type { GoalContext } from "@/lib/ui/goals";
 import type { Role, UiSnapshot } from "@/lib/ui/types";
 import { ChatBubble, DaySeparator, TypingDots } from "./ChatBubble";
 import { AvatarSheet } from "./AvatarSheet";
 import { DraftCard } from "./DraftCard";
+import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
 import { MuseAvatar } from "./MuseAvatar";
 import { RecommendationCard } from "./RecommendationCard";
 import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
-import { TabBar } from "./TabBar";
+import { TabBar, type Tab } from "./TabBar";
 
 type Props = {
   snapshot: UiSnapshot;
@@ -52,13 +54,22 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>("chat");
+  const [goalOpen, setGoalOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const thinking = snapshot.inFlight?.agent === view.agent;
   const simulated = snapshot.simulatedFriend;
+  const names = namesFor(snapshot);
+  const goalContext: GoalContext = {
+    friend: view.friendHumanName,
+    reelOwner: role === "a" ? `${view.friendHumanName}'s` : "your",
+    muses: [names.muse.aaron, names.muse.lisa],
+  };
 
   useEffect(() => {
+    if (tab !== "chat") return;
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
-  }, [view.items.length, thinking]);
+  }, [view.items.length, thinking, tab]);
 
   async function decide(planId: string, choice: "accept" | "decline") {
     if (readOnly) return;
@@ -109,40 +120,70 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   return (
     <div className="relative flex h-full flex-col bg-screen">
       {framed ? <StatusBar time={formatStatusBarTime(snapshot.now)} /> : <div className="h-[env(safe-area-inset-top)] shrink-0" />}
-      <header className="relative flex shrink-0 flex-col items-center gap-1.5 pb-3 pt-2">
-        <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
-        <StatusPill name={view.museName} status={view.status} />
-        {role === "b" && !readOnly ? (
-          <button
-            type="button"
-            onClick={() => setSheetOpen(true)}
-            aria-label={`${view.museName} sharing with ${view.friendMuseName}`}
-            className="absolute right-4 top-2 grid size-9 place-items-center rounded-full bg-group transition-colors hover:bg-bubble-muse"
-          >
-            <Shield className="size-5" strokeWidth={1.75} aria-hidden="true" />
-          </button>
-        ) : null}
-      </header>
       {simulated && role === "b" ? (
-        <p className="mx-4 mb-2 rounded-tile bg-group px-3 py-2 text-center text-[13px] font-semibold">{copy.simulatedFriendBanner}</p>
+        <p className="shrink-0 bg-group px-4 py-2 text-center text-[13px] font-semibold">{copy.simulatedFriendBanner}</p>
       ) : null}
-      <div ref={scroller} className="quiet-scroll flex-1 overflow-y-auto px-4 pb-28 [mask-image:linear-gradient(to_bottom,transparent,black_14px)]">
-        <div className="flex flex-col">
-          {view.items.map((item, index) => (
-            <div key={item.id} className={spacingBefore(view.items[index - 1], item)}>
-              {renderItem(item)}
+      {tab === "chat" ? (
+        <>
+          <header className="relative flex shrink-0 flex-col items-center gap-1.5 pb-3 pt-2">
+            {role === "b" && !readOnly ? (
+              <button
+                type="button"
+                onClick={() => setSheetOpen(true)}
+                aria-label={`Open ${view.museName} settings`}
+                className="rounded-full transition-transform hover:scale-105"
+              >
+                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
+              </button>
+            ) : (
+              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
+            )}
+            <StatusPill name={view.museName} status={view.status} />
+            {role === "b" && !readOnly ? (
+              <button
+                type="button"
+                onClick={() => setSheetOpen(true)}
+                aria-label={`${view.museName} sharing with ${view.friendMuseName}`}
+                className="absolute right-4 top-2 grid size-9 place-items-center rounded-full bg-group transition-colors hover:bg-bubble-muse"
+              >
+                <Shield className="size-5" strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            ) : null}
+          </header>
+          <div ref={scroller} className="quiet-scroll flex-1 overflow-y-auto px-4 pb-28 [mask-image:linear-gradient(to_bottom,transparent,black_14px)]">
+            <div className="flex flex-col">
+              {view.items.map((item, index) => (
+                <div key={item.id} className={spacingBefore(view.items[index - 1], item)}>
+                  {renderItem(item)}
+                </div>
+              ))}
+              {thinking ? (
+                <div className="mt-3.5">
+                  <TypingDots />
+                </div>
+              ) : null}
             </div>
-          ))}
-          {thinking ? (
-            <div className="mt-3.5">
-              <TypingDots />
-            </div>
-          ) : null}
+          </div>
+        </>
+      ) : (
+        <div className="quiet-scroll flex-1 overflow-y-auto">
+          {goalOpen && snapshot.plan ? (
+            <GoalDetail plan={snapshot.plan} context={goalContext} onBack={() => setGoalOpen(false)} />
+          ) : (
+            <GoalsTab plan={snapshot.plan} context={goalContext} onOpen={() => setGoalOpen(true)} />
+          )}
         </div>
-      </div>
-      <TabBar />
+      )}
+      <TabBar
+        tab={tab}
+        onSelect={(next) => {
+          setTab(next);
+          setGoalOpen(false);
+        }}
+      />
       {sheetOpen && role === "b" ? (
         <AvatarSheet
+          simulated={simulated}
           museName={view.museName}
           friendMuseName={view.friendMuseName}
           sharing={snapshot.sharing.lisa}

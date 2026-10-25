@@ -45,6 +45,9 @@ export const copy = {
   simulatedTitle: "No friend here?",
   simulatedDetail: "Play with a simulated friend: Michelle, fictional, played by a model.",
   simulatedAction: "Play with a simulated friend",
+  goalsTitle: "Goals",
+  goalsTracking: "Tracking",
+  goalsEmpty: (friend: string) => `Nothing tracked yet. When you and ${friend} settle on a plan, it shows up here.`,
   oldExchangeThem: "We should try that shawarma place!",
   oldExchangeYou: "Yes, let's go!",
 
