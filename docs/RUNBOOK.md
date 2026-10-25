@@ -39,23 +39,16 @@ Check it by pointing a phone camera at the file opened on screen; it must open t
 
 ## Human steps
 
-### H1. Put the Muse key into Vercel (Aaron, 3 minutes)
+### H1. Push the secrets into Vercel (Aaron, 3 minutes)
 
-The agents on production need `MODEL_API_KEY`. Nothing else in the app reads it yet, so this can wait until the first agent code merges, but do it before the P1 checkpoint (Sun 12:00am).
+Production needs `MODEL_API_KEY` for the agents (and, later, the Supabase variables, see H3). One script copies what is set in `code/.env` to the Vercel project for Production and Preview, stored as Sensitive, and never prints a value. Do this before the P1 checkpoint (Sun 12:00am).
 
-1. Open https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables.
-2. Click **Add Environment Variable**. Key: `MODEL_API_KEY`. Value: paste the key from `code/.env` (the line after the `=`, no quotes, no spaces). Environments: tick **Production** and **Preview**. Turn **Sensitive** on. Click **Save**.
-3. Expect the variable listed with two environments and the value hidden.
-4. Click **Deployments**, open the latest production deployment, **...**, **Redeploy**, **Redeploy** again in the dialog. Expect the new deployment to turn Ready in about 30 seconds.
+1. In a terminal, from the `code` folder (the checkout that holds your real `.env`): `./scripts/push-env-to-vercel.sh --dry-run`. Expect names with character counts and `dry run only; nothing was changed.`
+2. Run `./scripts/push-env-to-vercel.sh`. Expect `pushed MODEL_API_KEY (49 characters, secret)`. If the Vercel CLI asks which Git branch a Preview variable is for, press Enter (all branches).
+3. Check: `vercel env ls` lists `MODEL_API_KEY` for Production and Preview.
+4. Redeploy so the running deployment picks it up: open https://vercel.com/aaron-sulbaran-projects/muse-friends, **Deployments**, the latest production deployment, **...**, **Redeploy**, confirm. Expect Ready in about 30 seconds. (Any merge to `main` also redeploys.)
 
-CLI alternative (from a linked checkout, with `.env` in the same folder; the key is piped and never printed):
-
-```bash
-awk '/^MODEL_API_KEY=/{printf "%s", substr($0,index($0,"=")+1)}' .env | vercel env add MODEL_API_KEY --environment production,preview --sensitive --yes
-vercel env ls
-```
-
-Expect `MODEL_API_KEY` listed for Production and Preview.
+Dashboard fallback if the script fails: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables, **Add Environment Variable**, key `MODEL_API_KEY`, value from `.env` (the text after the `=`, no quotes), Environments **Production** and **Preview**, **Sensitive** on, **Save**; then redeploy as in step 4. Re-run the script (or repeat the dashboard steps) whenever a new variable is added to `.env`.
 
 ### H2. Connect musefriends.tech (Aaron, 10 minutes, after claiming the domain)
 
