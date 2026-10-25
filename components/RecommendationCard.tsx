@@ -18,7 +18,7 @@ type Props = {
 function Row({ icon, title, detail }: { icon: React.ReactNode; title: string; detail?: string }) {
   return (
     <div className="flex items-center gap-3 py-2">
-      <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-bubble-muse text-ink">{icon}</span>
+      <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-surface text-ink">{icon}</span>
       <div className="min-w-0">
         <p className="text-[15px] font-semibold leading-5">{title}</p>
         {detail ? <p className="text-[13px] leading-[18px] text-muted">{detail}</p> : null}

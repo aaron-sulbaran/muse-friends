@@ -32,9 +32,7 @@ export function ActivityRow({ message, simulatedFriend, names, onOpen }: Props) 
         aria-label={messageAccessibleName(message, names)}
         className="flex w-full items-start gap-3 rounded-group px-3 py-2.5 text-left transition-colors hover:bg-group"
       >
-        <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-group">
-          <MuseAvatar agent={message.from} simulated={simulatedFriend && message.from === "lisa"} name={from} size={28} />
-        </span>
+        <MuseAvatar agent={message.from} simulated={simulatedFriend && message.from === "lisa"} name={from} size={36} />
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-3">
             <span className="text-[15px] font-semibold leading-5">

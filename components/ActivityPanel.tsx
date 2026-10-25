@@ -32,9 +32,7 @@ function ThinkingRow({ snapshot }: { snapshot: UiSnapshot }) {
   return (
     <li className="animate-row-in">
       <div className="flex items-center gap-3 rounded-group bg-group px-3 py-2.5">
-        <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-surface">
-          <MuseAvatar agent={agent} simulated={simulated} name={names.muse[agent]} size={28} />
-        </span>
+        <MuseAvatar agent={agent} simulated={simulated} name={names.muse[agent]} size={36} />
         <span className="text-[15px] leading-5">{names.muse[agent]} is thinking</span>
         <span className="flex gap-1" aria-hidden="true">
           {[0, 1, 2].map((dot) => (
