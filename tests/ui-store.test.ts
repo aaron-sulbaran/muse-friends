@@ -65,7 +65,7 @@ describe("the UI over Lane A's real lifecycle and controls", () => {
     await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "decline" });
     const snapshot = await ui(store);
     expect(snapshot.plan?.state).toBe("dropped");
-    expect(viewForRole(snapshot, "a").items.find((item) => item.kind === "bubble" && item.id === "dropped")).toMatchObject({ text: "Mochi said not now." });
+    expect(viewForRole(snapshot, "a").items.find((item) => item.kind === "bubble" && item.id === "dropped")).toMatchObject({ text: "Your friend said not now." });
   });
 
   it("a reset empties the stage and keeps nothing of the old plan", async () => {

@@ -5,6 +5,11 @@
  * Pure data with no persona calendars, so it is safe in a browser bundle.
  */
 
+import { capital, isUnnamed } from "@/lib/ui/tokens";
+
+/** " Jordan" after a verb, or nothing when the person has no name: "You sent this", not "You sent your friend this". */
+const to = (friend: string): string => (isUnnamed(friend) ? "" : ` ${friend}`);
+
 export type PastSignal = {
   id: string;
   kind: "reel" | "place";
@@ -48,11 +53,11 @@ export const SHAWARMA_REEL: PastSignal = {
   // The same address as the seeded signal in lib/seed/fixtures.ts (a test holds them equal), so the reel on
   // screen is the reel the agents read. Set both to the reel Aaron or Lisa owns.
   permalink: "https://example.com/reel/seed-shawarma-001",
-  sentLine: (friend) => `${friend} sent you a reel. 🎞️`,
+  sentLine: (friend) => `${capital(friend)} sent you a reel. 🎞️`,
   sentLineMine: (friend) => `You sent ${friend} a reel. 🎞️`,
   reply: "we should go!",
-  nextIdea: (friend) => `${friend} sent you this a week ago. Want me to see if you two can make it happen?`,
-  nextIdeaMine: (friend) => `You sent ${friend} this a week ago. I'm checking if you two can make it happen.`,
+  nextIdea: (friend) => `${capital(friend)} sent you this a week ago. Want me to see if you two can make it happen?`,
+  nextIdeaMine: (friend) => `You sent${to(friend)} this a week ago. I'm checking if you two can make it happen.`,
 };
 
 /** The other plans still sitting in the chat, oldest first. Muse picks the next idea from these. */
@@ -63,11 +68,11 @@ export const OTHER_SIGNALS: PastSignal[] = [
     daysAgo: 33,
     time: "11:05 AM",
     title: "Cedar Bluff Trail",
-    sentLine: (friend) => `${friend} sent you a hiking spot: Cedar Bluff Trail. 🥾`,
+    sentLine: (friend) => `${capital(friend)} sent you a hiking spot: Cedar Bluff Trail. 🥾`,
     sentLineMine: (friend) => `You sent ${friend} a hiking spot: Cedar Bluff Trail. 🥾`,
     reply: "omg yes, when it cools down",
-    nextIdea: (friend) => `${friend} also sent you a hiking spot last month, Cedar Bluff Trail. Want me to check with ${friend}?`,
-    nextIdeaMine: (friend) => `You also sent ${friend} a hiking spot last month, Cedar Bluff Trail. Want me to check with ${friend}?`,
+    nextIdea: (friend) => `${capital(friend)} also sent you a hiking spot last month, Cedar Bluff Trail. Want me to check with ${friend}?`,
+    nextIdeaMine: (friend) => `You also sent${to(friend)} a hiking spot last month, Cedar Bluff Trail. Want me to check with ${friend}?`,
   },
   {
     id: "reel_cabin_weekend",
@@ -78,11 +83,11 @@ export const OTHER_SIGNALS: PastSignal[] = [
     poster: "slowweekends.tx",
     caption: "48 hours, one cabin, zero signal 🌲",
     image: "/reels/cabin-weekend.jpg",
-    sentLine: (friend) => `${friend} sent you a reel. 🎞️`,
+    sentLine: (friend) => `${capital(friend)} sent you a reel. 🎞️`,
     sentLineMine: (friend) => `You sent ${friend} a reel. 🎞️`,
     reply: "we need to do this",
-    nextIdea: (friend) => `${friend} also sent you a Hill Country cabin weekend a couple of weeks ago. Want me to look for a free weekend with ${friend}?`,
-    nextIdeaMine: (friend) => `You also sent ${friend} a Hill Country cabin weekend a couple of weeks ago. Want me to look for a free weekend with ${friend}?`,
+    nextIdea: (friend) => `${capital(friend)} also sent you a Hill Country cabin weekend a couple of weeks ago. Want me to look for a free weekend with ${friend}?`,
+    nextIdeaMine: (friend) => `You also sent${to(friend)} a Hill Country cabin weekend a couple of weeks ago. Want me to look for a free weekend with ${friend}?`,
   },
 ];
 

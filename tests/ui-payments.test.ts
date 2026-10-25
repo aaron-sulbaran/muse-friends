@@ -98,8 +98,8 @@ describe("money in the chat", () => {
     const snapshot = at("scheduled", { payments: [payment({ status: "received", balanceBefore: 80, balanceAfter: 95 })] });
     const a = viewForRole(snapshot, "a").items.find((item) => item.kind === "payment-card");
     const b = viewForRole(snapshot, "b").items.find((item) => item.kind === "payment-card");
-    expect(a).toMatchObject({ side: "payer", friendName: "Mochi" });
-    expect(b).toMatchObject({ side: "payee", friendName: "Sprout" });
+    expect(a).toMatchObject({ side: "payer", friendName: "your friend" });
+    expect(b).toMatchObject({ side: "payee", friendName: "your friend" });
     expect(paymentsForPlan(snapshot, snapshotPlan("scheduled"))).toHaveLength(1);
     expect(sideOfPayment(payment(), "aaron")).toBe("payer");
     expect(sideOfPayment(payment(), "lisa")).toBe("payee");
