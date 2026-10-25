@@ -67,17 +67,21 @@ export async function confirmedPlan(store: JsonStore): Promise<Plan> {
 }
 
 // Runs `work` with the model pointed at a model that does not exist, so every call is a 404, and puts the
-// environment back after. The retry pauses are shrunk so an outage run is quick.
+// environment back after. The retry pauses are shrunk so an outage run is quick, and the fallback model and the
+// slow 404 tail are off: a real outage has nowhere to go, and a fallback that answers would make it no outage.
 export async function withModelOutage<T>(work: () => Promise<T>): Promise<T> {
-  const before = { id: process.env.MODEL_ID, scale: process.env.MODEL_RETRY_SCALE };
+  const names = ["MODEL_ID", "MODEL_RETRY_SCALE", "MODEL_FALLBACK_IDS", "MODEL_404_TAIL_MS"] as const;
+  const before = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   process.env.MODEL_ID = "muse-eval-model-that-does-not-exist";
   process.env.MODEL_RETRY_SCALE = "0.02";
+  process.env.MODEL_FALLBACK_IDS = "";
+  process.env.MODEL_404_TAIL_MS = "0";
   try {
     return await work();
   } finally {
-    if (before.id === undefined) delete process.env.MODEL_ID;
-    else process.env.MODEL_ID = before.id;
-    if (before.scale === undefined) delete process.env.MODEL_RETRY_SCALE;
-    else process.env.MODEL_RETRY_SCALE = before.scale;
+    for (const name of names) {
+      if (before[name] === undefined) delete process.env[name];
+      else process.env[name] = before[name];
+    }
   }
 }

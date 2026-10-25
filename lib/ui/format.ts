@@ -183,6 +183,14 @@ export function messageTitle(message: UiMessage): string {
       return message.windows?.length ? `Accepted ${formatWindowList(message.windows)}` : "Accepted";
     case "decline":
       return message.reason === "no_overlap" ? "Declined: no time works" : "Declined";
+    case "trip_ask":
+      return "Asked for a flight limit and one taste";
+    case "trip_answer":
+      return `Answered: up to $${message.trip?.limit ?? 0} for a flight, ${message.trip?.taste ?? "a taste"}`;
+    case "trip_plan":
+      return `Proposed a $${message.trip?.cap ?? 0} flight cap, ${message.trip?.lines?.length ?? 0} itinerary lines and a $${message.trip?.deposit ?? 0} pot deposit`;
+    case "trip_reply":
+      return message.trip?.choice === "in" ? `Is in, $${message.trip.deposit ?? 0} in the pot` : "Is out";
     default:
       return "Sent a message";
   }

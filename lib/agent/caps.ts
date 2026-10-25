@@ -73,7 +73,7 @@ export function reserveRun(room = "demo", now: number = Date.now()): { ok: true;
   return { ok: true, budget: runBudget(room, now) };
 }
 
-// Gives back a reserved run that never started a model turn (for example a refused follow-up).
+// Gives back a reserved run that never started anything (for example a follow-up naming an unknown contact).
 export function refundRun(room = "demo", now: number = Date.now()): void {
   recent(room, now).pop();
   recent(GLOBAL_KEY, now).pop();

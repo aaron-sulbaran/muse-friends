@@ -1,0 +1,878 @@
+{
+  "run": {
+    "id": "run_trip_live",
+    "label": "Trip for three (recorded live on Muse Spark)",
+    "scenario": "trip",
+    "source": "live",
+    "recordedAt": "2026-10-25T04:42:12-05:00",
+    "snapshot": {
+      "room": {
+        "id": "demo",
+        "simulatedFriend": true,
+        "resetCount": 0,
+        "localLedger": {
+          "acct_local_mvnn2dgd2ntz": 2080,
+          "acct_local_mvnn2dgd47ip": 2080,
+          "acct_local_mvnn2dgd6kg3": 2080,
+          "acct_local_mvnn2dgd8c4u": 1260
+        },
+        "updatedAt": "2026-10-25T14:00:00-05:00"
+      },
+      "clock": {
+        "now": "2026-10-25T14:00:00-05:00"
+      },
+      "busy": [],
+      "signals": [],
+      "threads": [
+        {
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "groupId": "grp_mvnn21gega0l",
+          "initiator": "aaron",
+          "participants": [
+            "aaron",
+            "lisa"
+          ],
+          "state": "completed",
+          "messageCount": 4,
+          "createdAt": "2026-10-25T04:41:52-05:00",
+          "updatedAt": "2026-10-25T04:42:09-05:00"
+        },
+        {
+          "contextId": "ctx_mvnn21gelod4",
+          "planId": "plan_mvnn21gebstb",
+          "groupId": "grp_mvnn21gega0l",
+          "initiator": "aaron",
+          "participants": [
+            "aaron",
+            "kai"
+          ],
+          "state": "completed",
+          "messageCount": 4,
+          "createdAt": "2026-10-25T04:41:52-05:00",
+          "updatedAt": "2026-10-25T04:42:11-05:00"
+        }
+      ],
+      "messages": [
+        {
+          "message": {
+            "id": "msg_mvnn22mr5ua8",
+            "contextId": "ctx_mvnn21ge9u84",
+            "seq": 1,
+            "from": "aaron",
+            "to": "lisa",
+            "type": "trip_ask",
+            "state": "working",
+            "activity": {
+              "kind": "events",
+              "title": "Japan trip, July 2027"
+            },
+            "reason": "trip",
+            "trip": {
+              "planId": "plan_mvnn21gebstb",
+              "prompt": "What is Michelle's most for a flight, and one thing they want from the trip?",
+              "range": {
+                "low": 800,
+                "high": 1000
+              }
+            },
+            "at": "2026-10-25T04:41:52-05:00"
+          },
+          "stamp": {
+            "passed": [],
+            "removed": [],
+            "windowsDropped": 0
+          },
+          "delivery": "delivered",
+          "httpStatus": 202
+        },
+        {
+          "message": {
+            "id": "msg_mvnn22n5xog6",
+            "contextId": "ctx_mvnn21gelod4",
+            "seq": 1,
+            "from": "aaron",
+            "to": "kai",
+            "type": "trip_ask",
+            "state": "working",
+            "activity": {
+              "kind": "events",
+              "title": "Japan trip, July 2027"
+            },
+            "reason": "trip",
+            "trip": {
+              "planId": "plan_mvnn21gebstb",
+              "prompt": "What is Kai's most for a flight, and one thing they want from the trip?",
+              "range": {
+                "low": 800,
+                "high": 1000
+              }
+            },
+            "at": "2026-10-25T04:41:52-05:00"
+          },
+          "stamp": {
+            "passed": [],
+            "removed": [],
+            "windowsDropped": 0
+          },
+          "delivery": "delivered",
+          "httpStatus": 202
+        },
+        {
+          "message": {
+            "id": "msg_mvnn24pnbc7k",
+            "contextId": "ctx_mvnn21gelod4",
+            "seq": 2,
+            "from": "kai",
+            "to": "aaron",
+            "type": "trip_answer",
+            "state": "working",
+            "activity": {
+              "kind": "events",
+              "title": "Japan trip, July 2027"
+            },
+            "reason": "trip",
+            "trip": {
+              "planId": "plan_mvnn21gebstb",
+              "answer": "limit",
+              "limit": 900,
+              "taste": "anime",
+              "constraint": "low mobility",
+              "by": "person_model"
+            },
+            "at": "2026-10-25T04:41:55-05:00"
+          },
+          "stamp": {
+            "passed": [],
+            "removed": [],
+            "windowsDropped": 0
+          },
+          "delivery": "delivered",
+          "httpStatus": 202
+        },
+        {
+          "message": {
+            "id": "msg_mvnn24q5fsuq",
+            "contextId": "ctx_mvnn21ge9u84",
+            "seq": 2,
+            "from": "lisa",
+            "to": "aaron",
+            "type": "trip_answer",
+            "state": "working",
+            "activity": {
+              "kind": "events",
+              "title": "Japan trip, July 2027"
+            },
+            "reason": "trip",
+            "trip": {
+              "planId": "plan_mvnn21gebstb",
+              "answer": "yes",
+              "limit": 1000,
+              "taste": "food, every cuisine",
+              "by": "person_model"
+            },
+            "at": "2026-10-25T04:41:55-05:00"
+          },
+          "stamp": {
+            "passed": [],
+            "removed": [],
+            "windowsDropped": 0
+          },
+          "delivery": "delivered",
+          "httpStatus": 202
+        },
+        {
+          "message": {
+            "id": "msg_mvnn2dgevadx",
+            "contextId": "ctx_mvnn21ge9u84",
+            "seq": 3,
+            "from": "aaron",
+            "to": "lisa",
+            "type": "trip_plan",
+            "state": "working",
+            "activity": {
+              "kind": "events",
+              "title": "Japan trip, July 2027"
+            },
+            "reason": "trip",
+            "trip": {
+              "planId": "plan_mvnn21gebstb",
+              "cap": 900,
+              "lines": [
+                "FL-1",
+                "ST-1",
+                "EX-1",
+                "EX-5"
+              ],
+              "total": 1665,
+              "deposit": 420
+            },
+            "at": "2026-10-25T04:42:06-05:00"
+          },
+          "stamp": {
+            "passed": [],
+            "removed": [],
+            "windowsDropped": 0
+          },
+          "proof": {
+            "model": "muse-spark-1.2",
+            "responseId": "resp_6addceeeb2729ee959334b42",
+            "latencyMs": 3141,
+            "inputTokens": 3001,
+            "outputTokens": 294,
+            "reasoningTokens": 97
+          },
+          "delivery": "delivered",
+          "httpStatus": 202
+        },
+        {
+          "message": {
+            "id": "msg_mvnn2dgfjr56",
+            "contextId": "ctx_mvnn21gelod4",
+            "seq": 3,
+            "from": "aaron",
+            "to": "kai",
+            "type": "trip_plan",
+            "state": "working",
+            "activity": {
+              "kind": "events",
+              "title": "Japan trip, July 2027"
+            },
+            "reason": "trip",
+            "trip": {
+              "planId": "plan_mvnn21gebstb",
+              "cap": 900,
+              "lines": [
+                "FL-1",
+                "ST-1",
+                "EX-1",
+                "EX-5"
+              ],
+              "total": 1665,
+              "deposit": 420
+            },
+            "at": "2026-10-25T04:42:06-05:00"
+          },
+          "stamp": {
+            "passed": [],
+            "removed": [],
+            "windowsDropped": 0
+          },
+          "proof": {
+            "model": "muse-spark-1.2",
+            "responseId": "resp_6addceeeb2729ee959334b42",
+            "latencyMs": 3141,
+            "inputTokens": 3001,
+            "outputTokens": 294,
+            "reasoningTokens": 97
+          },
+          "delivery": "delivered",
+          "httpStatus": 202
+        },
+        {
+          "message": {
+            "id": "msg_mvnn2fpfxkun",
+            "contextId": "ctx_mvnn21ge9u84",
+            "seq": 4,
+            "from": "lisa",
+            "to": "aaron",
+            "type": "trip_reply",
+            "state": "completed",
+            "activity": {
+              "kind": "events",
+              "title": "Japan trip, July 2027"
+            },
+            "reason": "trip",
+            "trip": {
+              "planId": "plan_mvnn21gebstb",
+              "deposit": 420,
+              "choice": "in",
+              "ledgerRef": "dp_local_mvnn2fpfadxy"
+            },
+            "at": "2026-10-25T04:42:09-05:00"
+          },
+          "stamp": {
+            "passed": [],
+            "removed": [],
+            "windowsDropped": 0
+          },
+          "delivery": "delivered",
+          "httpStatus": 202
+        },
+        {
+          "message": {
+            "id": "msg_mvnn2h6bxnq3",
+            "contextId": "ctx_mvnn21gelod4",
+            "seq": 4,
+            "from": "kai",
+            "to": "aaron",
+            "type": "trip_reply",
+            "state": "completed",
+            "activity": {
+              "kind": "events",
+              "title": "Japan trip, July 2027"
+            },
+            "reason": "trip",
+            "trip": {
+              "planId": "plan_mvnn21gebstb",
+              "deposit": 420,
+              "choice": "in",
+              "ledgerRef": "dp_local_mvnn2h6bcfwr"
+            },
+            "at": "2026-10-25T04:42:11-05:00"
+          },
+          "stamp": {
+            "passed": [],
+            "removed": [],
+            "windowsDropped": 0
+          },
+          "delivery": "delivered",
+          "httpStatus": 202
+        }
+      ],
+      "plans": [
+        {
+          "id": "plan_mvnn21gebstb",
+          "contextId": "ctx_mvnn21ge9u84",
+          "initiator": "aaron",
+          "participants": [
+            "aaron",
+            "lisa"
+          ],
+          "state": "confirmed",
+          "activity": {
+            "kind": "events",
+            "title": "Japan trip, July 2027"
+          },
+          "window": {
+            "start": "2027-07-10T09:00:00-05:00",
+            "end": "2027-07-17T20:00:00-05:00"
+          },
+          "decisions": {
+            "aaron": "accepted",
+            "lisa": "accepted"
+          },
+          "group": {
+            "groupId": "grp_mvnn21gega0l",
+            "coordinator": "aaron",
+            "members": [
+              "aaron",
+              "lisa",
+              "kai"
+            ],
+            "contexts": {
+              "lisa": "ctx_mvnn21ge9u84",
+              "kai": "ctx_mvnn21gelod4"
+            },
+            "decisions": {
+              "aaron": "accepted",
+              "lisa": "accepted",
+              "kai": "accepted"
+            },
+            "rounds": 0,
+            "quorum": "all"
+          },
+          "kind": "trip",
+          "trip": {
+            "title": "Japan trip, July 2027",
+            "destination": "Tokyo",
+            "horizon": {
+              "label": "July 2027",
+              "start": "2027-07-10T09:00:00-05:00",
+              "end": "2027-07-17T20:00:00-05:00"
+            },
+            "range": {
+              "low": 800,
+              "high": 1000
+            },
+            "answers": {
+              "aaron": {
+                "answer": "yes",
+                "limit": 1000,
+                "taste": "ramen and film photography",
+                "by": "person",
+                "at": "2026-10-25T04:41:52-05:00"
+              },
+              "kai": {
+                "answer": "limit",
+                "limit": 900,
+                "taste": "anime",
+                "constraint": "low mobility",
+                "by": "person_model",
+                "at": "2026-10-25T04:41:55-05:00"
+              },
+              "lisa": {
+                "answer": "yes",
+                "limit": 1000,
+                "taste": "food, every cuisine",
+                "by": "person_model",
+                "at": "2026-10-25T04:41:55-05:00"
+              }
+            },
+            "cap": {
+              "amount": 900,
+              "basis": "The lowest limit anyone gave: Kai's $900, played by a model"
+            },
+            "itinerary": {
+              "lines": [
+                {
+                  "id": "FL-1",
+                  "kind": "flight",
+                  "label": "Austin to Tokyo Haneda, one stop, economy",
+                  "cost": 860,
+                  "source": "Seeded for the demo, catalog FL-1",
+                  "serves": []
+                },
+                {
+                  "id": "ST-1",
+                  "kind": "stay",
+                  "label": "Shinjuku business hotel, 6 nights, elevator and step-free rooms",
+                  "cost": 620,
+                  "source": "Seeded for the demo, catalog ST-1",
+                  "serves": [
+                    "low mobility"
+                  ]
+                },
+                {
+                  "id": "EX-1",
+                  "kind": "excursion",
+                  "label": "Akihabara anime day with a seated cafe route",
+                  "cost": 90,
+                  "source": "Seeded for the demo, catalog EX-1",
+                  "serves": [
+                    "anime",
+                    "low mobility"
+                  ]
+                },
+                {
+                  "id": "EX-5",
+                  "kind": "excursion",
+                  "label": "Ramen and izakaya evening in Shinjuku, counter seats",
+                  "cost": 95,
+                  "source": "Seeded for the demo, catalog EX-5",
+                  "serves": [
+                    "food",
+                    "ramen",
+                    "low mobility"
+                  ]
+                }
+              ],
+              "total": 1665,
+              "composedBy": "model",
+              "rationale": "Flight FL-1 stays within Kai's $900 cap for you, Kai and Michelle, stay ST-1 respects Kai's low mobility, EX-1 is for Kai's anime and EX-5 for Sprout's ramen and Michelle's food."
+            },
+            "pot": {
+              "source": "local",
+              "potAccountId": "acct_local_mvnn2dgd8c4u",
+              "wallets": {
+                "aaron": {
+                  "accountId": "acct_local_mvnn2dgd2ntz",
+                  "balance": 2080
+                },
+                "lisa": {
+                  "accountId": "acct_local_mvnn2dgd47ip",
+                  "balance": 2080
+                },
+                "kai": {
+                  "accountId": "acct_local_mvnn2dgd6kg3",
+                  "balance": 2080
+                }
+              },
+              "perPerson": 420,
+              "target": 1260,
+              "breakdown": [
+                {
+                  "label": "Itinerary, per person",
+                  "amount": 1665,
+                  "source": "Seeded for the demo: FL-1, ST-1, EX-1, EX-5"
+                },
+                {
+                  "label": "Up-front share, 25%",
+                  "amount": 416,
+                  "source": "Sprout's rule: 25% up front"
+                },
+                {
+                  "label": "Rounded to the nearest $10",
+                  "amount": 420,
+                  "source": "Sprout's rule"
+                },
+                {
+                  "label": "Pot target, 3 people",
+                  "amount": 1260,
+                  "source": "3 times the deposit"
+                }
+              ],
+              "deposits": {
+                "aaron": {
+                  "amount": 420,
+                  "status": "confirmed",
+                  "withdrawalId": "wd_local_mvnn2ic2droy",
+                  "depositId": "dp_local_mvnn2ic2euyz",
+                  "by": "person",
+                  "at": "2026-10-25T04:42:12-05:00"
+                },
+                "lisa": {
+                  "amount": 420,
+                  "status": "confirmed",
+                  "withdrawalId": "wd_local_mvnn2fpf9h61",
+                  "depositId": "dp_local_mvnn2fpfadxy",
+                  "by": "person_model",
+                  "at": "2026-10-25T04:42:09-05:00"
+                },
+                "kai": {
+                  "amount": 420,
+                  "status": "confirmed",
+                  "withdrawalId": "wd_local_mvnn2h6bb42h",
+                  "depositId": "dp_local_mvnn2h6bcfwr",
+                  "by": "person_model",
+                  "at": "2026-10-25T04:42:11-05:00"
+                }
+              }
+            },
+            "unknowns": [
+              "Real prices, seats and rooms: I do not know them. Every price here is seeded for the demo, and nothing is booked.",
+              "The only film photography walk needs medium effort, so Sprout's film photography cannot be done while respecting Kai's low-mobility limit."
+            ]
+          },
+          "history": [
+            {
+              "state": "detected",
+              "at": "2026-10-25T04:41:50-05:00",
+              "note": "Trip requested"
+            },
+            {
+              "state": "negotiating",
+              "at": "2026-10-25T04:41:50-05:00",
+              "note": "Sprout is asking each Muse"
+            },
+            {
+              "state": "awaiting_humans",
+              "at": "2026-10-25T04:41:55-05:00",
+              "note": "Itinerary and pot deposit proposed"
+            },
+            {
+              "state": "confirmed",
+              "at": "2026-10-25T04:42:12-05:00",
+              "note": "All 3 people said yes"
+            }
+          ],
+          "createdAt": "2026-10-25T04:41:50-05:00",
+          "updatedAt": "2026-10-25T04:42:12-05:00"
+        }
+      ],
+      "cards": [],
+      "policies": [
+        {
+          "owner": "aaron",
+          "friend": "lisa",
+          "tier": "close",
+          "categories": {
+            "food": true,
+            "events": true,
+            "availability": true,
+            "location": true,
+            "interests": true
+          }
+        },
+        {
+          "owner": "lisa",
+          "friend": "aaron",
+          "tier": "close",
+          "categories": {
+            "food": true,
+            "events": true,
+            "availability": true,
+            "location": true,
+            "interests": true
+          }
+        },
+        {
+          "owner": "aaron",
+          "friend": "kai",
+          "tier": "close",
+          "categories": {}
+        },
+        {
+          "owner": "kai",
+          "friend": "aaron",
+          "tier": "close",
+          "categories": {}
+        }
+      ],
+      "redactions": [],
+      "events": [
+        {
+          "id": "evt_mvnn21genrst",
+          "at": "2026-10-25T04:41:50-05:00",
+          "kind": "plan_state",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Sprout is turning \"We NEED to do Japan next summer.\" into a plan: Japan trip, July 2027, for three"
+        },
+        {
+          "id": "evt_mvnn22mqwnl4",
+          "at": "2026-10-25T04:41:52-05:00",
+          "kind": "plan_state",
+          "actor": "human",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "You answered: up to $1,000, ramen and film photography"
+        },
+        {
+          "id": "evt_mvnn22n546tv",
+          "at": "2026-10-25T04:41:52-05:00",
+          "kind": "message_sent",
+          "actor": "agent",
+          "agent": "aaron",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "messageId": "msg_mvnn22mr5ua8",
+          "text": "Sprout asked Mochi for Michelle's budget bound and one taste"
+        },
+        {
+          "id": "evt_mvnn22n64p6j",
+          "at": "2026-10-25T04:41:52-05:00",
+          "kind": "message_sent",
+          "actor": "agent",
+          "agent": "aaron",
+          "contextId": "ctx_mvnn21gelod4",
+          "planId": "plan_mvnn21gebstb",
+          "messageId": "msg_mvnn22n5xog6",
+          "text": "Sprout asked Pebble for Kai's budget bound and one taste"
+        },
+        {
+          "id": "evt_mvnn24pmq937",
+          "at": "2026-10-25T04:41:55-05:00",
+          "kind": "plan_state",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Kai answered (played by a model): up to $900, anime, low mobility"
+        },
+        {
+          "id": "evt_mvnn24pqew91",
+          "at": "2026-10-25T04:41:55-05:00",
+          "kind": "message_sent",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21gelod4",
+          "planId": "plan_mvnn21gebstb",
+          "messageId": "msg_mvnn24pnbc7k",
+          "text": "Pebble answered for Kai (played by a model): up to $900, anime, low mobility"
+        },
+        {
+          "id": "evt_mvnn24q5anlx",
+          "at": "2026-10-25T04:41:55-05:00",
+          "kind": "plan_state",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Michelle answered (played by a model): up to $1,000, food, every cuisine"
+        },
+        {
+          "id": "evt_mvnn24q7v5w7",
+          "at": "2026-10-25T04:41:55-05:00",
+          "kind": "message_sent",
+          "actor": "agent",
+          "agent": "lisa",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "messageId": "msg_mvnn24q5fsuq",
+          "text": "Mochi answered for Michelle (played by a model): up to $1,000, food, every cuisine"
+        },
+        {
+          "id": "evt_mvnn24q87amj",
+          "at": "2026-10-25T04:41:55-05:00",
+          "kind": "plan_state",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Sprout set a flight cap of $900 per person. The lowest limit anyone gave: Kai's $900, played by a model"
+        },
+        {
+          "id": "evt_mvnn2dgduagu",
+          "at": "2026-10-25T04:41:55-05:00",
+          "kind": "plan_state",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Sprout composed 4 lines at $1,665 per person (picked by the model, checked by code) and a $420 pot deposit each"
+        },
+        {
+          "id": "evt_mvnn2dgfyeqr",
+          "at": "2026-10-25T04:42:06-05:00",
+          "kind": "message_sent",
+          "actor": "agent",
+          "agent": "aaron",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "messageId": "msg_mvnn2dgevadx",
+          "text": "Sprout proposed a $900 cap, an itinerary of 4 lines (seeded) and a $420 pot deposit to Mochi"
+        },
+        {
+          "id": "evt_mvnn2dgfvdtl",
+          "at": "2026-10-25T04:42:06-05:00",
+          "kind": "message_sent",
+          "actor": "agent",
+          "agent": "aaron",
+          "contextId": "ctx_mvnn21gelod4",
+          "planId": "plan_mvnn21gebstb",
+          "messageId": "msg_mvnn2dgfjr56",
+          "text": "Sprout proposed a $900 cap, an itinerary of 4 lines (seeded) and a $420 pot deposit to Pebble"
+        },
+        {
+          "id": "evt_mvnn2dgfx4z7",
+          "at": "2026-10-25T04:41:55-05:00",
+          "kind": "plan_state",
+          "actor": "system",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "The itinerary and the pot deposit wait on all 3 people. Nothing is booked."
+        },
+        {
+          "id": "evt_mvnn2fpfskzj",
+          "at": "2026-10-25T04:42:09-05:00",
+          "kind": "payment_sent",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Michelle put $420 in the trip pot (played by a model): paper dollars on the demo ledger (withdrawal wd_local_mvnn2fpf9h61, deposit dp_local_mvnn2fpfadxy)"
+        },
+        {
+          "id": "evt_mvnn2fpgnuy3",
+          "at": "2026-10-25T04:42:09-05:00",
+          "kind": "message_sent",
+          "actor": "agent",
+          "agent": "lisa",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "messageId": "msg_mvnn2fpfxkun",
+          "text": "Mochi: Michelle is in, $420 in the pot"
+        },
+        {
+          "id": "evt_mvnn2fe0p4kb",
+          "at": "2026-10-25T04:42:09-05:00",
+          "kind": "human_decision",
+          "actor": "human",
+          "agent": "lisa",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Mochi said yes to Japan trip, July 2027"
+        },
+        {
+          "id": "evt_mvnn2h6bthdv",
+          "at": "2026-10-25T04:42:11-05:00",
+          "kind": "payment_sent",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Kai put $420 in the trip pot (played by a model): paper dollars on the demo ledger (withdrawal wd_local_mvnn2h6bb42h, deposit dp_local_mvnn2h6bcfwr)"
+        },
+        {
+          "id": "evt_mvnn2h6budil",
+          "at": "2026-10-25T04:42:11-05:00",
+          "kind": "message_sent",
+          "actor": "agent",
+          "contextId": "ctx_mvnn21gelod4",
+          "planId": "plan_mvnn21gebstb",
+          "messageId": "msg_mvnn2h6bxnq3",
+          "text": "Pebble: Kai is in, $420 in the pot"
+        },
+        {
+          "id": "evt_mvnn2gxkxduf",
+          "at": "2026-10-25T04:42:11-05:00",
+          "kind": "human_decision",
+          "actor": "human",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Pebble said yes to Japan trip, July 2027"
+        },
+        {
+          "id": "evt_mvnn2ic3sr4r",
+          "at": "2026-10-25T04:42:12-05:00",
+          "kind": "payment_sent",
+          "actor": "human",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "You put $420 in the trip pot: paper dollars on the demo ledger (withdrawal wd_local_mvnn2ic2droy, deposit dp_local_mvnn2ic2euyz)"
+        },
+        {
+          "id": "evt_mvnn2hpcp6zl",
+          "at": "2026-10-25T04:42:12-05:00",
+          "kind": "human_decision",
+          "actor": "human",
+          "agent": "aaron",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Sprout said yes to Japan trip, July 2027"
+        },
+        {
+          "id": "evt_mvnn2hpcxo3m",
+          "at": "2026-10-25T04:42:12-05:00",
+          "kind": "plan_state",
+          "actor": "system",
+          "contextId": "ctx_mvnn21ge9u84",
+          "planId": "plan_mvnn21gebstb",
+          "text": "Plan confirmed by all 3 people"
+        }
+      ],
+      "rejectedWindows": {}
+    }
+  },
+  "model": "muse-spark-1.2",
+  "stats": {
+    "attempts": 1,
+    "chosenAttempt": 1,
+    "totalMs": 21877,
+    "perMessage": [
+      {
+        "seq": 1,
+        "from": "aaron",
+        "type": "trip_ask",
+        "at": "2026-10-25T04:41:52-05:00"
+      },
+      {
+        "seq": 1,
+        "from": "aaron",
+        "type": "trip_ask",
+        "at": "2026-10-25T04:41:52-05:00"
+      },
+      {
+        "seq": 2,
+        "from": "kai",
+        "type": "trip_answer",
+        "at": "2026-10-25T04:41:55-05:00"
+      },
+      {
+        "seq": 2,
+        "from": "lisa",
+        "type": "trip_answer",
+        "at": "2026-10-25T04:41:55-05:00"
+      },
+      {
+        "seq": 3,
+        "from": "aaron",
+        "type": "trip_plan",
+        "at": "2026-10-25T04:42:06-05:00"
+      },
+      {
+        "seq": 3,
+        "from": "aaron",
+        "type": "trip_plan",
+        "at": "2026-10-25T04:42:06-05:00"
+      },
+      {
+        "seq": 4,
+        "from": "lisa",
+        "type": "trip_reply",
+        "at": "2026-10-25T04:42:09-05:00"
+      },
+      {
+        "seq": 4,
+        "from": "kai",
+        "type": "trip_reply",
+        "at": "2026-10-25T04:42:11-05:00"
+      }
+    ]
+  }
+}

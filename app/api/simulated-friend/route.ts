@@ -32,6 +32,8 @@ export async function POST(request: Request) {
       return plan && plan.state === "awaiting_humans" && plan.decisions.lisa === "pending" ? plan : null;
     };
     if (!(await store.getRoom()).simulatedFriend) return refuse("This room has a real second person", 409);
+    // A trip's people join through the trip engine, which takes their deposit first; a bare yes would skip the pot.
+    if ((await store.getPlan(parsed.data.planId))?.kind === "trip") return refuse("A trip's people answer through the trip", 409);
     const first = await waiting();
     if (!first) return refuse("Nothing is waiting on the simulated friend", 409);
 

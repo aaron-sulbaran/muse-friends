@@ -194,9 +194,15 @@ export const copy = {
   groupDropped: "The Muses couldn't find a time that works for all three this week. I'll keep an eye out.",
   memberCardTitle: (name: string) => `${name} has no phone`,
   memberCardDetail: (name: string) => `${name} is a fictional friend, so you answer for ${name}.`,
+  memberDeciding: (name: string) => `${name} is deciding`,
+  memberPlayedByModel: (name: string) => `${name} is fictional and played by a model. If it stalls, you can answer for ${name}.`,
   memberAccept: (name: string) => `${name} says yes`,
   memberDecline: (name: string) => `${name} says not now`,
   planForThree: "Plan for three",
+  planATrip: "Plan a trip",
+  tripStartTitle: "Plan a trip with your friends",
+  tripStartDetail: "Sprout asks each Muse one question, then proposes a seeded itinerary and a pot. Michelle and Kai are played by a model.",
+  tripStartAction: "Plan a trip",
   goalsTitle: "Goals",
   goalsTracking: "Tracking",
   goalsEmpty: (friend: string) => `Nothing tracked yet. When you and ${friend} settle on a plan, it shows up here.`,
@@ -212,11 +218,12 @@ export const copy = {
   replayLabel: "Replay of a recorded run",
   replayShort: "Replay",
   /** The badge text for a replay, saying what is playing: a real run with the date it was recorded, or the scripted fallback. */
-  replayBadge: (recording: { source: "live" | "scripted"; recordedAt: string } | undefined, compact: boolean) => {
+  replayBadge: (recording: { source: "live" | "scripted"; recordedAt: string; model?: string } | undefined, compact: boolean) => {
     if (!recording) return compact ? "Replay" : "Replay of a recorded run";
     if (recording.source === "scripted") return compact ? "Replay, scripted" : "Replay of a scripted run";
     const date = recordingDate(recording.recordedAt);
-    return compact ? `Replay, recorded ${date}` : `Replay of a real run, recorded ${date}`;
+    const made = recording.model ? `${date}, ${recording.model}` : date;
+    return compact ? `Replay, recorded ${made}` : `Replay of a real run, recorded ${made}`;
   },
   replayStart: "Watch a recorded run",
   simulatedClock: "Simulated clock",

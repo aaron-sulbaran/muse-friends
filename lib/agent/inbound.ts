@@ -5,6 +5,7 @@ import {
   type AgentMessage,
   type DropReason,
   isPaymentType,
+  isTripType,
   type MessageRecord,
   type Plan,
   type Recommendation,
@@ -19,6 +20,7 @@ import { buildCards } from "./cards";
 import { allPairsAgreed, namesOf, planForContext } from "./group";
 import { withLock } from "./lock";
 import { commitPaymentCore } from "./payment-rules";
+import { commitTripCore } from "./trip-rules";
 import { newId, seatOf } from "./ids";
 import { passedOver } from "./thread";
 
@@ -49,6 +51,8 @@ export type CommitResult = {
 export async function commitMessageCore(store: Store, record: MessageRecord, redaction: Redaction | null = null): Promise<CommitResult> {
   // Payments have a channel of their own: no plan transitions, no cards, no windows ledger.
   if (isPaymentType(record.message.type)) return commitPaymentCore(store, record, redaction);
+  // So do trips: a thread of their own per member, linked to the plan, which only the trip engine moves.
+  if (isTripType(record.message.type)) return commitTripCore(store, record, redaction);
   const { message } = record;
   const at = message.at;
   const [existingPlan, priorRecords, existingThread] = await Promise.all([

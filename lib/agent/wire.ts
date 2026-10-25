@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { MEMBER_IDS, ModelProof, PolicyStamp, Redaction, isPaymentType, type MemberId, type TaskState } from "@/lib/protocol";
+import { MEMBER_IDS, ModelProof, PolicyStamp, Redaction, isPaymentType, isTripType, type MemberId, type TaskState } from "@/lib/protocol";
 import { validateIncoming, type IncomingCheck } from "@/lib/policy";
 import { validatePaymentIncoming } from "./payment-rules";
+import { validateTripIncoming } from "./trip-rules";
 import { getPersona, displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
@@ -100,6 +101,12 @@ export async function receiveMessage(
       if (!extra.ok) check = { ok: false, status: extra.status, error: extra.error };
     }
 
+    // A trip message gets the trip checks: its plan, the star, and that the numbers are the person's and the seed's.
+    if (generic.ok && isTripType(generic.message.type)) {
+      const extra = await validateTripIncoming(store, generic.message);
+      if (!extra.ok) check = { ok: false, status: extra.status, error: extra.error };
+    }
+
     if (!check.ok) {
       const now = input.wallNow?.() ?? Date.now();
       const plan = contextId ? await store.getPlanByContext(contextId) : null;
@@ -122,7 +129,8 @@ export async function receiveMessage(
       envelope.data.redaction,
     );
     // In a group the coordinator waits for every friend to answer, then runs once.
-    let runTurn = committed.threadState === "working";
+    // A trip message never starts a negotiation turn: the trip engine drives the trip.
+    let runTurn = committed.threadState === "working" && !isTripType(check.message.type);
     if (runTurn && thread?.groupId) {
       const plan = await planForContext(store, check.message.contextId);
       if (plan?.group && input.recipient === plan.group.coordinator) runTurn = await claimCoordinatorTurn(store, plan.id);

@@ -1,5 +1,6 @@
 import type { AgentMessage, MemberId, Window } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
+import type { Contact } from "@/lib/seed/contacts";
 import { otherAgent } from "./ids";
 import { describeInstant, describeWindow } from "./windows";
 
@@ -40,6 +41,18 @@ export function signalTurnInput(agent: MemberId, signalId: string, nowMs: number
     "2. Call record_reel_details with the place, area, cuisine, and opening hours you read in the caption.",
     "3. Call get_my_calendar for the coming week to find free blocks, and pick up to 3 windows of 1 to 3 hours that suit the place and its opening hours (a restaurant meal is an evening plan, between 5pm and 9pm).",
     `4. Call send_to_friend_agent with type intent to open the conversation with ${friend}: name the place as the activity, offer those windows, and add a short note.`,
+  ].join("\n");
+}
+
+// The opening turn of a follow-up with someone the person met. No reel: the person asked for it.
+export function followUpTurnInput(agent: MemberId, contact: Contact, nowMs: number): string {
+  const friend = displayName(otherAgent(agent));
+  return [
+    `It is ${describeInstant(nowMs)} Central. Your calendar tool covers now through Sat Oct 31.`,
+    `Your person asked you to follow up with ${contact.displayName}. ${contact.howYouMet}. ${contact.displayName} has a Muse too (${friend}, the friend you can message). You are acquaintances, not close friends: keep it light and brief.`,
+    "Do this:",
+    "1. Call get_my_calendar for the coming week to find free blocks.",
+    `2. Call send_to_friend_agent with type intent: a low-key plan such as coffee or a short walk as the activity (kind events or food), up to 3 windows of 1 to 2 hours from your free blocks (coffee suits mid-morning to early evening, 10am to 7pm), and a short friendly note that mentions having met. Your person's sharing settings for ${contact.displayName} are limited; add share: ["location"] as usual and let the settings decide.`,
   ].join("\n");
 }
 
