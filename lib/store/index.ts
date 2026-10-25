@@ -92,3 +92,18 @@ export interface Store {
   // runs saved with saveRecordedRun survive a replace.
   replaceAll(snapshot: StateSnapshot): Promise<void>;
 }
+
+type StoreModule = { createStore: () => Store | Promise<Store> };
+
+// One store per server process. STORE=supabase loads lib/store/supabase.ts (Lane P), which must
+// export createStore(); anything else uses the local JSON file. Shared through globalThis so every
+// route bundle in `next dev` sees the same instance.
+export async function getStore(): Promise<Store> {
+  const shared = globalThis as typeof globalThis & { __museStore?: Promise<Store> };
+  shared.__museStore ??= (async () => {
+    const name = process.env.STORE === "supabase" ? "supabase" : "json";
+    const implementation = (await import(`./${name}`)) as StoreModule;
+    return implementation.createStore();
+  })();
+  return shared.__museStore;
+}

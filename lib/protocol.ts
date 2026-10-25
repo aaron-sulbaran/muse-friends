@@ -29,6 +29,7 @@ export type SharedCategory = z.infer<typeof SharedCategory>;
 
 export const THREAD_CAP = 6;
 export const MAX_WINDOWS = 3;
+export const MAX_WINDOW_HOURS = 3;
 export const NOTE_MAX = 140;
 export const TITLE_MAX = 60;
 
@@ -70,7 +71,7 @@ export type DropReason = z.infer<typeof DropReason>;
 const Id = z.string().min(1).max(64);
 
 // ISO 8601 with an explicit offset. The demo runs in US Central (UTC-05:00 that week).
-export const IsoDateTime = z.iso.datetime({ offset: true });
+export const IsoDateTime = z.iso.datetime({ offset: true }).describe("ISO 8601 with offset, for example 2026-10-27T18:00:00-05:00");
 
 export const Window = z
   .strictObject({ start: IsoDateTime, end: IsoDateTime })
@@ -161,18 +162,20 @@ export type AgentMessage = z.infer<typeof AgentMessage>;
 // from, to, state, at, and builds `shared` from `share` through the sender's allowlist, so a
 // model can never forge identity, position, or state.
 const MessageDraftShape = z.strictObject({
-  type: MessageType,
-  reason: Reason,
-  activity: Activity.optional(),
-  windows: z.array(Window).max(MAX_WINDOWS).optional(),
-  note: z.string().max(NOTE_MAX).optional(),
-  share: z.array(SharedCategory).max(SHARED_CATEGORIES.length).optional(),
+  type: MessageType.describe("intent opens, propose offers windows, counter answers with other windows, accept agrees to ONE window, decline ends it"),
+  reason: Reason.describe("both_free: checked and it works; interest_match: shared interest; no_overlap: nothing fits; not_interested; cap_reached: out of messages"),
+  activity: Activity.optional().describe("What the plan is, for example kind food, title Shawarma Point"),
+  windows: z.array(Window).max(MAX_WINDOWS).optional().describe("Up to 3 windows copied exactly from your free blocks"),
+  note: z.string().max(NOTE_MAX).optional().describe("One friendly sentence, max 140 characters, no private details"),
+  share: z.array(SharedCategory).max(SHARED_CATEGORIES.length).optional().describe("Categories of your interests to share, if your person allows it"),
 });
 
 export const MessageDraft = MessageDraftShape.superRefine(checkWindowRules);
 export type MessageDraft = z.infer<typeof MessageDraft>;
 
-export const SendToFriendArgs = MessageDraftShape.extend({ friend: AgentId }).superRefine(checkWindowRules);
+export const SendToFriendArgs = MessageDraftShape.extend({
+  friend: AgentId.describe('The friend\'s agent id, exactly "aaron" or "lisa" (not a display name)'),
+}).superRefine(checkWindowRules);
 export type SendToFriendArgs = z.infer<typeof SendToFriendArgs>;
 
 // Categories whose content is present in a message. Availability means windows, location
