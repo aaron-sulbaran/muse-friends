@@ -11,13 +11,15 @@ type Props = {
   onChanged: () => void;
   /** A recording is on screen: show the card, but starting a run would touch live state. */
   readOnly: boolean;
+  /** The live-run caps are reached: the page falls back to a recording instead of showing an error. */
+  onPaused?: (text: string) => void;
 };
 
 /**
  * What a judge taps to begin. Side b sends the shawarma reel to side a; a judge
  * alone on side a brings in the simulated friend, who then sends it.
  */
-export function StartCard({ variant, friendName, onChanged, readOnly }: Props) {
+export function StartCard({ variant, friendName, onChanged, readOnly, onPaused }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sendsReel = variant === "send-reel";
@@ -28,7 +30,8 @@ export function StartCard({ variant, friendName, onChanged, readOnly }: Props) {
     setError(null);
     const result: Result = await (sendsReel ? postSignal() : postSimulatedFriend());
     setPending(false);
-    if (!result.ok) setError(result.message);
+    if (!result.ok && result.paused) onPaused?.(result.message);
+    else if (!result.ok) setError(result.message);
     onChanged();
   }
 

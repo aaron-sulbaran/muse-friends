@@ -79,6 +79,7 @@ async function run(label) {
   // 1. The reel arrives.
   const t0 = Date.now();
   const ack = await call("POST", "/api/signals", target ? { scenario: "follow_up", target } : {});
+  if (ack.status === 429) console.log(`  The room is paused by a run cap (${ack.json?.reason}): "${ack.json?.text}". Demo runs count against the caps too.`);
   if (target && ack.status === 409) {
     // The gate: no mutual follow, no thread. The refusal is logged and nothing else starts.
     check(ack.json?.reason === "not_mutual", `refused with reason ${ack.json?.reason}: "${ack.json?.text}"`);
@@ -115,7 +116,8 @@ async function run(label) {
   const messages = (last?.messages ?? []).filter((m) => m.contextId === contextId).sort((a, b) => a.seq - b.seq);
   check(last?.plan?.state === "awaiting_humans", `plan reached awaiting_humans (was ${last?.plan?.state ?? "none"})${last?.failure ? `, failure: ${JSON.stringify(last.failure)}` : ""}`);
   check(messages.length > 0 && messages.length <= 4, `agreed within 4 messages (${messages.length})`);
-  check(messages.every((m) => m.proof), "every message carries model proof");
+  const fallbacks = messages.filter((m) => !m.proof).length;
+  check(fallbacks === 0, `every message carries model proof${fallbacks > 0 ? ` (${fallbacks} sent by the scripted fallback: the model could not reply)` : ""}`);
   if (target) {
     const location = messages.filter((m) => (m.shared ?? []).includes("location") || m.activity?.place);
     check(location.length === 0, `no message carries a place or location (${location.length} did)`);
@@ -130,7 +132,7 @@ async function run(label) {
   for (const { m, arrival, turn } of rows) {
     const windows = (m.windows ?? []).length;
     console.log(
-      `  ${m.seq}  ${String(nameOf(last, m.from)).padEnd(6)}  ${m.type.padEnd(6)}  ${seconds(arrival).padStart(7)}  ${seconds(turn).padStart(6)}  ${seconds(m.proof?.latencyMs ?? 0).padStart(9)}  ${String(m.proof?.outputTokens ?? "").padStart(7)}  ${windows} window(s)${m.note ? ` | "${m.note}"` : ""}  [shared: ${(m.shared ?? []).join(",") || "-"}; withheld: ${(m.removed ?? []).join(",") || "-"}]`,
+      `  ${m.seq}  ${String(nameOf(last, m.from)).padEnd(6)}  ${m.type.padEnd(6)}  ${seconds(arrival).padStart(7)}  ${seconds(turn).padStart(6)}  ${seconds(m.proof?.latencyMs ?? 0).padStart(9)}  ${String(m.proof?.outputTokens ?? "").padStart(7)}  ${windows} window(s)${m.note ? ` | "${m.note}"` : ""}${m.proof ? "" : " (fallback, no model proof)"}  [shared: ${(m.shared ?? []).join(",") || "-"}; withheld: ${(m.removed ?? []).join(",") || "-"}]`,
     );
   }
   console.log(`  agents ${last?.plan?.state === "awaiting_humans" ? "agreed" : "did not agree"} in ${messages.length} messages at ${seconds(agreedMs)}`);
@@ -153,6 +155,12 @@ async function run(label) {
   etag = null;
   now = await state();
   check(now.plan?.state === "followed_up", `plan followed_up (${now.plan?.state})`);
+  // The clock no longer counts a plan as followed through; only a person's "We went!" tap does.
+  check(now.followThrough?.events?.length === 0, `the clock alone does not count it (${now.followThrough?.events?.length} event(s))`);
+  const went = await call("POST", `/api/plans/${planId}/outcome`, { role: "a", result: "went" });
+  check(went.status === 200, `"We went!" tapped (${went.status}, ${went.ms}ms)`);
+  etag = null;
+  now = await state();
   check(now.followThrough?.events?.length === 1, `Follow-through counts ${now.followThrough?.events?.length} human event(s)`);
 
   // 4. The privacy toggle.

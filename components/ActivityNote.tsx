@@ -1,4 +1,4 @@
-import { Film, MessageCircle, Shield, UserMinus, Users, type LucideIcon } from "lucide-react";
+import { CalendarX, Film, MessageCircle, Shield, UserMinus, Users, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
 
@@ -8,6 +8,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
   policy_changed: { icon: Shield, title: "Changed sharing" },
   contact_chosen: { icon: Users, title: "Asked to follow up" },
   contact_refused: { icon: UserMinus, title: "Did not reach out", plain: true },
+  busy_added: { icon: CalendarX, title: "Marked a time busy" },
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */

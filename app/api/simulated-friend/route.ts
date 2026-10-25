@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { reserveRun } from "@/lib/agent/caps";
 import { decide } from "@/lib/agent/lifecycle";
 import { getStore } from "@/lib/store";
 import { michelleDecides } from "@/lib/ui/friend";
@@ -36,6 +37,15 @@ export async function POST(request: Request) {
   await sleep(2200);
   const plan = await waiting();
   if (!plan) return refuse("Nothing is waiting on the simulated friend", 409);
+
+  // Michelle's answer is a model call, so it counts against the same live-run caps as the agents' turns.
+  const slot = reserveRun();
+  if (!slot.ok) {
+    return NextResponse.json(
+      { data: null, error: { message: slot.text }, paused: true, reason: slot.reason, text: slot.text, budget: slot.budget },
+      { status: 429, headers: { "Retry-After": String(slot.budget.retryAfterSeconds ?? 60) } },
+    );
+  }
 
   let choice: "accept" | "decline";
   try {

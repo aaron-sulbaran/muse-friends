@@ -1,6 +1,6 @@
 import { Bell, CalendarCheck, Check, ChevronLeft, Clock, Film, MessageCircle, Repeat, X, type LucideIcon } from "lucide-react";
 import { copy } from "@/lib/ui/copy";
-import { goalRowDetail, goalSteps, goalTitle, isTracked, type GoalContext } from "@/lib/ui/goals";
+import { goalDone, goalRowDetail, goalSteps, goalTitle, isTracked, type GoalContext } from "@/lib/ui/goals";
 import type { PlanState, UiPlan } from "@/lib/ui/types";
 
 const stepIcons: Record<PlanState, LucideIcon> = {
@@ -36,8 +36,14 @@ export function GoalsTab({ plan, context, onOpen }: ListProps) {
           onClick={onOpen}
           className="mt-3 flex w-full animate-card-in items-center gap-3 rounded-card bg-surface p-4 text-left shadow-float transition-colors hover:bg-group"
         >
-          <span aria-hidden="true" className="size-5 shrink-0 rounded-full border-2 border-faint" />
-          <span className="min-w-0">
+          {goalDone(plan) ? (
+            <span aria-hidden="true" className="grid size-5 shrink-0 place-items-center rounded-full bg-tracking text-surface">
+              <Check className="size-3" strokeWidth={3} />
+            </span>
+          ) : (
+            <span aria-hidden="true" className="size-5 shrink-0 rounded-full border-2 border-faint" />
+          )}
+          <span className={plan.outcome?.result === "didnt" ? "min-w-0 opacity-60" : "min-w-0"}>
             <span className="block text-[15px] font-semibold leading-5">{goalTitle(plan, context.friend)}</span>
             <span className="block text-[13px] leading-[18px] text-muted">{goalRowDetail(plan, context)}</span>
           </span>
@@ -72,8 +78,8 @@ export function GoalDetail({ plan, context, onBack }: DetailProps) {
       <p className="mt-6 text-[15px] font-semibold leading-5">{copy.activityTitle}</p>
       <ol className="mt-3">
         {steps.map((step, index) => {
-          const Icon = stepIcons[step.state];
           const last = index === steps.length - 1;
+          const Icon = last && goalDone(plan) ? Check : last && plan.outcome?.result === "didnt" ? X : stepIcons[step.state];
           return (
             <li key={`${step.state}-${index}`} className="relative flex gap-3 pb-5 animate-row-in">
               {!last ? <span aria-hidden="true" className="absolute left-[13px] top-8 h-[calc(100%-2rem)] w-0.5 bg-bubble-muse" /> : null}

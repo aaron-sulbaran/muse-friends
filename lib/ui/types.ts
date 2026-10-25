@@ -4,6 +4,7 @@
  * schemas directly and a contract change lands in one adapter.
  */
 
+import type { RunBudget } from "@/lib/agent/caps";
 import type {
   AgentId,
   Category,
@@ -20,6 +21,9 @@ import type {
 // The wire vocabulary comes from the protocol, never a copy, so a new reason or
 // category cannot silently break the adapter's types.
 export type { AgentId, Category, Decision, MessageReason, MessageType, PlanState, Role, ShareTier, ThreadState, TimeWindow };
+
+/** What a Muse is doing, for the header avatar's loop: nothing, reading or waiting on a model, or talking to the other Muse. */
+export type AvatarMood = "idle" | "thinking" | "talking";
 
 export type ModelProof = {
   model: string;
@@ -76,7 +80,11 @@ export type UiPlan = {
   droppedReason: string | null;
   /** When each state was reached, oldest first. */
   history: Array<{ state: PlanState; at: string }>;
+  /** What the people said about whether it happened; null until someone answers. */
+  outcome: UiOutcome | null;
 };
+
+export type UiOutcome = { result: "went" | "didnt"; at: string; nextIdeaId: string | null; chosenBy: "model" | "rule" | null };
 
 export type FollowThroughEvent = {
   id: string;
@@ -103,7 +111,7 @@ export type UiRefusal = { id: string; at: string; contactName: string; text: str
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "contact_chosen" | "contact_refused";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "contact_chosen" | "contact_refused";
   at: string;
   text: string;
 };
@@ -148,6 +156,8 @@ export type UiSnapshot = {
     humanTapCount: number;
   };
   inFlight: InFlight | null;
+  /** The live-run caps right now; null while a recording is on screen, which spends nothing. */
+  budget: RunBudget | null;
   /** Set when an agent's turn ended without a message: the thread stopped and the presenter decides on Replay. */
   failure: { agent: AgentId } | null;
   /** What each side currently lets the other see. */

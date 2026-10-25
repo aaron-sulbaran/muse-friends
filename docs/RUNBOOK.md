@@ -6,16 +6,17 @@ How Muse Friends is hosted, and every step that needs a human with a dashboard l
 
 | Thing | Value |
 |---|---|
-| Production URL (QR code, judges, README) | https://muse-friends.vercel.app |
-| Health check | https://muse-friends.vercel.app/api/health returns `{"ok":true,"sha":"<7 chars>"}`; `sha` is the deployed commit |
+| Production URL (QR code, judges, README) | https://musefriends.tech. The canonical address is **https://www.musefriends.tech**: the bare name answers with a 308 redirect to it, so the browser's address bar ends on `www` |
+| Fallback address | https://muse-friends.vercel.app: public and always live; hand this one out if the domain ever misbehaves |
+| Health check | https://musefriends.tech/api/health (after the redirect, https://www.musefriends.tech/api/health) returns `{"ok":true,"sha":"<7 chars>"}`; `sha` is the deployed commit |
 | Vercel project | `muse-friends`, team "Aaron's Personal Projects" (Hobby), region `iad1` |
 | Git connection | `aaron-sulbaran/muse-friends`; `main` deploys to production, every other branch to a preview |
-| QR code | `public/qr.svg` (served at `/qr.svg`), encodes the production URL |
+| QR code | `public/qr.svg` (served at `/qr.svg`), encodes `https://musefriends.tech` |
 
 ## How deploys work
 
-- Push to `main`: production deploy, served on `muse-friends.vercel.app` within about a minute.
-- Push to any other branch: a preview deploy with its own URL. **Previews are behind Vercel Authentication** (a Vercel login is required to open them). Only the primary production alias `muse-friends.vercel.app` is public; the team-scoped alias `muse-friends-aaron-sulbaran-projects.vercel.app` also redirects to a Vercel login. Always hand out and test the short URL.
+- Push to `main`: production deploy, served on `www.musefriends.tech`, `musefriends.tech`, and `muse-friends.vercel.app` within about a minute.
+- Push to any other branch: a preview deploy with its own URL. **Previews are behind Vercel Authentication** (a Vercel login is required to open them). Only the production addresses (`www.musefriends.tech`, the redirecting `musefriends.tech`, and the primary alias `muse-friends.vercel.app`) are public; the team-scoped alias `muse-friends-aaron-sulbaran-projects.vercel.app` also redirects to a Vercel login. Always hand out and test one of the public addresses.
 - This is a Hobby project, and Hobby limits Git deploys to the account owner's own commits (not yet tested here with a second author). If a push from someone else never produces a deployment, deploy from the owner's machine with `vercel --prod`.
 - Environment variables apply to new deployments only. After adding or changing one, redeploy (H1 step 4).
 
@@ -29,13 +30,13 @@ vercel inspect <deployment-url> # build details
 
 ## Regenerating the QR code
 
-Run this whenever the production URL changes (for example when `musefriends.tech` goes live), then commit `public/qr.svg`:
+Run this whenever the production address changes, then commit `public/qr.svg`. It last changed on Sat Oct 24 evening, when `musefriends.tech` went live; before that it encoded the vercel.app address.
 
 ```bash
-pnpm dlx qrcode@1.5.4 -t svg -e M -q 2 -o public/qr.svg "https://muse-friends.vercel.app"
+pnpm dlx qrcode@1.5.4 -t svg -e M -q 2 -o public/qr.svg "https://musefriends.tech"
 ```
 
-Check it by pointing a phone camera at the file opened on screen; it must open the URL in a private window with no login.
+Check it by pointing a phone camera at the file opened on screen; it must open the address in a private window with no login, passing through one redirect to `www`.
 
 ## Human steps
 
@@ -58,16 +59,28 @@ Production needs `MODEL_API_KEY` for the agents (and, later, the Supabase variab
 
 Dashboard fallback if the script fails: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables, **Add Environment Variable**, key `MODEL_API_KEY`, value from `.env` (the text after the `=`, no quotes), Environments **Production** and **Preview**, **Sensitive** on, **Save**; then redeploy as in step 4. Re-run the script (or repeat the dashboard steps) whenever a new variable is added to `.env`.
 
-### H2. Connect musefriends.tech (Aaron, 10 minutes, after claiming the domain)
+### H2. Connect musefriends.tech: done by Aaron (live Sat Oct 24 evening)
 
-1. Open https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/domains, click **Add Domain**, type `musefriends.tech`, and choose the option that redirects `www` to the apex.
-2. Vercel shows the DNS records it wants. Expect an **A** record on `@` (usually `76.76.21.21`) and a **CNAME** on `www`; the values on your screen win over these. Send them to the orchestrator so this page can record them.
-3. In the get.tech account for the domain, open **DNS management**, delete any parking A record on `@`, add the two records, save.
-4. Wait up to 30 minutes. On the Vercel Domains page the domain changes from "Invalid Configuration" to a check mark and a certificate is issued on its own.
-5. In a private window on a phone, `https://musefriends.tech` must load the app with a lock icon and `https://www.musefriends.tech` must redirect to it.
-6. Tell the orchestrator. The platform lane then regenerates the QR code for the new URL (section above) and the README links change.
+Canonical address: **https://www.musefriends.tech**. The bare name `https://musefriends.tech` redirects to it with a 308 (set in the Vercel project, Settings, Domains), so the QR code, which encodes the bare name, costs a phone one extra hop and lands on `www`. Both names are verified in the Vercel project and have certificates. The domain stays on the registrar's nameservers; the records live in the get.tech DNS editor.
 
-DNS records Vercel showed for this project: _not added yet; filled in after step 2._
+DNS records Vercel shows for this project, as set:
+
+| Type | Name | Value |
+|---|---|---|
+| A | `@` | `216.198.79.1` |
+| CNAME | `www` | `02c1d9a5bffce12d.vercel-dns-017.com.` |
+
+Vercel also accepts `64.29.17.1` (second IP) or the older `76.76.21.21` for the apex, and `cname.vercel-dns.com.` for `www`. Checked on Sat Oct 24 against the registrar's own nameservers and against 8.8.8.8, 1.1.1.1, and 9.9.9.9: all return the two values above.
+
+To redo it on a fresh project:
+
+1. Open https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/domains. Add `www.musefriends.tech`, then add `musefriends.tech` and choose to redirect it to `www.musefriends.tech`.
+2. Copy the records Vercel shows into the get.tech DNS editor, deleting any parking record on `@` or `www`.
+3. Wait up to 30 minutes; both names turn to a check mark and certificates are issued on their own.
+4. In a private window on a phone, `https://musefriends.tech` must land on `https://www.musefriends.tech` with a lock icon.
+5. Regenerate the QR code if the address changed (section above).
+
+One quirk to know about: when I looked, Vercel's own domain check (`vercel api /v6/domains/musefriends.tech/config`) still said `misconfigured: true` with a conflicting `A 127.0.0.1` on the bare name, although the registrar's nameservers and all three public resolvers return the right record and both names serve. I treat it as stale on Vercel's side. If the bare name ever misbehaves, look for a leftover `A 127.0.0.1` on `@` in the DNS editor and delete it.
 
 ### H3. Supabase: hand over the server key (Aaron, 3 minutes; the schema is applied)
 
@@ -92,10 +105,10 @@ Added when the MCP front door is deployed; see the next section of this runbook 
 Who: anyone with a phone. Time: 5 minutes. Run it on venue Wi-Fi and again on mobile data, in a private tab.
 
 0. Optional first pass from a laptop on the same network: `./scripts/smoke-production.sh`. Expect seven `PASS` lines (health, home, both phones, the QR file, the stylesheet, the state JSON), none over 3 seconds, none redirected to a Vercel login. It does not run the negotiation; that is step 3, on a phone.
-1. Scan `/qr.svg` (open https://muse-friends.vercel.app/qr.svg on another screen) or type the URL.
-2. Use the public alias only: `https://muse-friends.vercel.app` (or `https://musefriends.tech` once it is live). The agents post to each other at the origin of the request that started them, so a preview or the team-scoped alias, which sit behind a Vercel login, would put a login wall in front of the second hop and the negotiation would stall.
+1. Scan the QR code (open https://musefriends.tech/qr.svg on another screen) or type the address.
+2. Use a public address only: `https://musefriends.tech` (it redirects to the canonical `https://www.musefriends.tech`, so expect the address bar to end on `www`) or the fallback `https://muse-friends.vercel.app`. The agents post to each other at the origin of the request that started them, so a preview or the team-scoped alias, which sit behind a Vercel login, would put a login wall in front of the second hop and the negotiation would stall. After the redirect the origin is `www`, which is public too.
 3. Run one negotiation. Open `/a`, tap **Play with a simulated friend**, wait for the plan card, tap **Reach out**. Pass: no Vercel login; the card appears within about 30 seconds; the other side answers on its own within seconds and the status line moves to waiting for Michelle and then to the WhatsApp step; nothing stalls and nothing takes anywhere near 300 seconds. With a second phone on `/b` instead of the simulated friend, that phone's person taps the card.
-4. Clean up, every time. In **Demo controls** on the stage page tap **Reset**, then turn the simulated friend off (the stage control, or `curl -X POST https://muse-friends.vercel.app/api/controls -H 'content-type: application/json' -d '{"type":"simulated_friend","on":false}'`). Reset keeps the simulated-friend setting on purpose, so a solo test otherwise leaves the next two judges with a model-played friend.
+4. Clean up, every time. In **Demo controls** on the stage page tap **Reset**, then turn the simulated friend off (the stage control, or `curl -X POST https://www.musefriends.tech/api/controls -H 'content-type: application/json' -d '{"type":"simulated_friend","on":false}'`). Reset keeps the simulated-friend setting on purpose, so a solo test otherwise leaves the next two judges with a model-played friend.
 5. Fail: write down which network, what you saw, and the time, and send it to the orchestrator.
 
 First full run (Sat Oct 24, about 9:50pm, Wi-Fi, 375 px window, production `b5d41bd`): the tap to a plan awaiting both people took about 15 seconds (reel read at about 3 seconds, first agent message at about 12, third at about 17 on a polling clock), the simulated friend answered within a few seconds of the tap, the plan was confirmed, and the database held 1 signal, 1 thread, 3 messages, 1 plan, 2 cards, and 10 timeline events. Replay played from the stage's Demo controls.
@@ -109,13 +122,13 @@ What happened (Sat Oct 24, about 8:45pm): production builds restore the previous
 Check, from anywhere:
 
 ```bash
-curl -s https://muse-friends.vercel.app/ | grep -o '/_next/static/[^"]*\.css'
-curl -s https://muse-friends.vercel.app/<the path printed above> | grep -c -- '--color-screen'
+curl -sL https://musefriends.tech/ | grep -o '/_next/static/[^"]*\.css'
+curl -sL https://musefriends.tech/<the path printed above> | grep -c -- '--color-screen'
 ```
 
 Expect a count of 1 or more. `./scripts/smoke-production.sh` runs the same check ("stylesheet carries the brand tokens").
 
 Confirmed fixed (Sat Oct 24, about 8:56pm): the first production deploy after the change, commit `4326251`, served a 25,645 byte stylesheet containing `--color-screen` and no Geist, and `./scripts/smoke-production.sh` passed all seven checks. The build log still says "Restored build cache from previous deployment", then runs `rm -rf .next && pnpm run build`, so the restored cache is thrown away before the compiler sees it.
 
-Fix: `vercel.json` now builds with `rm -rf .next && pnpm run build`, so no restored cache can reach the compiler and every deploy is a clean build (it adds a few seconds). If it ever happens anyway, open the Vercel project, **Deployments**, the latest production deployment, **...**, **Redeploy**, untick **Use existing Build Cache**, **Redeploy**, then rerun the check. Also confirm you opened `https://muse-friends.vercel.app` and not a preview or a team-scoped alias, which sit behind a login and can lag.
+Fix: `vercel.json` now builds with `rm -rf .next && pnpm run build`, so no restored cache can reach the compiler and every deploy is a clean build (it adds a few seconds). If it ever happens anyway, open the Vercel project, **Deployments**, the latest production deployment, **...**, **Redeploy**, untick **Use existing Build Cache**, **Redeploy**, then rerun the check. Also confirm you opened a public address (`https://musefriends.tech` or `https://muse-friends.vercel.app`) and not a preview or a team-scoped alias, which sit behind a login and can lag.
 

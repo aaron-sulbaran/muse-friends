@@ -12,6 +12,8 @@ type Props = {
   museName: string;
   /** Called after a pick so the caller can refresh the snapshot at once. */
   onChanged: () => void;
+  /** The live-run caps are reached: the page falls back to a recording instead of showing an error. */
+  onPaused?: (text: string) => void;
   onClose: () => void;
 };
 
@@ -20,7 +22,7 @@ type Props = {
  * the Muse may reach out. A contact who does not follow back can still be picked,
  * so the gate's refusal is visible rather than hidden by the list.
  */
-export function ContactSheet({ contacts, museName, onChanged, onClose }: Props) {
+export function ContactSheet({ contacts, museName, onChanged, onPaused, onClose }: Props) {
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -36,7 +38,9 @@ export function ContactSheet({ contacts, museName, onChanged, onClose }: Props) 
     setPending(null);
     onChanged();
     // A refusal is the gate working, not a failure: the timeline and the phone show it, so the sheet just closes.
-    if (result.ok || result.refused) onClose();
+    // So does a paused budget: the page plays a recording and says why.
+    if (!result.ok && result.paused) onPaused?.(result.message);
+    if (result.ok || result.refused || result.paused) onClose();
     else setError(result.message);
   }
 

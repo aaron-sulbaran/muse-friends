@@ -1,8 +1,9 @@
+import type { RunBudget } from "@/lib/agent/caps";
 import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { CONTACTS, getContact, isMutual } from "@/lib/seed/contacts";
 import { simulatedFriend } from "./tokens";
-import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiPlan, UiRefusal, UiSnapshot } from "./types";
+import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiRefusal, UiSnapshot } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -13,6 +14,8 @@ import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, 
 
 export type UiOverlay = {
   mode: "live" | "replay";
+  /** The run caps for the JSON drawer; omit for a recording, which spends nothing. */
+  budget?: RunBudget | null;
 };
 
 /** Taps and sends that move a plan along. Not the outcome, so never counted. */
@@ -98,10 +101,29 @@ function toUiPlan(plan: Plan, state: StateSnapshot, rename: (text: string) => st
         ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null)
         : null,
     history: plan.history.map(({ state, at }) => ({ state, at })),
+    outcome: outcomeFor(plan, state),
+  };
+}
+
+/** The first answer wins. A followed_through event means went (recordings have it without the route); evt_outcome_didnt_ means didnt. */
+function outcomeFor(plan: Plan, state: StateSnapshot): UiOutcome | null {
+  const own = state.events.filter((event) => event.planId === plan.id);
+  const went = own.find((event) => event.kind === "followed_through");
+  const didnt = own.find((event) => event.kind === "human_decision" && event.id.startsWith("evt_outcome_didnt_"));
+  const answer = went && didnt ? (went.at <= didnt.at ? went : didnt) : (went ?? didnt);
+  if (!answer) return null;
+  const result = answer === went ? "went" : "didnt";
+  const next = own.map((event) => /^evt_next_(.+)_(model|rule)_[a-z0-9]+$/.exec(event.id)).find((match) => match !== null) ?? null;
+  return {
+    result,
+    at: answer.at,
+    nextIdeaId: result === "went" && next ? next[1] : null,
+    chosenBy: result === "went" && next ? (next[2] as "model" | "rule") : null,
   };
 }
 
 function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string {
+  if (reason === "agent_unavailable") return "An agent couldn't reply (model error)";
   if (turnFailed) return "A model call failed";
   switch (reason) {
     case "cap_reached":
@@ -119,7 +141,7 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<string>(["caption_extracted", "thread_opened", "policy_changed"]);
+const noteKinds = new Set<string>(["caption_extracted", "thread_opened", "policy_changed", "busy_added"]);
 
 function toNotes(state: StateSnapshot, rename: (text: string) => string): UiNote[] {
   const followUps = new Map(state.plans.filter((plan) => plan.target !== undefined).map((plan) => [plan.id, plan]));
@@ -235,6 +257,7 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
       humanTapCount: state.events.filter((event) => event.actor === "human" && humanTapKinds.has(event.kind)).length,
     },
     inFlight: deriveInFlight(state, plan),
+    budget: overlay.budget ?? null,
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
   };

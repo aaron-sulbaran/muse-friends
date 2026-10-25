@@ -1,49 +1,45 @@
-import type { AgentId } from "@/lib/ui/types";
+"use client";
+
+import { useEffect } from "react";
+import type { AgentId, AvatarMood } from "@/lib/ui/types";
 
 type Props = {
   agent: AgentId;
-  /** A letter: show a grey initial disc instead of the character (the simulated friend, or a contact). */
+  /** A letter: show a grey initial disc instead of the character (the simulated friend, or a contact the person chose). */
   initial?: string | null;
   /** The Muse's name, for the accessible label. */
   name?: string;
+  /** Rendered height in pixels. The renders are made for 36 (rows and cards) and 44 (the header), never above 96. */
   size?: number;
+  /** Set on the phone header: the animated loop for what this Muse is doing. Left out, the avatar is the static portrait. */
+  mood?: AvatarMood;
   className?: string;
 };
 
-function tintOf(variable: string): string {
-  return `color-mix(in srgb, ${variable} 10%, white)`;
+const characterOf: Record<AgentId, string> = { aaron: "sprout", lisa: "mochi" };
+const moods: AvatarMood[] = ["idle", "thinking", "talking"];
+
+let preloaded = false;
+
+/** Fetches every loop once, so a change of mood swaps from the cache instead of flashing empty. */
+function preloadLoops() {
+  if (preloaded) return;
+  preloaded = true;
+  for (const character of Object.values(characterOf)) {
+    for (const mood of moods) new Image().src = `/avatars/${character}-${mood}.webp`;
+  }
 }
 
-const eye = { fill: "var(--color-avatar-ink)" };
-const mouth = { fill: "none", stroke: "var(--color-avatar-ink)", strokeWidth: 2, strokeLinecap: "round" } as const;
+/**
+ * A Muse's character: Blender renders of Sprout and Mochi, bare, no circle and no tile. The header gets the loop for its
+ * mood (a still frame under reduced motion); everywhere else is the static portrait. Michelle, the simulated friend,
+ * keeps a grey initial disc so she never looks like a real Muse; so does a contact the person chose to follow up with.
+ */
+export function MuseAvatar({ agent, initial = null, name = "Muse", size = 44, mood, className = "" }: Props) {
+  useEffect(() => {
+    if (mood) preloadLoops();
+  }, [mood]);
 
-function Sprout() {
-  return (
-    <>
-      <path d="M32 15c-1-5 1-9 6-11 1 5-1 9-6 11zM32 15c1-4-1-7-5-8-1 4 1 7 5 8z" style={{ fill: "var(--color-sprout-leaf)" }} />
-      <path d="M32 14c11 0 18 9 18 22 0 14-8 22-18 22s-18-8-18-22c0-13 7-22 18-22z" style={{ fill: "var(--color-sprout)" }} />
-      <circle cx="26" cy="35" r="2.6" style={eye} />
-      <circle cx="38" cy="35" r="2.6" style={eye} />
-      <path d="M28.5 41.5q3.5 3 7 0" style={mouth} />
-    </>
-  );
-}
-
-function Mochi() {
-  return (
-    <>
-      <circle cx="17" cy="23" r="7" style={{ fill: "var(--color-mochi)" }} />
-      <circle cx="47" cy="23" r="7" style={{ fill: "var(--color-mochi)" }} />
-      <path d="M32 20c14 0 23 9 23 20 0 12-10 18-23 18S9 52 9 40c0-11 9-20 23-20z" style={{ fill: "var(--color-mochi)" }} />
-      <circle cx="25" cy="38" r="2.6" style={eye} />
-      <circle cx="39" cy="38" r="2.6" style={eye} />
-      <path d="M29 44h6" style={mouth} />
-    </>
-  );
-}
-
-/** A Muse's character: a circle with a 10 percent tint of the body color and the character bottom-aligned. */
-export function MuseAvatar({ agent, initial = null, name = "Muse", size = 44, className = "" }: Props) {
   if (agent === "lisa" && initial) {
     return (
       <span
@@ -55,15 +51,19 @@ export function MuseAvatar({ agent, initial = null, name = "Muse", size = 44, cl
       </span>
     );
   }
-  const tint = tintOf(agent === "aaron" ? "var(--color-sprout)" : "var(--color-mochi)");
+
+  const character = characterOf[agent];
+  const image = (src: string) => (
+    // Fixed brand renders at their native size; next/image would only re-encode the animated loops.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={name} width={size} height={size} draggable={false} className={`block shrink-0 select-none object-contain ${className}`} style={{ width: size, height: size }} />
+  );
+
+  if (!mood) return image(`/avatars/${character}-portrait.png`);
   return (
-    <span
-      className={`inline-block shrink-0 overflow-hidden rounded-full ${className}`}
-      style={{ width: size, height: size, backgroundColor: tint }}
-    >
-      <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label={name} className="block" style={{ marginTop: size * 0.06 }}>
-        {agent === "aaron" ? <Sprout /> : <Mochi />}
-      </svg>
-    </span>
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcSet={`/avatars/${character}-${mood}-header.png`} />
+      {image(`/avatars/${character}-${mood}.webp`)}
+    </picture>
   );
 }

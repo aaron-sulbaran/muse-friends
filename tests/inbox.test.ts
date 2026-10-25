@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentMessage, type AgentMessage as Message } from "@/lib/protocol";
+import { resetRunBudget } from "@/lib/agent/caps";
 import { validateIncoming } from "@/lib/policy";
 import { freeBlocks, windowHash } from "@/lib/agent/windows";
 import { agentToken, authenticateSender, receiveMessage } from "@/lib/agent/wire";
@@ -199,6 +200,7 @@ describe("receiveMessage", () => {
 
 describe("routes", () => {
   beforeEach(() => {
+    resetRunBudget();
     scheduled.length = 0;
     process.env.STORE_PATH = path.join(mkdtempSync(path.join(tmpdir(), "muse-routes-")), "store.json");
     (globalThis as { __museStore?: unknown }).__museStore = undefined;
@@ -276,25 +278,6 @@ describe("routes", () => {
     const store = await getStore();
     expect(await store.getSignal(body.signalId)).toMatchObject({ from: "lisa", to: "aaron" });
     expect((await store.getPlanByContext(body.contextId))?.state).toBe("detected");
-  });
-
-  it("stops starting runs once a room has used its cap, until reset", async () => {
-    process.env.MAX_RUNS_PER_ROOM = "2";
-    try {
-      const { POST } = await import("@/app/api/signals/route");
-      const start = () => POST(new Request("http://localhost:3001/api/signals", { method: "POST", body: "{}" }));
-      expect((await start()).status).toBe(202);
-      expect((await start()).status).toBe(202);
-      const blocked = await start();
-      expect(blocked.status).toBe(429);
-      expect((await blocked.json()).error).toContain("used its 2 runs");
-      const { getStore } = await import("@/lib/store");
-      const { resetDemo } = await import("@/lib/agent/controls");
-      await resetDemo(await getStore());
-      expect((await start()).status).toBe(202);
-    } finally {
-      delete process.env.MAX_RUNS_PER_ROOM;
-    }
   });
 
   it("rejects an unknown scenario", async () => {

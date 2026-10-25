@@ -115,16 +115,14 @@ describe("advanceClock", () => {
     expect((await store.getClock()).now).toBe("2026-10-28T10:00:00-05:00");
   });
 
-  it("writes a reminder from each agent, one human follow-through event, and a follow-up from each", async () => {
+  it("writes a reminder from each agent and a follow-up from each, and counts nothing until a person says they went", async () => {
     await scheduled();
     for (let step = 0; step < 3; step += 1) ok(await advanceClock(store));
     const events = await store.listEvents();
     expect(events.filter((event) => event.kind === "clock_advanced")).toHaveLength(3);
     expect(events.filter((event) => event.text.includes("reminded their person")).map((event) => event.agent)).toEqual(["aaron", "lisa"]);
-    const followed = events.filter((event) => event.kind === "followed_through");
-    expect(followed).toHaveLength(1);
-    expect(followed[0].actor).toBe("human");
-    expect(events.filter((event) => event.text.includes("again next month?")).map((event) => event.agent)).toEqual(["aaron", "lisa"]);
+    expect(events.filter((event) => event.kind === "followed_through")).toHaveLength(0);
+    expect(events.filter((event) => event.text.includes("whether they made it")).map((event) => event.agent)).toEqual(["aaron", "lisa"]);
   });
 
   it("runs the steps in between when a later one is named, so two buttons are enough", async () => {
@@ -133,7 +131,7 @@ describe("advanceClock", () => {
     expect(plan.state).toBe("followed_up");
     expect(moved.now).toBe("2026-10-28T10:00:00-05:00");
     expect(plan.history.map((entry) => entry.state).slice(-3)).toEqual(["reminded", "happened", "followed_up"]);
-    expect((await store.listEvents()).filter((event) => event.kind === "followed_through")).toHaveLength(1);
+    expect((await store.listEvents()).filter((event) => event.kind === "followed_through")).toHaveLength(0);
   });
 
   it("can stop at a named step, and never moves backward or repeats a step", async () => {
