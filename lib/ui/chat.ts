@@ -1,4 +1,5 @@
 import { copy } from "./copy";
+import { googleCalendarUrl } from "./gcal";
 import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, namesFor } from "./format";
 import type { AgentId, Role, UiPlan, UiSnapshot } from "./types";
 
@@ -14,7 +15,7 @@ export type ChatItem =
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
   | { kind: "collapsed"; id: string; text: string }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
-  | { kind: "hold-row"; id: string; title: string; detail: string; planId: string }
+  | { kind: "hold-row"; id: string; title: string; planId: string; googleUrl: string | null }
   | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend"; friendName: string };
 
 export type PhoneView = {
@@ -124,8 +125,13 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
           kind: "hold-row",
           id: "hold-row",
           title: copy.holdTitle(plan.activityTitle, theirs.human),
-          detail: copy.holdAction,
           planId: plan.id,
+          googleUrl: googleCalendarUrl({
+            title: copy.holdTitle(plan.activityTitle, theirs.human),
+            window: plan.window,
+            details: copy.holdDetails(names.muse.aaron, names.muse.lisa),
+            location: plan.place,
+          }),
         });
       }
       if (plan.state === "reminded" || plan.state === "followed_up") {

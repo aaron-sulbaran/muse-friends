@@ -113,7 +113,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
-        return <HoldRow planId={item.planId} role={role} title={item.title} action={item.detail} disabled={readOnly} />;
+        return <HoldRow planId={item.planId} role={role} title={item.title} googleUrl={item.googleUrl} disabled={readOnly} />;
     }
   }
 
