@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/lib/ui/copy";
+import { paymentSummary } from "@/lib/ui/payments";
 import type { UiPayment, UiSnapshot } from "@/lib/ui/types";
 
 type Props = {
@@ -76,7 +77,9 @@ export function PaymentDrawer({ payment, wallets, names, onClose }: Props) {
               <X className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
             </button>
           </header>
-          <div className="mt-5 rounded-group bg-group p-3 font-mono text-[12px] leading-[18px]">
+          <p className="mt-5 text-[15px] leading-[22px]">{paymentSummary(detail, names)}</p>
+          <p className="mt-4 text-[13px] font-semibold leading-[18px] text-muted">{copy.paymentDrawerRecord}</p>
+          <div className="mt-2 rounded-group bg-group p-3 font-mono text-[12px] leading-[18px]">
             <pre className="whitespace-pre-wrap break-words">{JSON.stringify(detail, null, 2)}</pre>
           </div>
           <button

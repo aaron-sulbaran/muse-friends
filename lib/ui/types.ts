@@ -144,6 +144,8 @@ export type UiPayment = {
   to: AgentId;
   amount: number;
   reason: string;
+  /** The reason with the plan's event and day in front ("Shawarma Point, Tue Oct 27, dinner share"); the cards show this when set. */
+  description?: string;
   note?: string;
   status: "proposed" | "declined" | "failed" | "sent" | "received" | "refunded";
   source: "nessie" | "local";

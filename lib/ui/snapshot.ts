@@ -3,6 +3,7 @@ import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
 import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
+import { describeNote, describePayment } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
 import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
@@ -185,10 +186,10 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
   }));
 }
 
-function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
+function toNotes(events: StateSnapshot["events"], rename: (text: string) => string, payments: UiPayment[]): UiNote[] {
   return events
     .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]) && isWorthARow(event))
-    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(event.text) }));
+    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(describeNote(event.text, payments)) }));
 }
 
 /** The message's proof, with its recorded tool calls tidied for display when there are any. */
@@ -270,6 +271,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
   const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
   const messages = toUiMessages(state);
+  const payments = paymentsOf(state);
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
@@ -278,7 +280,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state))].sort((first, second) => first.at.localeCompare(second.at)),
+    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state), payments)].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events, renameFor(state)),
@@ -291,7 +293,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
     wallets: { aaron: walletFor("aaron", state), lisa: walletFor("lisa", state) },
-    payments: paymentsOf(state),
+    payments,
     paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
     sandbox: sandboxFor(state),
   };
@@ -312,6 +314,12 @@ function sandboxFor(state: StateSnapshot): UiSnapshot["sandbox"] {
   const connected = wallets.length > 0 && wallets.every((wallet) => wallet.source === "nessie");
   const enabled = paymentsEnabled();
   return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, local ledger" };
+}
+
+/** The plan a payment belongs to, as far as naming it goes: its title and window. */
+function planNamed(planId: string, state: StateSnapshot): Pick<UiPlan, "activityTitle" | "window"> | null {
+  const plan = state.plans.find((candidate) => candidate.id === planId);
+  return plan ? { activityTitle: plan.activity?.title ?? "the plan", window: plan.window ?? null } : null;
 }
 
 const dollars = (amount: number) => (amount < 0 ? `-$${-amount}` : `$${amount}`);
@@ -393,5 +401,10 @@ function paymentsOf(state: StateSnapshot): UiPayment[] {
   const byId = new Map<string, UiPayment>();
   for (const proposal of Object.values(proposals)) byId.set(proposal.paymentId, fromProposal(proposal));
   for (const view of sent) byId.set(view.paymentId, toUiPayment(view, proposals[view.paymentId]));
-  return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at));
+  return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at)).map((payment) => named(payment, planNamed(payment.planId, state)));
+}
+
+/** A payment with the plan's event and day in front of its reason, for the cards and the Activity row. */
+function named(payment: UiPayment, plan: Pick<UiPlan, "activityTitle" | "window"> | null): UiPayment {
+  return { ...payment, description: describePayment(payment.reason, plan) };
 }

@@ -35,7 +35,7 @@ export function PaymentCard({ payment, side, friendName, friendMuse, onOpen }: P
         </span>
         <div className="min-w-0">
           <h3 className="text-[17px] font-semibold leading-[22px]">{title}</h3>
-          <p className="mt-0.5 text-[13px] leading-[18px] text-muted">{payment.reason}</p>
+          <p className="mt-0.5 text-[13px] leading-[18px] text-muted">{payment.description ?? payment.reason}</p>
         </div>
       </div>
       <p className={`mt-3 text-[13px] font-semibold leading-[18px] ${payment.status === "received" ? "text-tracking" : ""}`}>
