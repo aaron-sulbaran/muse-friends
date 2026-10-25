@@ -8,6 +8,8 @@
 // Options: --base URL  --runs N (default 1)  --privacy after|before|none (default after)
 //          --keep (do not reset the room at the end)  --timeout SECONDS (default 120)
 //          --force (start even if the room already holds a plan or messages; it will be cleared)
+//          --target ID  run the weak-tie follow-up with a seeded contact instead of the reel (jules is mutual,
+//                       riley is not and must be refused); privacy then defaults to none
 //
 // It uses the same public routes the phones use: POST /api/signals, GET /api/state (with the ETag),
 // POST /api/plans/[id]/decision and /draft, POST /api/clock, POST /api/controls. It RESETS the room at the
@@ -21,7 +23,8 @@ function option(name, fallback) {
 }
 const base = (option("base", process.env.DEMO_BASE_URL ?? "http://localhost:3001")).replace(/\/$/, "");
 const runs = Number(option("runs", "1"));
-const privacy = option("privacy", "after");
+const target = option("target", null);
+const privacy = option("privacy", target ? "none" : "after");
 const keep = argv.includes("--keep");
 const timeoutMs = Number(option("timeout", "120")) * 1000;
 const force = argv.includes("--force");
@@ -75,7 +78,18 @@ async function run(label) {
 
   // 1. The reel arrives.
   const t0 = Date.now();
-  const ack = await call("POST", "/api/signals", {});
+  const ack = await call("POST", "/api/signals", target ? { scenario: "follow_up", target } : {});
+  if (target && ack.status === 409) {
+    // The gate: no mutual follow, no thread. The refusal is logged and nothing else starts.
+    check(ack.json?.reason === "not_mutual", `refused with reason ${ack.json?.reason}: "${ack.json?.text}"`);
+    await sleep(1500);
+    etag = null;
+    const after = await state();
+    check(after.messages.length === 0, `no messages were sent (${after.messages.length})`);
+    check(after.plan?.state === "dropped", `plan dropped (${after.plan?.state})`);
+    check(!after.inFlight, "no agent turn is running");
+    return { refused: true, messages: [], agreedMs: 0, rows: [], last: after };
+  }
   check(ack.status === 202, `POST /api/signals answered 202 in ${ack.ms}ms`);
   if (ack.status !== 202) return null;
   const { contextId, planId } = ack.json;
@@ -102,6 +116,10 @@ async function run(label) {
   check(last?.plan?.state === "awaiting_humans", `plan reached awaiting_humans (was ${last?.plan?.state ?? "none"})${last?.failure ? `, failure: ${JSON.stringify(last.failure)}` : ""}`);
   check(messages.length > 0 && messages.length <= 4, `agreed within 4 messages (${messages.length})`);
   check(messages.every((m) => m.proof), "every message carries model proof");
+  if (target) {
+    const location = messages.filter((m) => (m.shared ?? []).includes("location") || m.activity?.place);
+    check(location.length === 0, `no message carries a place or location (${location.length} did)`);
+  }
 
   const rows = messages.map((m, index) => {
     const arrival = arrivals.get(m.seq) ?? 0;
