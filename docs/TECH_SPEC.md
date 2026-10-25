@@ -9,7 +9,7 @@ Status: v2.1, Sat Oct 24, 2026. Smoke tests 1 to 3 passed on live Muse Spark at 
 | App | Next.js (App Router), TypeScript strict, Tailwind |
 | Agents | OpenAI SDK with `baseURL: "https://api.meta.ai/v1"` and `apiKey: process.env.MODEL_API_KEY` (passed explicitly; the SDK does not read that variable), model `muse-spark-1.3`, Responses API (`client.responses.create`) with function tools. The message schema is the parameters of the `send_to_friend_agent` tool, zod-parsed on receipt |
 | Validation | zod (the same schemas, converted to JSON schema, are the tool parameters) |
-| State | `Store` interface; in-memory implementation persisted to `data/store.json` |
+| State | `Store` interface with two implementations: Supabase (Postgres) in production, and an in-memory store persisted to `data/store.json` for local development |
 | Live UI | Polling `/api/state` every second |
 | Handoff | `https://wa.me/?text=<encodeURIComponent(draft)>` click-to-chat with no phone number, plus a copy-draft fallback button; `.ics` file for the calendar hold, served by `GET /api/plans/[id]/hold.ics` |
 | Package manager | pnpm |
