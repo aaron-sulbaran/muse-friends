@@ -3,9 +3,10 @@ import { googleCalendarUrl } from "./gcal";
 import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, listOf, namesFor } from "./format";
 import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib/seed/past-signals";
 import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
+import { tripThread, type GroupLine } from "./group";
 import { capital } from "./tokens";
 import { threadLines, type ThreadLine } from "./thread";
-import type { AgentId, AvatarMood, Decision, MemberId, Role, UiPayment, UiPlan, UiSnapshot } from "./types";
+import type { AgentId, AvatarMood, Decision, MemberId, PlanState, Role, UiPayment, UiPlan, UiSnapshot, UiTrip } from "./types";
 
 /*
  * What one phone's chat shows, derived from the snapshot. Pure, so it can be
@@ -20,14 +21,21 @@ export type ChatItem =
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
   | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; names: string[]; count: number }
-  | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string }
+  | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string; simulated: boolean }
+  // A trip's group thread (lib/ui/group.ts): lines from people and their Muses, and the cards a person decides on.
+  | { kind: "group-line"; id: string; line: GroupLine }
+  | { kind: "trip-question"; id: string; planId: string; member: MemberId; forName: string | null; range: { low: number; high: number }; route: string }
+  | { kind: "trip-budget"; id: string; trip: UiTrip }
+  | { kind: "trip-itinerary"; id: string; trip: UiTrip }
+  | { kind: "trip-open"; id: string; trip: UiTrip }
+  | { kind: "trip-pot"; id: string; planId: string; trip: UiTrip; answerable: MemberId[]; viewer: MemberId; state: PlanState }
   | { kind: "payment-card"; id: string; payment: UiPayment; side: "payer" | "payee"; friendName: string; friendMuse: string }
   | { kind: "settle-card"; id: string; planId: string; offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>; friendName: string; friendMuse: string }
   | { kind: "outcome-replies"; id: string; planId: string }
   | { kind: "collapsed"; id: string; text: string }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
   | { kind: "hold-row"; id: string; title: string; planId: string; googleUrl: string | null }
-  | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend"; friendName: string };
+  | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend" | "plan-trip"; friendName: string };
 
 /** A plan for three as one phone sees it: the people, in plan order, with what each has said so far. */
 export type GroupView = {
@@ -75,7 +83,8 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
 
   const items: ChatItem[] = [];
   const plan = snapshot.plan;
-  const thread = threadLines(snapshot, role);
+  // A plan for three has its own group thread (the trip's lines); only your private chat with your Muse joins it here.
+  const thread = threadLines(snapshot, role).filter((line) => !snapshot.plan?.group || line.id.startsWith("thread-chat-"));
   const planGroup = plan?.group ?? null;
   const groupView: GroupView | null = planGroup
     ? {
@@ -85,6 +94,11 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
         others: planGroup.members.filter(({ id }) => id !== agent).map(({ id, decision }) => ({ id, name: names.human[id], muse: names.muse[id], decision })),
       }
     : null;
+  // A trip is one group thread, people and Muses together, with its own cards (lib/ui/group.ts).
+  if (plan?.kind === "trip" && plan.trip) {
+    const thread = tripThread(snapshot, role);
+    return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status: thread.status, mood: thread.mood, group: groupView, items: thread.items };
+  }
   // Who the plan is "with", as this phone says it: the friend in a pair, the other two in a plan for three.
   const withWhom = groupView ? listOf(groupView.others.map((other) => other.name)) : theirs.human;
 
@@ -100,6 +114,8 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     } else if (role === "a" && snapshot.simulatedFriend) {
       // Michelle is already the friend (the default on a phone): one tap has Sprout check with her.
       items.push({ kind: "start-card", id: "start-reel", variant: "send-reel", friendName: theirs.human });
+      // The long-term scenario: the same Muses planning a trip months out. Offered beside the reel, never instead of it.
+      items.push({ kind: "start-card", id: "start-trip", variant: "plan-trip", friendName: theirs.human });
     } else if (role === "a") {
       items.push({ kind: "start-card", id: "start-simulated", variant: "simulated-friend", friendName: theirs.muse });
     }
@@ -167,9 +183,10 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
         items.push({ kind: "plan-card", id: "plan-card", plan, role, state: "live" });
         status = { glyph: "waiting-you", text: copy.statusWaitingYou };
       }
-      // Pebble has no phone: the coordinator's phone carries Pebble's card until they answer.
+      // Kai (Pebble's person) has no phone: the coordinator's phone carries Kai's card until they answer, and when one judge plays
+      // alone a model answers it (the card says so).
       const phoneless = groupView?.coordinator ? pendingOthers.find((other) => other.id === "kai") : undefined;
-      if (phoneless) items.push({ kind: "member-card", id: `member-card-${phoneless.id}`, planId: plan.id, member: phoneless.id, name: phoneless.name });
+      if (phoneless) items.push({ kind: "member-card", id: `member-card-${phoneless.id}`, planId: plan.id, member: phoneless.id, name: phoneless.name, simulated: snapshot.simulatedFriend });
       if (agreedCount > 0) items.push(agreedLine);
       break;
     case "confirmed":

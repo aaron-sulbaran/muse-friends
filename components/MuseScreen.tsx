@@ -17,6 +17,8 @@ import { Composer } from "./Composer";
 import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
+import { GroupAvatars, GroupItem, isGroupItem } from "./GroupThread";
+import { tripOwners } from "@/lib/ui/group";
 import { MemberCard } from "./MemberCard";
 import { MuseAvatar } from "./MuseAvatar";
 import { PaymentCard } from "./PaymentCard";
@@ -69,12 +71,14 @@ function StatusBar({ time }: { time: string }) {
   );
 }
 
-const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card"]);
+const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card", "trip-question", "trip-budget", "trip-itinerary", "trip-open", "trip-pot"]);
 
 /** 4px between bubbles of one run, 14px between runs, 16px around a card. */
 function spacingBefore(previous: ChatItem | undefined, item: ChatItem, lineOf: (item: ChatItem | undefined) => ThreadLine | undefined): string {
   if (!previous) return "";
   if (cardKinds.has(previous.kind) || cardKinds.has(item.kind)) return "mt-4";
+  // A trip's thread: a run of one speaker sits close, a new speaker sits apart.
+  if (previous.kind === "group-line" && item.kind === "group-line") return item.line.first ? "mt-3.5" : "mt-1.5";
   const line = lineOf(item);
   return line && !startsRun(lineOf(previous), line) ? "mt-1" : "mt-3.5";
 }
@@ -93,6 +97,9 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const chatContent = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const thinking = snapshot.inFlight?.agent === view.agent;
+  // A trip is one group thread: the header shows the three Muses and the group's name, and the wallet chip (the two seats' own wallets) steps aside.
+  const tripPlan = snapshot.plan?.kind === "trip" ? snapshot.plan.trip : null;
+  const avatar = tripPlan ? <GroupAvatars trip={tripPlan} mood={view.mood} viewer={view.agent} /> : <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />;
   const simulated = snapshot.simulatedFriend;
   const names = namesFor(snapshot);
   // Bubbles and the Muses' own lines read as one thread: who is speaking is a sender, and a run shows its chip once.
@@ -156,6 +163,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   }
 
   function renderItem(item: ChatItem) {
+    if (isGroupItem(item)) return <GroupItem item={item} readOnly={readOnly} onChanged={onChanged} />;
     switch (item.kind) {
       case "separator":
         return <DaySeparator day={item.day} time={item.time} />;
@@ -204,7 +212,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         // On the stage, Activity already sits between the phones; a phone on its own opens it as a sheet.
         return standalone ? <AgreedLine names={item.names} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
       case "member-card":
-        return <MemberCard planId={item.planId} member={item.member} name={item.name} readOnly={readOnly} onChanged={onChanged} />;
+        return <MemberCard planId={item.planId} member={item.member} name={item.name} simulated={item.simulated} readOnly={readOnly} onChanged={onChanged} />;
       case "outcome-replies":
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
@@ -251,7 +259,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={`Open ${view.museName} settings`}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
+                {avatar}
               </button>
             ) : standalone && !readOnly ? (
               // Muse opens Activity from the avatar; Sprout's phone has no settings sheet to compete with.
@@ -261,13 +269,13 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={copy.activityOpen}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
+                {avatar}
               </button>
             ) : (
-              <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
+              avatar
             )}
-            <StatusPill name={view.museName} status={view.status} />
-            <WalletChip snapshot={snapshot} agent={view.agent} />
+            <StatusPill name={tripPlan ? tripPlan.title : view.museName} status={view.status} />
+            {tripPlan ? <p className="mt-1.5 px-6 text-center text-[12px] leading-4 text-muted">{tripOwners(tripPlan)}</p> : <WalletChip snapshot={snapshot} agent={view.agent} />}
             {standalone && snapshot.mode === "replay" ? (
               <div className="absolute left-4 top-2">
                 <ReplayBadge mode="replay" compact recording={snapshot.recording} />

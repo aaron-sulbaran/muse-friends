@@ -1,12 +1,12 @@
 "use client";
 
-import { Film, UserRound } from "lucide-react";
+import { Film, Plane, UserRound } from "lucide-react";
 import { useState } from "react";
-import { postSignal, postSimulatedFriend, type Result } from "@/lib/ui/actions";
+import { postSignal, postSimulatedFriend, postTripSignal, type Result } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
 
 type Props = {
-  variant: "send-reel" | "simulated-friend";
+  variant: "send-reel" | "simulated-friend" | "plan-trip";
   friendName: string;
   onChanged: () => void;
   /** A recording is on screen: show the card, but starting a run would touch live state. */
@@ -23,12 +23,13 @@ export function StartCard({ variant, friendName, onChanged, readOnly, onPaused }
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sendsReel = variant === "send-reel";
+  const plansTrip = variant === "plan-trip";
 
   async function start() {
     if (readOnly) return;
     setPending(true);
     setError(null);
-    const result: Result = await (sendsReel ? postSignal() : postSimulatedFriend());
+    const result: Result = await (plansTrip ? postTripSignal() : sendsReel ? postSignal() : postSimulatedFriend());
     setPending(false);
     if (!result.ok && result.paused) onPaused?.(result.message);
     else if (!result.ok) setError(result.message);
@@ -39,11 +40,11 @@ export function StartCard({ variant, friendName, onChanged, readOnly, onPaused }
     <section className="max-w-[92%] animate-card-in rounded-card bg-surface p-5 shadow-float">
       <div className="flex items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-group">
-          {sendsReel ? <Film className="size-5" strokeWidth={1.75} aria-hidden="true" /> : <UserRound className="size-5" strokeWidth={1.75} aria-hidden="true" />}
+          {plansTrip ? <Plane className="size-5" strokeWidth={1.75} aria-hidden="true" /> : sendsReel ? <Film className="size-5" strokeWidth={1.75} aria-hidden="true" /> : <UserRound className="size-5" strokeWidth={1.75} aria-hidden="true" />}
         </span>
         <div>
-          <h3 className="text-[17px] font-semibold leading-[22px]">{sendsReel ? copy.sendReelTitle(friendName) : copy.simulatedTitle}</h3>
-          <p className="mt-0.5 text-[13px] leading-[18px] text-muted">{sendsReel ? copy.sendReelDetail : copy.simulatedDetail}</p>
+          <h3 className="text-[17px] font-semibold leading-[22px]">{plansTrip ? copy.tripStartTitle : sendsReel ? copy.sendReelTitle(friendName) : copy.simulatedTitle}</h3>
+          <p className="mt-0.5 text-[13px] leading-[18px] text-muted">{plansTrip ? copy.tripStartDetail : sendsReel ? copy.sendReelDetail : copy.simulatedDetail}</p>
         </div>
       </div>
       <button
@@ -52,7 +53,7 @@ export function StartCard({ variant, friendName, onChanged, readOnly, onPaused }
         onClick={start}
         className="mt-4 w-full rounded-full bg-accent px-4 py-2.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110 active:brightness-90 disabled:opacity-50"
       >
-        {sendsReel ? copy.sendReelAction(friendName) : copy.simulatedAction}
+        {plansTrip ? copy.tripStartAction : sendsReel ? copy.sendReelAction(friendName) : copy.simulatedAction}
       </button>
       {error ? (
         <p role="alert" className="mt-3 text-[13px] leading-[18px] text-withheld">

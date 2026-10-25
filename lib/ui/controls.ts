@@ -5,7 +5,7 @@ import type { PlanState, UiReel } from "./types";
  * labels that follow the data. Pure, so the words can be tested without rendering.
  */
 
-export type ControlKey = "reset" | "loadReel" | "jump" | "replay" | "leak" | "scenario" | "invite";
+export type ControlKey = "reset" | "loadReel" | "jump" | "replay" | "replayTrip" | "leak" | "scenario" | "invite";
 
 /** One plain sentence each. Shown on hover on a laptop and behind an "i" on a phone. */
 export const controlInfo: Record<ControlKey, string> = {
@@ -13,6 +13,7 @@ export const controlInfo: Record<ControlKey, string> = {
   loadReel: "Starts the one-to-one scenario: the reel arrives and the two Muses plan.",
   jump: "Moves the demo clock to the reminder, then on to the next day's follow-up.",
   replay: "Plays the labeled recording of a real run, without starting a live one.",
+  replayTrip: "Plays the labeled recording of the trip for three, with the model that made it named, without starting a live one.",
   leak: "Sends two forged messages to the inbox and shows the refusals.",
   scenario: "Picks which demo to run; the other two open after the gate.",
   invite: "The link a friend opens to join this room on their own phone.",
@@ -27,7 +28,7 @@ export function jumpLabel(state: PlanState | undefined): string {
   return state === "reminded" ? "Jump to next day" : "Jump to reminder";
 }
 
-export type Scenario = { id: "one-to-one" | "new-in-town" | "group"; label: string; available: boolean };
+export type Scenario = { id: "one-to-one" | "new-in-town" | "group" | "trip"; label: string; available: boolean };
 
 /**
  * The three demos. Only one to one has a route on main today; flip `available` as the others land. Each one that
@@ -37,6 +38,7 @@ export const scenarios: readonly Scenario[] = [
   { id: "one-to-one", label: "One to one", available: true },
   { id: "new-in-town", label: "New in town", available: false },
   { id: "group", label: "Group of three", available: true },
+  { id: "trip", label: "Group trip", available: true },
 ];
 
 export const SCENARIO_LOCKED_NOTE = "after the gate";

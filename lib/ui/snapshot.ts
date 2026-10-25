@@ -3,10 +3,11 @@ import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
 import { CATEGORIES, isCategoryAllowed, isPaymentType, MEMBER_IDS, type AgentId, type MemberId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
+import { SEEDED_LABEL, TRIP_PEOPLE } from "@/lib/seed/trip";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiSnapshot, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiSnapshot, UiTrip, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -125,10 +126,55 @@ function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
           contextIds: [...new Set([plan.contextId, ...Object.values(plan.group.contexts)])],
         }
       : null,
+    kind: plan.kind ?? "hangout",
+    trip: toUiTrip(plan, state),
     draft: plan.draft ? rename(plan.draft) : null,
     droppedReason: plan.state === "dropped" ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null) : null,
     history: plan.history.map(({ state, at }) => ({ state, at })),
     outcome: outcomeFor(plan, state),
+  };
+}
+
+/** The trip a plan of kind "trip" carries, with the people named, the pot's balances read from the ledger, and every price labeled seeded. */
+function toUiTrip(plan: Plan, state: StateSnapshot): UiTrip | null {
+  const trip = plan.trip;
+  if (plan.kind !== "trip" || !trip || !plan.group) return null;
+  const ledger = state.room.localLedger ?? {};
+  const balanceOf = (accountId: string | undefined) => (accountId !== undefined && ledger[accountId] !== undefined ? ledger[accountId] : null);
+  return {
+    title: trip.title,
+    destination: trip.destination,
+    horizon: trip.horizon,
+    range: trip.range,
+    people: plan.group.members.map((member) => ({
+      member,
+      name: TRIP_PEOPLE[member].name,
+      muse: TRIP_PEOPLE[member].muse,
+      simulated: member === "kai" || (member !== plan.group!.coordinator && state.room.simulatedFriend),
+      taste: TRIP_PEOPLE[member].taste,
+      constraint: TRIP_PEOPLE[member].constraint,
+    })),
+    answers: plan.group.members.flatMap((member) => {
+      const answer = trip.answers[member];
+      return answer ? [{ member, answer: answer.answer, limit: answer.limit, taste: answer.taste, constraint: answer.constraint ?? null, by: answer.by, at: answer.at }] : [];
+    }),
+    cap: trip.cap ?? null,
+    itinerary: trip.itinerary ? { ...trip.itinerary, lines: trip.itinerary.lines.map((line) => ({ ...line })) } : null,
+    pot: trip.pot
+      ? {
+          perPerson: trip.pot.perPerson,
+          target: trip.pot.target,
+          balance: balanceOf(trip.pot.potAccountId),
+          breakdown: trip.pot.breakdown,
+          deposits: plan.group.members.flatMap((member) => {
+            const deposit = trip.pot?.deposits[member];
+            return deposit ? [{ member, amount: deposit.amount, status: deposit.status, ...(deposit.withdrawalId ? { withdrawalId: deposit.withdrawalId } : {}), ...(deposit.depositId ? { depositId: deposit.depositId } : {}), ...(deposit.refundId ? { refundId: deposit.refundId } : {}), ...(deposit.by ? { by: deposit.by } : {}), ...(deposit.error ? { error: deposit.error } : {}) }] : [];
+          }),
+          wallets: plan.group.members.map((member) => ({ member, balance: balanceOf(trip.pot?.wallets[member]?.accountId) })),
+        }
+      : null,
+    unknowns: trip.unknowns,
+    seededLabel: SEEDED_LABEL,
   };
 }
 
@@ -243,6 +289,7 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
       note: message.note ? rename(message.note) : undefined,
       shared: record.stamp.passed,
       removed: record.stamp.removed,
+      ...(message.trip ? { trip: message.trip } : {}),
       at: message.at,
       proof: withToolCalls(record.proof),
       blockedRule: rejected ? (record.error ?? "Rejected by the receiving inbox") : undefined,
@@ -257,6 +304,11 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
  */
 function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["inFlight"] {
   if (!plan) return null;
+  // A trip waits on people most of the time; the coordinator is only thinking while it composes the itinerary.
+  if (plan.kind === "trip") {
+    const composing = plan.state === "negotiating" && plan.group?.members.every((member) => plan.trip?.answers[member]) && !plan.trip?.itinerary;
+    return composing ? { agent: plan.group!.coordinator, agents: [plan.group!.coordinator] } : null;
+  }
   const groupId = plan.group?.groupId;
   const threads = groupId ? state.threads.filter((candidate) => candidate.groupId === groupId) : state.threads.filter((candidate) => candidate.contextId === plan.contextId);
   if (threads.length === 0) return plan.state === "detected" ? { agent: plan.initiator, agents: [plan.initiator] } : null;

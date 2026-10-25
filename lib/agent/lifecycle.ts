@@ -112,6 +112,10 @@ export function decide(
     if (!plan) return { ok: false, status: 404, error: "no such plan" } as const;
     if (plan.state !== "awaiting_humans") return { ok: false, status: 409, error: `the plan is ${plan.state}, not waiting for a decision` } as const;
     if (!membersOfPlan(plan).includes(input.agent)) return { ok: false, status: 422, error: "that person is not part of this plan" } as const;
+    // A trip is joined with a deposit: a yes without one would skip the pot, so only the trip engine may record it.
+    if (plan.kind === "trip" && input.choice === "accept" && plan.trip?.pot?.deposits[input.agent]?.status !== "confirmed") {
+      return { ok: false, status: 409, error: "a trip needs this person's pot deposit first" } as const;
+    }
     const ownCard = (await store.listCards({ planId: plan.id, forAgent: input.agent }))[0];
     if (decisionsOf(plan)[input.agent] !== "pending" || (ownCard && ownCard.status !== "pending")) {
       return { ok: false, status: 409, error: "this person already decided" } as const;
