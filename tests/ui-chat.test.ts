@@ -63,7 +63,7 @@ describe("what the header avatar is doing", () => {
   });
 
   it("thinks while its own model call is in flight, and only that Muse does", () => {
-    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const, agents: ["aaron" as const] } };
     expect(viewForRole(inFlight, "a").mood).toBe("thinking");
     expect(viewForRole(inFlight, "b").mood).toBe("talking");
   });

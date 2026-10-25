@@ -9,6 +9,7 @@ import type {
   AgentId,
   Category,
   Decision,
+  MemberId,
   MessageType,
   PlanState,
   Reason as MessageReason,
@@ -20,7 +21,7 @@ import type {
 
 // The wire vocabulary comes from the protocol, never a copy, so a new reason or
 // category cannot silently break the adapter's types.
-export type { AgentId, Category, Decision, MessageReason, MessageType, PlanState, Role, ShareTier, ThreadState, TimeWindow };
+export type { AgentId, Category, Decision, MemberId, MessageReason, MessageType, PlanState, Role, ShareTier, ThreadState, TimeWindow };
 
 /** What a Muse is doing, for the header avatar's loop: nothing, reading or waiting on a model, or talking to the other Muse. */
 export type AvatarMood = "idle" | "thinking" | "talking";
@@ -38,8 +39,9 @@ export type UiMessage = {
   id: string;
   contextId: string;
   seq: number;
-  from: AgentId;
-  to: AgentId;
+  /** A group plan's third friend (Pebble) can sit on either end, so these are members, not just the two phone seats. */
+  from: MemberId;
+  to: MemberId;
   type: MessageType;
   state: ThreadState;
   activity?: { title: string; place?: string };
@@ -59,6 +61,18 @@ export type UiMessage = {
   raw: unknown;
 };
 
+/** One person in a plan for three, with their own answer: Pebble's lives only here, not in `decisions`. */
+export type UiGroupMember = { id: MemberId; decision: Decision };
+
+export type UiGroup = {
+  /** The member whose Muse opened the plan and talks to the others: the person who got the reel. */
+  coordinator: MemberId;
+  /** Everyone in the plan, coordinator first. */
+  members: UiGroupMember[];
+  /** The coordinator's pair threads, one per friend: the conversations that make up this plan. */
+  contextIds: string[];
+};
+
 export type UiPlan = {
   id: string;
   contextId: string;
@@ -72,6 +86,8 @@ export type UiPlan = {
   placeWithheld: boolean;
   window: TimeWindow | null;
   decisions: Record<Role, Decision>;
+  /** Set when the plan is for three; the pair's plans have none. */
+  group: UiGroup | null;
   draft: string | null;
   droppedReason: string | null;
   /** When each state was reached, oldest first. */
@@ -97,8 +113,10 @@ export type UiNote = {
 };
 
 export type InFlight = {
-  /** The agent whose model call is running. */
-  agent: AgentId;
+  /** The agent whose model call started most recently. */
+  agent: MemberId;
+  /** Everyone whose model call is running: in a plan for three, both friends answer at the same time. */
+  agents: MemberId[];
 };
 
 export type SharingSettings = {
@@ -114,7 +132,7 @@ export type UiSnapshot = {
   /** True when side b is played by the model instead of a second human. */
   simulatedFriend: boolean;
   /** What people see for each side: the Muse characters' names, never the internal ids. */
-  sides: Record<AgentId, string>;
+  sides: Record<MemberId, string>;
   messages: UiMessage[];
   /** Non-message timeline rows, merged with the messages by time. */
   notes: UiNote[];

@@ -83,7 +83,7 @@ export function Stage() {
       <JsonDrawer
         message={openMessage}
         budget={live.snapshot?.budget ?? null}
-        names={names ?? { muse: { aaron: "", lisa: "" }, human: { aaron: "", lisa: "" } }}
+        names={names ?? { muse: { aaron: "", lisa: "", kai: "" }, human: { aaron: "", lisa: "", kai: "" } }}
         onClose={() => setOpenMessage(null)}
       />
     </div>

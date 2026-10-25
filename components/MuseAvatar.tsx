@@ -2,10 +2,10 @@
 
 import { useEffect } from "react";
 import { simulatedFriend } from "@/lib/ui/tokens";
-import type { AgentId, AvatarMood } from "@/lib/ui/types";
+import type { AvatarMood, MemberId } from "@/lib/ui/types";
 
 type Props = {
-  agent: AgentId;
+  agent: MemberId;
   /** True when side b is played by the simulated friend; shows a grey initial disc instead of a character. */
   simulated?: boolean;
   /** The Muse's name, for the accessible label. */
@@ -17,7 +17,7 @@ type Props = {
   className?: string;
 };
 
-const characterOf: Record<AgentId, string> = { aaron: "sprout", lisa: "mochi" };
+const characterOf = { aaron: "sprout", lisa: "mochi" } as const;
 const moods: AvatarMood[] = ["idle", "thinking", "talking"];
 
 let preloaded = false;
@@ -49,6 +49,20 @@ export function MuseAvatar({ agent, simulated = false, name = "Muse", size = 44,
         style={{ width: size, height: size, fontSize: size * 0.42 }}
       >
         {simulatedFriend.human.charAt(0)}
+      </span>
+    );
+  }
+
+  if (agent === "kai") {
+    // Pebble, the third friend of a group plan, has no render yet: an initial on a warm stone disc, never Michelle's grey.
+    return (
+      <span
+        aria-label={name}
+        role="img"
+        className={`inline-grid shrink-0 place-items-center rounded-full bg-pebble font-semibold text-ink ${className}`}
+        style={{ width: size, height: size, fontSize: size * 0.42 }}
+      >
+        {name.charAt(0)}
       </span>
     );
   }

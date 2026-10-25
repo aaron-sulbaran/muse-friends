@@ -1,5 +1,5 @@
 import { categoryLabel, simulatedFriend } from "./tokens";
-import type { AgentId, Category, TimeWindow, UiMessage, UiSnapshot } from "./types";
+import type { Category, MemberId, TimeWindow, UiMessage, UiSnapshot } from "./types";
 
 /** Every time the UI shows is Central, matching the event schedule. */
 export const displayTimeZone = "America/Chicago";
@@ -133,21 +133,22 @@ export function formatLatency(ms: number): string {
 
 export type Names = {
   /** The Muse's name as shown on a row or a pill: "Sprout", "Mochi", or "Michelle's Muse". */
-  muse: Record<AgentId, string>;
+  muse: Record<MemberId, string>;
   /** What the other person calls that side in a sentence: "Mochi", or "Michelle". */
-  human: Record<AgentId, string>;
+  human: Record<MemberId, string>;
 };
 
 /** Every visible name comes from the snapshot's persona display names, never from the internal ids. */
 export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "simulatedFriend">): Names {
   const simulated = snapshot.simulatedFriend;
   return {
-    muse: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.muse : snapshot.sides.lisa },
-    human: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.human : snapshot.sides.lisa },
+    muse: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.muse : snapshot.sides.lisa, kai: snapshot.sides.kai },
+    human: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.human : snapshot.sides.lisa, kai: snapshot.sides.kai },
   };
 }
 
-function listOf(items: string[]): string {
+/** "A", "A and B", "A, B, and C": names in a sentence. */
+export function listOf(items: string[]): string {
   if (items.length <= 1) return items.join("");
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;

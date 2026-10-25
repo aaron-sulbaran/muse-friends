@@ -78,12 +78,12 @@ describe("activity titles", () => {
 
 });
 
-const sprout = { sides: { aaron: "Sprout", lisa: "Mochi" }, simulatedFriend: false } as const;
+const sprout = { sides: { aaron: "Sprout", lisa: "Mochi", kai: "Pebble" }, simulatedFriend: false } as const;
 const withMichelle = { ...sprout, simulatedFriend: true } as const;
 
 describe("names", () => {
   it("come from the persona display names, and swap in the simulated friend", () => {
-    expect(namesFor(sprout)).toEqual({ muse: { aaron: "Sprout", lisa: "Mochi" }, human: { aaron: "Sprout", lisa: "Mochi" } });
+    expect(namesFor(sprout)).toEqual({ muse: { aaron: "Sprout", lisa: "Mochi", kai: "Pebble" }, human: { aaron: "Sprout", lisa: "Mochi", kai: "Pebble" } });
     expect(namesFor(withMichelle).muse.lisa).toBe("Michelle's Muse");
     expect(namesFor(withMichelle).human.lisa).toBe("Michelle");
   });

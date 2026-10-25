@@ -1,5 +1,5 @@
 import type { RunBudget } from "@/lib/agent/caps";
-import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { CATEGORIES, isCategoryAllowed, type AgentId, type MemberId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
 import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiSnapshot } from "./types";
@@ -71,6 +71,13 @@ function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
       a: (plan.decisions.aaron ?? "pending") as Decision,
       b: (plan.decisions.lisa ?? "pending") as Decision,
     },
+    group: plan.group
+      ? {
+          coordinator: plan.group.coordinator,
+          members: plan.group.members.map((id) => ({ id, decision: (plan.group?.decisions[id] ?? "pending") as Decision })),
+          contextIds: [...new Set([plan.contextId, ...Object.values(plan.group.contexts)])],
+        }
+      : null,
     draft: plan.draft ? rename(plan.draft) : null,
     droppedReason: plan.state === "dropped" ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null) : null,
     history: plan.history.map(({ state, at }) => ({ state, at })),
@@ -131,9 +138,8 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
       id: message.id,
       contextId: message.contextId,
       seq: message.seq,
-      // A group plan's third member has no phone seat yet; Lane B renders them (see the group PR).
-      from: message.from as AgentId,
-      to: message.to as AgentId,
+      from: message.from,
+      to: message.to,
       type: message.type,
       state: message.state,
       activity: message.activity ? { title: message.activity.title, place: message.activity.place } : undefined,
@@ -150,14 +156,25 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
   });
 }
 
-/** Whose model call is running right now, derived from the thread: the receiver of the last message, or the initiator before the first. */
+/**
+ * Whose model call is running right now: for each pair thread still working, the receiver of its last message, or
+ * the initiator before the first. A plan for three has two pair threads, so both friends can be thinking at once.
+ */
 function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["inFlight"] {
   if (!plan) return null;
-  const thread = state.threads.find((candidate) => candidate.contextId === plan.contextId);
-  if (!thread) return plan.state === "detected" ? { agent: plan.initiator } : null;
-  if (thread.state !== "working") return null;
-  const last = state.messages.filter((record) => record.message.contextId === thread.contextId).at(-1);
-  return { agent: (last ? last.message.to : thread.initiator) as AgentId };
+  const groupId = plan.group?.groupId;
+  const threads = groupId ? state.threads.filter((candidate) => candidate.groupId === groupId) : state.threads.filter((candidate) => candidate.contextId === plan.contextId);
+  if (threads.length === 0) return plan.state === "detected" ? { agent: plan.initiator, agents: [plan.initiator] } : null;
+  const thinking: Array<{ agent: MemberId; at: string }> = [];
+  for (const thread of threads) {
+    if (thread.state !== "working") continue;
+    const last = state.messages.filter((record) => record.message.contextId === thread.contextId).at(-1);
+    thinking.push({ agent: last ? last.message.to : thread.initiator, at: last?.message.at ?? thread.updatedAt });
+  }
+  if (thinking.length === 0) return null;
+  const agents = [...new Set(thinking.map((entry) => entry.agent))];
+  const latest = [...thinking].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0].agent;
+  return { agent: latest, agents };
 }
 
 /** An agent's turn that produced no message ends the thread as failed and leaves a turn_failed event naming the agent. */
@@ -191,7 +208,7 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
     mode: overlay.mode,
     simulatedFriend: state.room.simulatedFriend,
-    sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
+    sides: { aaron: displayName("aaron"), lisa: displayName("lisa"), kai: displayName("kai") },
     messages,
     notes: toNotes(state.events, renameFor(state)),
     plan: plan ? toUiPlan(plan, state) : null,
