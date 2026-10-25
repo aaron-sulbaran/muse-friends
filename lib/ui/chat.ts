@@ -1,7 +1,7 @@
 import { copy } from "./copy";
 import { googleCalendarUrl } from "./gcal";
 import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, namesFor } from "./format";
-import type { AgentId, Role, UiPlan, UiSnapshot } from "./types";
+import type { AgentId, AvatarMood, Role, UiPlan, UiSnapshot } from "./types";
 
 /*
  * What one phone's chat shows, derived from the snapshot. Pure, so it can be
@@ -28,6 +28,8 @@ export type PhoneView = {
   friendHumanName: string;
   /** The status line under the avatar name, with its leading emoji; null when idle. */
   status: string | null;
+  /** Which loop the header avatar plays: thinking while reading or while this Muse's own model call runs, talking while negotiating. */
+  mood: AvatarMood;
   items: ChatItem[];
 };
 
@@ -61,7 +63,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     } else if (role === "a") {
       items.push({ kind: "start-card", id: "start-simulated", variant: "simulated-friend", friendName: theirs.muse });
     }
-    return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status: null, items };
+    return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status: null, mood: "idle", items };
   }
 
   const today = daySeparatorFor(plan.history[0]?.at ?? snapshot.now, plan.history[0]?.at ?? snapshot.now);
@@ -73,15 +75,18 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
 
   const initiatorRole = agentRole[plan.initiator];
   let status: string | null = null;
+  let mood: AvatarMood = "idle";
   const myDecision = plan.decisions[role];
   const theirDecision = plan.decisions[role === "a" ? "b" : "a"];
 
   switch (plan.state) {
     case "detected":
       status = role === "a" ? copy.statusReading(theirs.human) : null;
+      if (role === "a") mood = "thinking";
       break;
     case "negotiating":
       status = copy.statusTalking(theirs.muse);
+      mood = "talking";
       break;
     case "awaiting_humans":
       if (plan.window) {
@@ -169,8 +174,12 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
       break;
   }
 
-  if (snapshot.failure) status = copy.statusTrouble(names.muse[snapshot.failure.agent]);
-  return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status, items };
+  if (snapshot.inFlight?.agent === agent) mood = "thinking";
+  if (snapshot.failure) {
+    status = copy.statusTrouble(names.muse[snapshot.failure.agent]);
+    mood = "idle";
+  }
+  return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status, mood, items };
 }
 
 function dayWordFor(iso: string): string {
