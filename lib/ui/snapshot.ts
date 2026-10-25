@@ -2,6 +2,7 @@ import type { RunBudget } from "@/lib/agent/caps";
 import { AGENT_IDS, CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
+import { toolCallsOf } from "./tools";
 import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiSnapshot } from "./types";
 
 /*
@@ -153,12 +154,29 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed", "busy_added"]);
+const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected"]);
+
+/**
+ * An inbox that refuses a message for what it carries (422) or who sent it (403) is the code saying no, which is
+ * worth a row. A 409 is a sequencing hiccup (a retry, a message out of turn), which is not.
+ */
+function isWorthARow(event: StateSnapshot["events"][number]): boolean {
+  if (event.kind !== "message_rejected") return true;
+  const status = /\((\d{3})\)/.exec(event.text)?.[1];
+  return status === "422" || status === "403";
+}
 
 function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
   return events
-    .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]))
+    .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]) && isWorthARow(event))
     .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(event.text) }));
+}
+
+/** The message's proof, with its recorded tool calls tidied for display when there are any. */
+function withToolCalls(proof: StateSnapshot["messages"][number]["proof"]): UiMessage["proof"] {
+  if (!proof) return undefined;
+  const toolCalls = toolCallsOf(proof);
+  return toolCalls ? { ...proof, toolCalls } : proof;
 }
 
 function toUiMessages(state: StateSnapshot): UiMessage[] {
@@ -181,7 +199,7 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
       shared: record.stamp.passed,
       removed: record.stamp.removed,
       at: message.at,
-      proof: record.proof,
+      proof: withToolCalls(record.proof),
       blockedRule: rejected ? (record.error ?? "Rejected by the receiving inbox") : undefined,
       raw: message,
     };
