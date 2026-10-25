@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { postClockAdvance } from "./actions";
 import type { ChatItem } from "./chat";
-import { SKIP_AFTER_MS, SKIP_BEAT_MS, skipDue, type SkipFrom } from "./time-skip";
+import { SKIP_AFTER_MS, SKIP_BEAT_MS, skipDue, skipsByItself, type SkipFrom } from "./time-skip";
 import type { UiPlan } from "./types";
 
 /**
- * Runs the automatic time skip on one phone (lib/ui/time-skip.ts). `skipNow` is for the hold row's buttons; otherwise
- * the phone skips by itself after `delayMs`. The clock route moves only a plan still in the state the phone saw, so the
- * two phones and the stage can all ask. Returns the skip this phone is showing before the clock has moved, if any.
+ * Runs the time skip on one phone (lib/ui/time-skip.ts). The skip to the reminder waits for the person: it starts only
+ * when they tap a calendar button on the hold row (`skipNow`). The skip from the reminder to the next morning starts by
+ * itself after `delayMs`. The clock route moves only a plan still in the state the phone saw, so the two phones and the
+ * stage can all ask. Returns the skip this phone is showing before the clock has moved, if any.
  */
 export function useTimeSkip(input: { plan: UiPlan | null; items: ChatItem[]; enabled: boolean; delayMs?: number; onChanged: () => void }) {
   const { plan, items, enabled, delayMs = SKIP_AFTER_MS, onChanged } = input;
@@ -40,10 +41,10 @@ export function useTimeSkip(input: { plan: UiPlan | null; items: ChatItem[]; ena
   }, []);
 
   useEffect(() => {
-    if (!key) return;
+    if (!key || !due || !skipsByItself(due)) return;
     const timer = setTimeout(skipNow, delayMs);
     return () => clearTimeout(timer);
-  }, [key, delayMs, skipNow]);
+  }, [key, due, delayMs, skipNow]);
 
   const pending: SkipFrom | null = showing && showing === key ? due : null;
   return { pending, skipNow };

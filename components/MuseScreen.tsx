@@ -141,8 +141,8 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     ? [...onboardingItems(onboardingState, view.friendHumanName), ...(onboardingActive ? [] : friendsOff ? view.items.filter((item) => item.kind !== "start-card" && item.kind !== "contact-entry") : view.items)]
     : view.items;
   const composerOn = role === "a" && !readOnly && !onboardingActive;
-  // After the hold, the clock skips ahead by itself: to the reminder, then to the next morning. Side a skips first; side b
-  // waits a little longer, so it moves the clock only when no side a phone is open (or its tab is asleep).
+  // Adding the hold to a calendar skips ahead to the reminder; from there the clock moves to the next morning by itself.
+  // Side a moves it first; side b waits a little longer, so it moves the clock only when no side a phone is open.
   const timeSkip = useTimeSkip({
     plan: snapshot.plan,
     items: chatItems,

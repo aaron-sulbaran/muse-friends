@@ -3,7 +3,7 @@ import type { PlanState } from "@/lib/protocol";
 import { snapshotAtPlanState } from "@/lib/seed/states";
 import { viewForRole } from "@/lib/ui/chat";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
-import { AFTER_SKIP_IDS, SKIP_SEPARATOR_IDS, skipDue, skipTarget } from "@/lib/ui/time-skip";
+import { AFTER_SKIP_IDS, SKIP_SEPARATOR_IDS, skipDue, skipTarget, skipsByItself } from "@/lib/ui/time-skip";
 
 const at = (state: PlanState) => toUiSnapshot(snapshotAtPlanState(state), { mode: "live" });
 const due = (state: PlanState, role: "a" | "b" = "a") => {
@@ -17,6 +17,11 @@ describe("the automatic time skip", () => {
       expect(due("scheduled", role)).toBe("scheduled");
       expect(due("reminded", role)).toBe("reminded");
     }
+  });
+
+  it("waits for the person to add the hold, then moves from the reminder to the next morning by itself", () => {
+    expect(skipsByItself("scheduled")).toBe(false);
+    expect(skipsByItself("reminded")).toBe(true);
   });
 
   it("is never due before the hold, or after the next morning", () => {

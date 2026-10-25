@@ -3,13 +3,13 @@ import { daySeparatorFor } from "./format";
 import type { UiPlan } from "./types";
 
 /*
- * The automatic time skip: once the calendar hold is on the phone, the demo clock moves to the day-of
- * reminder by itself, and from the reminder to the next morning's "Did you two make it?". Before each
+ * The time skip: once the person adds the calendar hold, the demo clock moves to the day-of reminder,
+ * and from the reminder to the next morning's "Did you two make it?" by itself. Before each
  * jump the chat shows a skip card, so a judge who has never seen the demo reads the jump as intentional.
  * Pure, so the timing and the labels are tested without rendering.
  */
 
-/** How long the phone waits on the hold row, or on the reminder, before skipping ahead. */
+/** How long the phone waits on the reminder before skipping to the next morning. */
 export const SKIP_AFTER_MS = 4_000;
 /** How long the skip card shows before the clock moves, so it is read before the reminder lands under it. */
 export const SKIP_BEAT_MS = 1_400;
@@ -34,6 +34,11 @@ export function skipDue(plan: UiPlan | null, items: ChatItem[]): SkipFrom | null
   if (plan.state === "scheduled" && items.some((item) => item.kind === "hold-row")) return "scheduled";
   if (plan.state === "reminded" && items.some((item) => item.id === "reminder")) return "reminded";
   return null;
+}
+
+/** Only the reminder moves on by itself; the skip to the reminder waits for the person to add the hold to a calendar. */
+export function skipsByItself(from: SkipFrom): boolean {
+  return from === "reminded";
 }
 
 /** Where a skip lands, in the chat's own words: "Tuesday" and "4:00 PM". */
