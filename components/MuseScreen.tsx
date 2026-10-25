@@ -136,7 +136,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const chatItems: ChatItem[] = onboardingOn
     ? [...onboardingItems(onboardingState, view.friendHumanName), ...(onboardingActive ? [] : friendsOff ? view.items.filter((item) => item.kind !== "start-card" && item.kind !== "contact-entry") : view.items)]
     : view.items;
-  const composerOn = standalone !== undefined && role === "a" && !readOnly && !onboardingActive;
+  const composerOn = role === "a" && !readOnly && !onboardingActive;
   const goalContext: GoalContext = {
     friend: view.group ? listOf(view.group.others.map((other) => other.name)) : view.friendHumanName,
     reelOwner: role === "a" ? `${view.friendHumanName}'s` : "your",
@@ -430,10 +430,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             // Above the floating tab bar, below the cards: the demo never needs it, and it never covers them.
             <div className="mb-[72px]">
               <Composer
-                friendLabel={view.friendHumanName}
                 museName={view.museName}
-                askEnabled
-                friendEnabled={false}
                 onSend={async (text) => {
                   const result = await postChat(text);
                   onChanged();
