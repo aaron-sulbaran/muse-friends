@@ -1,7 +1,6 @@
 import {
   THREAD_CAP,
   type ActivityEvent,
-  type AgentId,
   type MemberId,
   type AgentMessage,
   type DropReason,

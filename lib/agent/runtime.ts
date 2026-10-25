@@ -6,7 +6,7 @@ import type { AgentRuntimeContext } from "./context";
 import { failThread } from "./inbound";
 import { newId } from "./ids";
 import { ownFreeBlocks } from "./calendar";
-import { claimCoordinatorTurn, groupCandidates, groupReplies, memberContexts, planForContext } from "./group";
+import { groupCandidates, groupReplies, memberContexts, planForContext } from "./group";
 import { agentInstructions, groupOpeningInput, groupTurnInput, inboxTurnInput, signalTurnInput } from "./prompts";
 import { buildTools } from "./tools";
 import { describeWindow, intersectWindows, toCentralIso, windowHash } from "./windows";

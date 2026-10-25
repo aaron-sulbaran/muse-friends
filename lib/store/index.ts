@@ -1,6 +1,5 @@
 import type {
   ActivityEvent,
-  AgentId,
   MemberId,
   BusyBlock,
   DemoClock,

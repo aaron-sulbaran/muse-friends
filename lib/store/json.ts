@@ -4,7 +4,6 @@ import {
   RecordedRun,
   StateSnapshot,
   type ActivityEvent,
-  type AgentId,
   type MemberId,
   type BusyBlock,
   type DemoClock,
