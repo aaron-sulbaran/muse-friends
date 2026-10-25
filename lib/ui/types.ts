@@ -220,5 +220,11 @@ export type UiSnapshot = {
   /** What each side lets its Muse send. */
   paymentsScope: Record<AgentId, PaymentsSettings>;
   /** `connected` is true only when the wallets live on the real Nessie sandbox; otherwise a local ledger stands in. */
-  sandbox: { enabled: boolean; connected: boolean; text: string };
+  sandbox: {
+    enabled: boolean;
+    connected: boolean;
+    text: string;
+    /** Present only on the real sandbox, which keeps the transaction records but never moves an account's balance field (checked live); print it near the wallet chip. */
+    balanceNote?: string;
+  };
 };

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolMeta } from "@/lib/model";
 import { injectSignal } from "@/lib/agent/runtime";
 import { runSettleTurn } from "@/lib/agent/payment-runtime";
-import { readReceipt, sendMoney, type PaymentContext } from "@/lib/agent/payments";
+import { acceptPayment, readReceipt, sendMoney, type PaymentContext } from "@/lib/agent/payments";
 import { confirmProposal, declineProposal } from "@/lib/agent/proposals";
 import { getProposal } from "@/lib/agent/proposal-store";
 import { paymentsFrom } from "@/lib/agent/payment-rules";
@@ -212,6 +212,17 @@ describe("the person confirms", () => {
     expect(payment).toMatchObject({ status: "sent", withdrawalId: expect.stringMatching(/^wd_local_/), toolCalls: [{ name: "get_wallet" }, { name: "send_money" }] });
     expect(payment.confirmUrl).toBeUndefined();
     expect(payment.breakdown).toHaveLength(1);
+  });
+
+  it("adds the friend's tools to the same payment once it answers, so the drawer can show get_wallet, send_money and accept_payment", async () => {
+    const result = await sendMoney(ctx(), args(16), meta([], [{ name: "get_wallet", args: "", result: "balance read" }]));
+    const id = (result as { paymentId: string }).paymentId;
+    await confirm(id);
+    const contextId = (await store.listMessages())[0].message.contextId;
+    await acceptPayment({ store, agent: "lisa", contextId, wallNow, deliver: deliverAs("lisa") }, { paymentId: id }, meta([], [{ name: "get_wallet", args: "", result: "balance read" }]));
+    const [payment] = toUiSnapshot(await store.snapshot(), { mode: "live" }).payments;
+    expect(payment.status).toBe("received");
+    expect(payment.toolCalls?.map((call) => call.name)).toEqual(["get_wallet", "send_money", "get_wallet", "accept_payment"]);
   });
 
   it("is one withdrawal when two taps land at once", async () => {
