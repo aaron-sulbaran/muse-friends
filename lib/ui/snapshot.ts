@@ -1,6 +1,6 @@
 import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
-import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiPlan, UiSnapshot } from "./types";
+import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiPlan, UiSnapshot } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -20,26 +20,49 @@ function latestPlan(plans: Plan[]): Plan | null {
   return plans.at(-1) ?? null;
 }
 
-function toUiPlan(plan: Plan): UiPlan {
+function placeWithheld(plan: Plan, state: StateSnapshot): boolean {
+  return state.redactions.some((redaction) => redaction.contextId === plan.contextId && redaction.removed.includes("location"));
+}
+
+/**
+ * The most specific place the plan has, in order: the caption model's area, the plan's own place, a
+ * message's place. A place that only repeats the title adds nothing, so it is dropped.
+ */
+function placeFor(plan: Plan, state: StateSnapshot): string | null {
+  if (placeWithheld(plan, state)) return null;
+  const thread = state.threads.find((candidate) => candidate.contextId === plan.contextId);
+  const signal = state.signals.find((candidate) => candidate.id === thread?.signalId) ?? state.signals.find((candidate) => candidate.extracted);
+  const title = plan.activity?.title;
+  const candidates = [
+    signal?.extracted?.area,
+    plan.activity?.place,
+    ...state.messages.filter((record) => record.message.contextId === plan.contextId).map((record) => record.message.activity?.place),
+  ];
+  return candidates.find((candidate): candidate is string => Boolean(candidate) && candidate !== title) ?? null;
+}
+
+function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
   return {
     id: plan.id,
     contextId: plan.contextId,
     initiator: plan.initiator,
     state: plan.state,
     activityTitle: plan.activity?.title ?? "the plan",
-    place: plan.activity?.place ?? null,
+    place: placeFor(plan, state),
+    placeWithheld: placeWithheld(plan, state),
     window: plan.window ?? null,
     decisions: {
       a: (plan.decisions.aaron ?? "pending") as Decision,
       b: (plan.decisions.lisa ?? "pending") as Decision,
     },
     draft: plan.draft ?? null,
-    droppedReason: plan.state === "dropped" ? dropReasonText(plan.dropReason) : null,
+    droppedReason: plan.state === "dropped" ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null) : null,
     history: plan.history.map(({ state, at }) => ({ state, at })),
   };
 }
 
-function dropReasonText(reason: Plan["dropReason"]): string {
+function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string {
+  if (turnFailed) return "A model call failed";
   switch (reason) {
     case "cap_reached":
       return "No agreement in 6 messages";
@@ -56,13 +79,18 @@ function dropReasonText(reason: Plan["dropReason"]): string {
   }
 }
 
+const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed"]);
+
+function toNotes(events: StateSnapshot["events"]): UiNote[] {
+  return events
+    .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]))
+    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: event.text }));
+}
+
 function toUiMessages(state: StateSnapshot): UiMessage[] {
-  const seen = new Set<string>();
   return state.messages.map((record) => {
     const { message } = record;
     const rejected = record.delivery !== "delivered";
-    const replayed = seen.has(message.id);
-    seen.add(message.id);
     return {
       id: message.id,
       contextId: message.contextId,
@@ -78,7 +106,7 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
       shared: record.stamp.passed,
       removed: record.stamp.removed,
       at: message.at,
-      replayed,
+      proof: record.proof,
       blockedRule: rejected ? (record.error ?? "Rejected by the receiving inbox") : undefined,
       raw: message,
     };
@@ -93,6 +121,15 @@ function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["in
   if (thread.state !== "working") return null;
   const last = state.messages.filter((record) => record.message.contextId === thread.contextId).at(-1);
   return { agent: last ? last.message.to : thread.initiator };
+}
+
+/** An agent's turn that produced no message ends the thread as failed and leaves a turn_failed event naming the agent. */
+function failureOf(state: StateSnapshot, plan: Plan | null): UiSnapshot["failure"] {
+  if (!plan) return null;
+  const thread = state.threads.find((candidate) => candidate.contextId === plan.contextId);
+  if (thread?.state !== "failed") return null;
+  const failed = state.events.filter((event) => event.kind === "turn_failed" && event.contextId === plan.contextId).at(-1);
+  return failed?.agent ? { agent: failed.agent } : null;
 }
 
 function sharingFor(owner: AgentId, state: StateSnapshot): SharingSettings {
@@ -119,13 +156,15 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    plan: plan ? toUiPlan(plan) : null,
+    notes: toNotes(state.events),
+    plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events),
       agentMessageCount: messages.length,
       humanTapCount: state.events.filter((event) => event.actor === "human" && humanTapKinds.has(event.kind)).length,
     },
     inFlight: deriveInFlight(state, plan),
+    failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
   };
 }

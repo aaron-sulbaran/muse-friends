@@ -44,7 +44,7 @@ export function RecommendationCard({ plan, role, view, simulatedFriend, pending,
         <Row
           icon={<Film className="size-5" strokeWidth={1.75} aria-hidden="true" />}
           title={`${plan.activityTitle} from ${reelOwner} reel`}
-          detail={plan.place ?? copy.placeKeptPrivate}
+          detail={plan.place ?? (plan.placeWithheld ? copy.placeKeptPrivate : undefined)}
         />
         {plan.window ? (
           <Row icon={<Clock className="size-5" strokeWidth={1.75} aria-hidden="true" />} title={formatWindowFull(plan.window)} />

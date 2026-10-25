@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { postClockAdvance, postReset, postStep } from "@/lib/ui/actions";
+import { postClockAdvance, postReset, postSignal, type Result } from "@/lib/ui/actions";
 import type { UiSnapshot } from "@/lib/ui/types";
 
 type Props = {
@@ -9,57 +9,32 @@ type Props = {
   onChanged: () => void;
 };
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Bumped by every load and reset so an older playback stops itself. One controls panel exists at a time. */
-let activeRun = 0;
-
-/** Gaps between the six recorded messages when the reel is loaded; roughly what live model calls take. */
-const messageGapsMs = [2200, 2600, 2400, 2200, 2000, 2000];
-
 /**
- * Presenter-only controls. While the recorded run stands in for the live
- * agents, "Load the shawarma reel" plays the thread from the browser; once the real
- * signal route exists it only posts the signal.
+ * Presenter-only controls: start the run, move the clock, reset the room. Each
+ * posts to the real route and the timeline fills from the store as the agents work.
  */
 export function DemoControls({ snapshot, onChanged }: Props) {
   const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   const plan = snapshot?.plan ?? null;
-  const canJump = plan !== null && (plan.state === "scheduled" || plan.state === "confirmed" || plan.state === "reminded");
+  const planIsAlive = plan !== null && plan.state !== "dropped";
+  const canJump = plan !== null && (plan.state === "confirmed" || plan.state === "scheduled" || plan.state === "reminded");
   const jumpLabel = plan?.state === "reminded" ? "Jump to next day" : "Jump to reminder";
 
-  async function loadReel() {
-    const myRun = ++activeRun;
-    await postStep({ type: "load_reel" });
-    onChanged();
-    for (const gap of messageGapsMs) {
-      await wait(gap);
-      if (activeRun !== myRun) return;
-      await postStep({ type: "next_message" });
-      onChanged();
-    }
-  }
-
-  async function nextMessage() {
-    await postStep({ type: "next_message" });
+  async function run(action: () => Promise<Result>) {
+    const result = await action();
+    setMessage(result.ok ? null : result.message);
     onChanged();
   }
 
-  async function jump() {
-    await postClockAdvance();
-    onChanged();
-  }
+  const loadReel = () => run(postSignal);
+  const jump = () => run(postClockAdvance);
+  const reset = () => run(postReset);
 
-  async function reset() {
-    activeRun++;
-    await postReset();
-    onChanged();
-  }
-
-  const actions = useRef({ loadReel, nextMessage, jump, reset });
+  const actions = useRef({ loadReel, jump, reset });
   useEffect(() => {
-    actions.current = { loadReel, nextMessage, jump, reset };
+    actions.current = { loadReel, jump, reset };
   });
 
   useEffect(() => {
@@ -70,7 +45,6 @@ export function DemoControls({ snapshot, onChanged }: Props) {
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
       const key = event.key.toLowerCase();
       if (key === "s") void actions.current.loadReel();
-      else if (key === "n") void actions.current.nextMessage();
       else if (key === "f") void actions.current.jump();
       else if (key === "0") void actions.current.reset();
     }
@@ -79,9 +53,8 @@ export function DemoControls({ snapshot, onChanged }: Props) {
   }, []);
 
   const items: ReadonlyArray<{ label: string; key: string; run: () => void; disabled?: boolean }> = [
-    { label: "Load the shawarma reel", key: "S", run: loadReel, disabled: plan !== null },
-    { label: "Next message", key: "N", run: nextMessage, disabled: plan === null || plan.state !== "negotiating" && plan.state !== "detected" },
-    { label: jumpLabel, key: "F", run: jump, disabled: !canJump || plan?.state === "followed_up" },
+    { label: "Load the shawarma reel", key: "S", run: loadReel, disabled: planIsAlive },
+    { label: jumpLabel, key: "F", run: jump, disabled: !canJump },
     { label: "Reset", key: "0", run: reset },
   ];
 
@@ -96,7 +69,7 @@ export function DemoControls({ snapshot, onChanged }: Props) {
         Demo controls
       </button>
       {open ? (
-        <div role="menu" className="absolute bottom-full left-0 mb-2 w-60 animate-pop-in rounded-card bg-surface p-2 shadow-float">
+        <div role="menu" className="absolute bottom-full left-0 mb-2 w-64 animate-pop-in rounded-card bg-surface p-2 shadow-float">
           {items.map((item) => (
             <button
               key={item.label}
@@ -110,6 +83,11 @@ export function DemoControls({ snapshot, onChanged }: Props) {
               <kbd className="rounded-tile bg-group px-1.5 py-0.5 font-sans text-[12px] text-muted">{item.key}</kbd>
             </button>
           ))}
+          {message ? (
+            <p role="alert" className="px-3 pb-2 pt-1 text-[13px] leading-[18px] text-withheld">
+              {message}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

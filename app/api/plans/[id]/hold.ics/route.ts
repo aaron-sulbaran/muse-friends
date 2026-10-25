@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request, ctx: RouteContext<"/api/plans/[id]/hold.ics">) {
   const { id } = await ctx.params;
   const role = new URL(request.url).searchParams.get("role") === "b" ? "b" : "a";
-  const snapshot = readSnapshot();
+  const snapshot = await readSnapshot();
   const plan = snapshot.plan;
   if (!plan || plan.id !== id) {
     return NextResponse.json({ data: null, error: { message: "No such plan" } }, { status: 404 });
