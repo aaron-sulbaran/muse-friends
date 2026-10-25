@@ -194,7 +194,10 @@ export async function resetDemo(store: Store, input: { simulatedFriend?: boolean
 
 // Saves what is in the store as a Replay run.
 export async function recordCurrentRun(store: Store, input: { id: string; label: string }, options: Options = {}): Promise<RecordedRun> {
-  const run: RecordedRun = { id: input.id, label: input.label, scenario: "shawarma", source: "live", recordedAt: nowIso(options), snapshot: await store.snapshot() };
+  // A recording is shown to everyone, so the private chat with a Muse (D31) is not baked into it.
+  const state = await store.snapshot();
+  const snapshot = { ...state, room: { ...state.room, chat: undefined }, events: state.events.filter((event) => event.kind !== "chat_asked") };
+  const run: RecordedRun = { id: input.id, label: input.label, scenario: "shawarma", source: "live", recordedAt: nowIso(options), snapshot };
   await store.saveRecordedRun(run);
   return run;
 }
