@@ -78,6 +78,25 @@ Added when the MCP front door is deployed; see the next section of this runbook 
 
 Who: anyone with a phone. Time: 5 minutes. Run it on venue Wi-Fi and again on mobile data, in a private tab.
 
+0. Optional first pass from a laptop on the same network: `./scripts/smoke-production.sh`. Expect seven `PASS` lines (health, home, both phones, the QR file, the stylesheet, the state JSON), none over 3 seconds, none redirected to a Vercel login. It does not run the negotiation; that is step 2 on a phone.
 1. Scan `/qr.svg` (open https://muse-friends.vercel.app/qr.svg on another screen) or type the URL.
 2. Pass: the page loads with no Vercel login, `/api/health` shows `ok: true`, and once the agents are merged, one negotiation runs end to end inside 300 seconds with the timeline updating live.
 3. Fail: write down which network, what you saw, and the time, and send it to the orchestrator.
+
+## If production shows old styles after a deploy
+
+Symptom: the stage renders black and unstyled (system font, dark mode), yet `/api/health` shows the new commit.
+
+What happened (Sat Oct 24, about 8:45pm): production builds restore the previous production build cache. Twice in a row the Turbopack output for `app/globals.css` (processed by the Tailwind loader) stayed the old scaffold stylesheet while the HTML and JavaScript were new. Preview builds, whose cache came from a different lineage, produced the right stylesheet from the same source, and a clean local build did too.
+
+Check, from anywhere:
+
+```bash
+curl -s https://muse-friends.vercel.app/ | grep -o '/_next/static/[^"]*\.css'
+curl -s https://muse-friends.vercel.app/<the path printed above> | grep -c -- '--color-screen'
+```
+
+Expect a count of 1 or more. `./scripts/smoke-production.sh` runs the same check ("stylesheet carries the brand tokens").
+
+Fix: `vercel.json` now builds with `rm -rf .next && pnpm run build`, so no restored cache can reach the compiler and every deploy is a clean build (it adds a few seconds). If it ever happens anyway, open the Vercel project, **Deployments**, the latest production deployment, **...**, **Redeploy**, untick **Use existing Build Cache**, **Redeploy**, then rerun the check. Also confirm you opened `https://muse-friends.vercel.app` and not a preview or a team-scoped alias, which sit behind a login and can lag.
+
