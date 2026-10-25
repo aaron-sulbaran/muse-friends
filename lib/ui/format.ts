@@ -1,5 +1,4 @@
-import { categoryLabel } from "./tokens";
-import { simulatedFriend } from "./tokens";
+import { categoryLabel, simulatedFriend, unnamedFriend } from "./tokens";
 import type { AgentId, Category, TimeWindow, UiMessage, UiSnapshot } from "./types";
 
 /** Every time the UI shows is Central, matching the event schedule. */
@@ -135,17 +134,21 @@ export function formatLatency(ms: number): string {
 export type Names = {
   /** The Muse's name as shown on a row or a pill: "Sprout", "Mochi", or "Michelle's Muse". */
   muse: Record<AgentId, string>;
-  /** What the other person calls that side in a sentence: "Mochi", or "Michelle". */
+  /**
+   * What the other person calls that side's person in a sentence: "Michelle", a name someone gave, or "your friend"
+   * when nobody has. Never the Muse's name: a person is not their Muse.
+   */
   human: Record<AgentId, string>;
 };
 
 /** Every visible name comes from the snapshot's persona display names, never from the internal ids. */
-export function namesFor(snapshot: Pick<UiSnapshot, "sides"> & { standIn?: UiSnapshot["standIn"]; simulatedFriend?: boolean }): Names {
+export function namesFor(snapshot: Pick<UiSnapshot, "sides"> & Partial<Pick<UiSnapshot, "humans" | "standIn" | "simulatedFriend">>): Names {
   // A full snapshot says who stands in; a caller with only the room's flag (a wallet history) still gets Michelle.
   const standIn = snapshot.standIn ?? (snapshot.simulatedFriend ? { person: simulatedFriend.human, muse: simulatedFriend.muse } : null);
+  const person = (agent: AgentId): string => snapshot.humans?.[agent]?.trim() || (agent === "lisa" && standIn ? standIn.person : unnamedFriend);
   return {
     muse: { aaron: snapshot.sides.aaron, lisa: standIn ? standIn.muse : snapshot.sides.lisa },
-    human: { aaron: snapshot.sides.aaron, lisa: standIn ? standIn.person : snapshot.sides.lisa },
+    human: { aaron: person("aaron"), lisa: person("lisa") },
   };
 }
 

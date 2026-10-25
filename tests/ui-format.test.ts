@@ -84,7 +84,8 @@ const withMichelle = { ...sprout, standIn: { person: "Michelle", muse: "Michelle
 
 describe("names", () => {
   it("come from the persona display names, and swap in the simulated friend", () => {
-    expect(namesFor(sprout)).toEqual({ muse: { aaron: "Sprout", lisa: "Mochi" }, human: { aaron: "Sprout", lisa: "Mochi" } });
+    // The Muses have characters' names; their people have none until someone says, and are never called by a Muse's name.
+    expect(namesFor(sprout)).toEqual({ muse: { aaron: "Sprout", lisa: "Mochi" }, human: { aaron: "your friend", lisa: "your friend" } });
     expect(namesFor(withMichelle).muse.lisa).toBe("Michelle's Muse");
     expect(namesFor(withMichelle).human.lisa).toBe("Michelle");
   });

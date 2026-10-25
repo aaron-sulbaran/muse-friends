@@ -150,6 +150,7 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
     proof: meta
       ? {
           model: meta.model,
+          ...(meta.call.fallbackFrom ? { fallbackFrom: meta.call.fallbackFrom } : {}),
           responseId: meta.responseId,
           latencyMs: meta.call.ms,
           inputTokens: meta.call.inputTokens,

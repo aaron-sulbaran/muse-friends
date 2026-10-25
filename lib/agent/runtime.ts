@@ -187,6 +187,7 @@ export async function runFollowUpTurn(options: RuntimeOptions & { agent: AgentId
     requiredTools: ["send_to_friend_agent"],
   });
   if (result.status === "failed") {
+    // recoverOrFail logs the failure once it knows whether the scripted fallback spoke.
     return recoverOrFail(options, result, () => fallbackFollowUp(ctx, contact));
   }
   return result;
