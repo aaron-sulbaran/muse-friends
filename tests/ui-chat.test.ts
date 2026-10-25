@@ -12,6 +12,11 @@ function at(state: PlanState) {
   return toUiSnapshot(snapshotAtPlanState(state), live);
 }
 
+/** The negotiating fixture has a call in flight; between calls neither Muse is thinking, which is when the glyph says talking. */
+function quietNegotiation() {
+  return { ...at("negotiating"), inFlight: null };
+}
+
 function kinds(items: ChatItem[]) {
   return items.map((item) => item.kind);
 }
@@ -77,9 +82,9 @@ describe("what the header avatar is doing", () => {
 
 describe("the journey, phone by phone", () => {
   it("reading the reel, then talking, are status lines and nothing else in the chat", () => {
-    expect(viewForRole(at("detected"), "a").status).toBe("🎞️ reading Mochi's reel");
-    expect(viewForRole(at("negotiating"), "a").status).toBe("💬 talking to Mochi");
-    expect(viewForRole(at("negotiating"), "b").status).toBe("💬 talking to Sprout");
+    expect(viewForRole(at("detected"), "a").status).toEqual({ glyph: "reading", text: "reading Mochi's reel" });
+    expect(viewForRole(quietNegotiation(), "a").status).toEqual({ glyph: "talking", text: "talking to Mochi" });
+    expect(viewForRole(quietNegotiation(), "b").status).toEqual({ glyph: "talking", text: "talking to Sprout" });
     expect(kinds(viewForRole(at("negotiating"), "a").items)).not.toContain("plan-card");
   });
 
@@ -87,7 +92,7 @@ describe("the journey, phone by phone", () => {
     for (const role of ["a", "b"] as Role[]) {
       const view = viewForRole(at("awaiting_humans"), role);
       expect(view.items.filter((item) => item.kind === "plan-card")).toHaveLength(1);
-      expect(view.status).toBe("⏳ waiting for you");
+      expect(view.status).toEqual({ glyph: "waiting-you", text: "waiting for you" });
     }
     const bubble = viewForRole(at("awaiting_humans"), "a").items.find((item) => item.kind === "bubble" && item.id === "proposal");
     expect(bubble).toMatchObject({ text: "You and Mochi both want to try Shawarma Point, and you're both free Tuesday 6 to 8." });
@@ -100,7 +105,7 @@ describe("the journey, phone by phone", () => {
     const a = viewForRole(snapshot, "a");
     expect(kinds(a.items)).toContain("collapsed");
     expect(kinds(a.items)).not.toContain("plan-card");
-    expect(a.status).toBe("⏳ waiting for Mochi");
+    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi" });
     expect(kinds(viewForRole(snapshot, "b").items)).toContain("plan-card");
   });
 
@@ -217,7 +222,7 @@ describe("what the store can say that the recorded states do not", () => {
     expect(snapshot.failure).toEqual({ agent: "lisa" });
     expect(snapshot.plan?.droppedReason).toBe("A model call failed");
     const view = viewForRole(snapshot, "a");
-    expect(view.status).toBe("⚠️ having trouble reaching Mochi");
+    expect(view.status).toEqual({ glyph: "retrying", text: "having trouble reaching Mochi" });
     expect(view.items.find((item) => item.kind === "bubble" && item.id === "dropped")).toMatchObject({ text: "Mochi didn't answer, so this plan stopped." });
   });
 
@@ -228,5 +233,29 @@ describe("what the store can say that the recorded states do not", () => {
     expect(snapshot.simulatedFriend).toBe(true);
     expect(viewForRole(snapshot, "b").museName).toBe("Michelle's Muse");
     expect(viewForRole(snapshot, "a").friendHumanName).toBe("Michelle");
+  });
+});
+
+describe("the status glyph follows what the Muse is doing", () => {
+  it("thinks while its own call runs during a negotiation, and talks while it waits", () => {
+    const thinkingA = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    expect(viewForRole(thinkingA, "a").status).toEqual({ glyph: "thinking", text: "thinking it over" });
+    expect(viewForRole(thinkingA, "b").status).toEqual({ glyph: "talking", text: "talking to Sprout" });
+    expect(viewForRole(thinkingA, "a").mood).toBe("thinking");
+  });
+
+  it("says sent once a plan is confirmed, and nothing for the later states", () => {
+    expect(viewForRole(at("confirmed"), "a").status).toEqual({ glyph: "done", text: "sent" });
+    expect(viewForRole(at("scheduled"), "a").status).toBeNull();
+  });
+
+  it("has no emoji in any status line, in any state, on either phone", () => {
+    const emoji = /\p{Extended_Pictographic}/u;
+    for (const state of PLAN_STATES) {
+      for (const role of ["a", "b"] as Role[]) {
+        const status = viewForRole(at(state), role).status;
+        expect(status === null || !emoji.test(status.text)).toBe(true);
+      }
+    }
   });
 });

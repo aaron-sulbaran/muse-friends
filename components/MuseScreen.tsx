@@ -56,8 +56,12 @@ function StatusBar({ time }: { time: string }) {
   );
 }
 
+const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card"]);
+
+/** 6px between bubbles from the same speaker, 14px between speakers, 16px around a card. */
 function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
   if (!previous) return "";
+  if (cardKinds.has(previous.kind) || cardKinds.has(item.kind)) return "mt-4";
   const sameSpeaker = previous.kind === "bubble" && item.kind === "bubble" && previous.from === item.from;
   return sameSpeaker ? "mt-1.5" : "mt-3.5";
 }
@@ -212,7 +216,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       ) : null}
       {tab === "chat" ? (
         <>
-          <header className="relative flex shrink-0 flex-col items-center gap-1.5 pb-3 pt-2">
+          <header className="relative flex shrink-0 flex-col items-center pb-3 pt-2">
             {role === "b" && !readOnly ? (
               <button
                 type="button"
@@ -220,10 +224,10 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={`Open ${view.museName} settings`}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} mood={view.mood} />
+                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
               </button>
             ) : (
-              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} mood={view.mood} />
+              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
             )}
             <StatusPill name={view.museName} status={view.status} />
             {role === "b" && !readOnly ? (
@@ -243,8 +247,9 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
               const element = event.currentTarget;
               nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
             }}
-            className="quiet-scroll flex-1 overflow-y-auto px-4 pb-28 [mask-image:linear-gradient(to_bottom,transparent,black_14px)]">
-            <div ref={chatContent} className="flex flex-col">
+            className="quiet-scroll flex-1 overflow-y-auto px-4 pb-20 [mask-image:linear-gradient(to_bottom,transparent,black_14px)]">
+            {/* Anchored to the bottom like any messaging app: a short chat sits just above the tab bar, empty space at the top. */}
+            <div ref={chatContent} className="flex min-h-full flex-col justify-end">
               {view.items.map((item, index) => (
                 <div key={item.id} className={spacingBefore(view.items[index - 1], item)}>
                   {renderItem(item)}

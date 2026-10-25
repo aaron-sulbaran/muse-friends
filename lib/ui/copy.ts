@@ -6,11 +6,14 @@ export const copy = {
   activityEmpty: (first: string, second: string) => `Nothing yet. When ${first} and ${second} talk, every message shows up here.`,
   reconnecting: "Reconnecting...",
 
-  statusReading: (friend: string) => `🎞️ reading ${friend}'s reel`,
-  statusTalking: (muse: string) => `💬 talking to ${muse}`,
-  statusWaitingYou: "⏳ waiting for you",
-  statusWaitingFriend: (friend: string) => `⏳ waiting for ${friend}`,
-  statusTrouble: (muse: string) => `⚠️ having trouble reaching ${muse}`,
+  // Status lines are words only; the state's animated glyph (public/status) comes from the phone view.
+  statusReading: (friend: string) => `reading ${friend}'s reel`,
+  statusTalking: (muse: string) => `talking to ${muse}`,
+  statusThinking: "thinking it over",
+  statusWaitingYou: "waiting for you",
+  statusWaitingFriend: (friend: string) => `waiting for ${friend}`,
+  statusDone: "sent",
+  statusTrouble: (muse: string) => `having trouble reaching ${muse}`,
 
   proposalBubble: (friend: string, place: string, when: string) =>
     `You and ${friend} both want to try ${place}, and you're both free ${when}.`,
@@ -26,7 +29,7 @@ export const copy = {
   youSaidYes: "✓ You said yes",
   youPassed: "You said not now",
   friendPassed: (friend: string) => `${friend} said not now.`,
-  friendSaidYes: (muse: string, friend: string) => `${muse} said yes for ${friend}`,
+  friendIsIn: (muse: string) => `${muse} is in`,
 
   draftIntroA: (friend: string) => `${friend}'s in. Here's a message you can send ${friend}.`,
   draftIntroB: (friend: string) => `${friend} is sending you a message on WhatsApp.`,
