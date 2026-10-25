@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
-# Checks the MCP front door end to end: a request with no key is refused, the account key is
-# accepted, the one tool is listed, and get_status answers. The key is read from .env and handed
-# to curl on stdin, so it never appears in the command line or the output.
+# Checks the connector front door end to end, MCP and its REST mirror: a request with no key is
+# refused, the account key is accepted, the one tool is listed, get_status answers, and
+# GET /api/connector/status answers the same. The key is read from .env and handed to curl on
+# stdin, so it never appears in the command line or the output.
 #
-#   ./scripts/mcp-smoke.sh                                   production, account a
-#   ./scripts/mcp-smoke.sh https://muse-friends.vercel.app b
+#   ./scripts/mcp-smoke.sh                                   production (www), account a
+#   ./scripts/mcp-smoke.sh https://www.musefriends.tech b
 #   ./scripts/mcp-smoke.sh http://localhost:3003 a           local dev server
+#
+# Use the www address, not the bare name: the bare name answers with a 308 redirect, and a client
+# that does not follow a redirect on a POST would fail there.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-base_url="${1:-https://muse-friends.vercel.app}"
+base_url="${1:-https://www.musefriends.tech}"
 account="${2:-a}"
 key_name="MCP_TOKEN_$(printf '%s' "$account" | tr '[:lower:]' '[:upper:]')"
 endpoint="$base_url/api/mcp"
+rest_endpoint="$base_url/api/connector/status"
 
 token="$(awk -v key="$key_name" 'index($0, key "=") == 1 { value = substr($0, length(key) + 2) } END { printf "%s", value }' .env 2> /dev/null || true)"
 if [ -z "$token" ]; then
@@ -60,6 +65,25 @@ if [ "$status" = "200" ] && grep -q 'muse-friends' "$body_file"; then
     sed 's/^/      /'
 else
   check "get_status answers" bad "got HTTP $status"
+fi
+
+get_rest() {
+  local with_key="$1"
+  if [ "$with_key" = "yes" ]; then
+    printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -sS -m 30 -K - -o "$body_file" -w '%{http_code}' "$rest_endpoint"
+  else
+    curl -sS -m 30 -o "$body_file" -w '%{http_code}' "$rest_endpoint"
+  fi
+}
+
+status="$(get_rest no)"
+if [ "$status" = "401" ]; then check "REST mirror: no key is refused" ok; else check "REST mirror: no key is refused" bad "got HTTP $status"; fi
+
+status="$(get_rest yes)"
+if [ "$status" = "200" ] && grep -q '"service":"muse-friends"' "$body_file"; then
+  check "REST mirror: key $key_name is accepted and status answers" ok
+else
+  check "REST mirror: key $key_name is accepted and status answers" bad "got HTTP $status"
 fi
 
 if [ "$failures" -gt 0 ]; then

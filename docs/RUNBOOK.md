@@ -57,7 +57,7 @@ Production needs `MODEL_API_KEY` for the agents (and, later, the Supabase variab
 3. Check: `vercel env ls` lists `MODEL_API_KEY` for Production and Preview.
 4. Redeploy so the running deployment picks it up: open https://vercel.com/aaron-sulbaran-projects/muse-friends, **Deployments**, the latest production deployment, **...**, **Redeploy**, confirm. Expect Ready in about 30 seconds. (Any merge to `main` also redeploys.)
 
-If the connector test (H4) is on: add `--with-mcp-tokens` to step 2 (it generates `MCP_TOKEN_A` and `MCP_TOKEN_B` into `.env` first), and after the redeploy run `./scripts/mcp-smoke.sh`; expect four `PASS` lines and `all checks passed.`
+If the connector test (H4) is on: add `--with-mcp-tokens` to step 2 (it generates `MCP_TOKEN_A` and `MCP_TOKEN_B` into `.env` first), and after the redeploy run `./scripts/mcp-smoke.sh`; expect five `PASS` lines and `all checks passed.`
 
 Dashboard fallback if the script fails: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables, **Add Environment Variable**, key `MODEL_API_KEY`, value from `.env` (the text after the `=`, no quotes), Environments **Production** and **Preview**, **Sensitive** on, **Save**; then redeploy as in step 4. Re-run the script (or repeat the dashboard steps) whenever a new variable is added to `.env`.
 
@@ -98,21 +98,29 @@ The production store has to survive across stateless function calls; local devel
 3. Push them to Vercel with H1's script (`./scripts/push-env-to-vercel.sh`); when both Supabase lines are present it also sets `STORE=supabase` in Vercel, and only there. Then redeploy as in H1 step 4. Do not put `STORE` in `.env`: local development leaves it unset and uses the JSON file.
 4. Check the real project from your machine: `SUPABASE_LIVE_TEST=1 pnpm test tests/supabase-store.live.test.ts`. It round trips a thread, messages, a plan, cards, events, the rejected-window ledger, signals and a recorded run under throwaway ids, deletes them, and prints the latency of each call. It never touches live demo rows.
 
-### H4. Try the real Muse connection (Lisa, 30 minutes, after H1)
+### H4. Connect test of a real Muse (Aaron at the laptop, about 2:30am, 15 minutes, a stopwatch)
 
-This is the go or no-go test for the connector segment. It is gated and optional: the web sandbox is the product either way, and if this fails the demo carries a slide instead. The server side is a bearer-protected MCP endpoint with one read-only tool, `get_status`, at https://muse-friends.vercel.app/api/mcp.
+What it decides: whether an optional "Connect your own Muse" side path exists. It is **not** part of the scripted demo (research R1: no-go as a segment, because setup is about 4 minutes against a 3 minute pitch and nothing about Muse's connector builder is verified). The web sandbox is the product either way. Do not claim anything about a connected Muse until this passes twice.
 
-Before you start: Aaron has finished H1 and sends you the value of `MCP_TOKEN_A` from his `.env` through the password manager or a direct message (never git, never a shared doc). Use only your own Muse account, and use this key and no other.
+What the server offers: a bearer-protected MCP endpoint with one read-only tool, `get_status`, at **https://www.musefriends.tech/api/mcp**, and a plain REST mirror of the same answer at **https://www.musefriends.tech/api/connector/status** (one source says Muse's connector builder may only speak REST). Use the `www` address, not the bare name: the bare name answers with a 308 redirect, and a client that does not follow a redirect on a POST would fail there. `get_status` returns whether the store is reachable and counts of threads, messages, plans, cards, and activity rows, never their content. It stays closed (always 401) until the tokens exist.
 
-1. In your Muse app, in chat, ask Muse to create a custom connector for a remote MCP server at `https://muse-friends.vercel.app/api/mcp` that uses an API key. The exact wording may differ; Muse's own reply decides the next click. Expect a hosted connect link.
-2. Open the link and enter the key (`MCP_TOKEN_A`). Expect Muse to say it connected and to list a tool called `get_status`.
-3. Ask Muse: "Use the Muse Friends connector to call get_status." Expect an approval prompt (read-only, ask each time, or allow); approve it once.
-4. Pass: Muse reports `ok: true`, `service: muse-friends`, and `account: a`.
-5. Report back to the orchestrator, for each of steps 1 to 4: worked or did not, the exact error text if any, and whether your account type (free or paid) blocked a step. No account details, no screenshots of settings that show them.
+Set up the keys (5 minutes):
 
-If it fails, do not retry with other keys. The server logs one line per request (`mcp auth scheme=... accepted=...`, never the key), so the platform lane can tell whether Muse reached the endpoint, which header it sent the key in, and whether the key matched; tell the orchestrator the time of your last attempt. If Muse insists on OAuth and offers no API key field, report that; the connector segment is then off.
+1. From the `code` folder: `./scripts/push-env-to-vercel.sh --with-mcp-tokens`. It generates `MCP_TOKEN_A` and `MCP_TOKEN_B` into `.env` if missing and pushes them to Vercel as Sensitive. Redeploy production (H1 step 4).
+2. `./scripts/mcp-smoke.sh`. Expect five `PASS` lines: no key is refused, the key is accepted and `get_status` is listed, `get_status` answers, and the same two checks for the REST mirror. Run it once with `b` as the second argument to check the second key.
+3. Open `.env` and copy the value of `MCP_TOKEN_A` when Muse asks for it. Never paste it into chat, a doc, or git. These are throwaway keys; both can be regenerated by deleting them from `.env` and running step 1 again.
 
-Behind the endpoint: both `MCP_TOKEN_A` and `MCP_TOKEN_B` work and map to roles A and B. The key may arrive as `Authorization: Bearer <key>` or `X-API-Key: <key>`. An unset or short token never matches, so the endpoint stays closed until H1 is done. `start_plan`, `check_inbox`, and `respond` are added only if this test passes and the humans pick the connector segment.
+The test (your own Muse account; US, 18 or older; stopwatch started when you send the first message):
+
+1. New Muse chat. Paste this one line: `connect to the Muse Friends MCP server at https://www.musefriends.tech/api/mcp, bearer token, tool get_status`. Answer any prompt the way a judge could (HTTP, bearer); paste the key into Muse's secure credential prompt. Stop the clock at "connected".
+2. Ask: `call get_status`. Pass: Muse shows the result, with `ok: true`, `service: muse-friends`, `account: a`, and the store counts.
+3. Open a fresh chat and ask: `call Muse Friends get_status`. Pass: it works without connecting again (it persists).
+4. Ask: `in 5 minutes call Muse Friends get_status and tell me`. Pass: five minutes later Muse reports on its own.
+5. Repeat steps 1 to 3 on muse.ai in a browser, and note any card or usage-limit prompt.
+
+**Pass:** connected in under 3 minutes, result shown, persists, and all of it twice (the app and the web). **If Muse refuses MCP:** retry with the REST mirror, same key: `connect to the Muse Friends API at https://www.musefriends.tech/api/connector/status, bearer token, GET`.
+
+Report to the orchestrator: the time to connect, the exact prompts Muse asked, whether each step passed, and any card or usage-limit prompt. Leave account details out. If it fails, the server logs one line per request (`mcp auth scheme=... accepted=...` or `connector auth scheme=... accepted=...`, never the key), so the platform lane can tell whether Muse reached us, which header it sent the key in, and whether the key matched. If it passes, the only claim allowed is "it ran in a real Muse through a private custom connector, which Meta does not review". Never claim native Muse-to-Muse traffic, a listed connector, or that it shipped. `start_plan` is not built, and is not part of this test.
 
 ## Smoke test 7: the production URL on a real phone
 
