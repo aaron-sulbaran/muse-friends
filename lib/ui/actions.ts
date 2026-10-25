@@ -1,3 +1,4 @@
+import { getRoom, withRoom } from "./room";
 import type { Category, Role } from "./types";
 
 export type Result = { ok: true } | { ok: false; message: string; paused?: boolean };
@@ -6,7 +7,7 @@ type ErrorBody = { error?: string | { message?: string } | null; paused?: boolea
 
 async function post(url: string, body: unknown): Promise<Result> {
   try {
-    const response = await fetch(url, {
+    const response = await fetch(withRoom(url, getRoom()), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -45,9 +46,17 @@ export function postSignal() {
  * the stage), then the simulated friend sends the shawarma reel, which starts a real run.
  */
 export async function postSimulatedFriend(): Promise<Result> {
-  const switched = await post("/api/controls", { type: "simulated_friend", on: true });
+  const switched = await postSimulatedFriendSwitch(true);
   if (!switched.ok) return switched;
   return postSignal();
+}
+
+/**
+ * Michelle on or off for the room, and nothing else. It is a room-level switch and flipping it clears the room, so
+ * it is done before a plan starts, or on purpose behind a "start over" the person confirmed.
+ */
+export function postSimulatedFriendSwitch(on: boolean): Promise<Result> {
+  return post("/api/controls", { type: "simulated_friend", on });
 }
 
 /** Asks the simulated friend to answer her card. Safe to repeat: the server answers once. */
@@ -77,6 +86,16 @@ export async function postLeakAttempt(): Promise<{ ok: true; attempts: LeakAttem
   } catch {
     return { ok: false, message: "Could not reach the server" };
   }
+}
+
+/** Asks the person's Muse to settle up for a confirmed plan. The Muse decides whether money moves and how much, within the cap. */
+export function postSettle(planId: string, role: Role, note?: string) {
+  return post(`/api/plans/${planId}/settle`, note ? { role, note } : { role });
+}
+
+/** What a seat lets its Muse send: on or off, and a cap per plan in whole dollars (0 to 500; left out keeps the last one). */
+export function postPaymentsScope(role: Role, enabled: boolean, cap?: number) {
+  return post("/api/controls", { type: "payments", side: role, enabled, ...(cap === undefined ? {} : { cap }) });
 }
 
 export function postClockAdvance() {

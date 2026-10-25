@@ -35,11 +35,10 @@ function ThinkingRow({ snapshot }: { snapshot: UiSnapshot }) {
   if (!snapshot.inFlight) return null;
   const agent = snapshot.inFlight.agent;
   const names = namesFor(snapshot);
-  const simulated = snapshot.simulatedFriend && agent === "lisa";
   return (
     <li className="animate-row-in">
       <div className="flex items-center gap-3 rounded-group bg-group px-3 py-2.5">
-        <MuseAvatar agent={agent} simulated={simulated} name={names.muse[agent]} size={36} />
+        <MuseAvatar agent={agent} name={names.muse[agent]} size={36} />
         <span className="text-[15px] leading-5">{names.muse[agent]} is thinking</span>
         <span className="flex gap-1" aria-hidden="true">
           {[0, 1, 2].map((dot) => (
@@ -59,7 +58,7 @@ function FailureRow({ snapshot }: { snapshot: UiSnapshot }) {
   return (
     <li className="animate-row-in">
       <div className="flex items-center gap-3 rounded-group px-3 py-2.5">
-        <MuseAvatar agent={agent} simulated={snapshot.simulatedFriend && agent === "lisa"} name={names.muse[agent]} size={36} />
+        <MuseAvatar agent={agent} name={names.muse[agent]} size={36} />
         <span className="text-[15px] leading-5 text-withheld">{copy.modelErrorSecond(names.muse[agent])}</span>
       </div>
     </li>
@@ -124,7 +123,7 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage, onClose, foo
           {snapshot
             ? timelineOf(snapshot).map((entry) =>
                 entry.kind === "message" ? (
-                  <ActivityRow key={`${entry.message.id}-${entry.message.at}`} message={entry.message} simulatedFriend={snapshot.simulatedFriend} names={namesFor(snapshot)} onOpen={onOpenMessage} />
+                  <ActivityRow key={`${entry.message.id}-${entry.message.at}`} message={entry.message} names={namesFor(snapshot)} onOpen={onOpenMessage} />
                 ) : (
                   <ActivityNote key={entry.note.id} note={entry.note} />
                 ),

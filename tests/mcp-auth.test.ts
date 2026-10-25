@@ -22,6 +22,13 @@ describe("resolveMcpAccount", () => {
     expect(resolveMcpAccount(`${tokenA}x`, env)).toBeNull();
   });
 
+  it("maps the judge token to the judge account, and only when it is set", () => {
+    const judge = "j".repeat(48);
+    expect(resolveMcpAccount(judge, { ...env, MCP_TOKEN_JUDGE: judge })).toBe("judge");
+    expect(resolveMcpAccount(judge, env)).toBeNull();
+    expect(resolveMcpAccount("short", { MCP_TOKEN_JUDGE: "short" })).toBeNull();
+  });
+
   it("fails closed when the environment variables are unset or too short", () => {
     expect(resolveMcpAccount(tokenA, {})).toBeNull();
     expect(resolveMcpAccount("short", { MCP_TOKEN_A: "short" })).toBeNull();
@@ -44,6 +51,13 @@ describe("readPresentedCredential", () => {
       token: "from-header",
       scheme: "x-api-key",
     });
+  });
+
+  it("accepts the key pasted on its own in Authorization, with no Bearer in front of it", () => {
+    expect(readPresentedCredential(request({ authorization: "just-the-key-12345" }), undefined)).toEqual({ token: "just-the-key-12345", scheme: "raw" });
+    expect(readPresentedCredential(request({ authorization: "Bearer abc" }), undefined)).toEqual({ token: "abc", scheme: "bearer" });
+    // Another scheme with a value is not a raw key.
+    expect(readPresentedCredential(request({ authorization: "Basic dXNlcjpwYXNz" }), undefined).token).toBeUndefined();
   });
 
   it("reports none when nothing is presented", () => {

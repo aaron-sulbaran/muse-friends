@@ -89,9 +89,9 @@ describe("POST /api/mcp", () => {
     expect(logged).toContain("accepted=false");
   });
 
-  it("lists exactly one tool", async () => {
+  it("lists get_status and the three judge tools, and nothing else", async () => {
     const response = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }, { authorization: `Bearer ${tokenA}` });
     const message = await readRpcResult(response);
-    expect(message.result.tools.map((tool: { name: string }) => tool.name)).toEqual(["get_status"]);
+    expect(message.result.tools.map((tool: { name: string }) => tool.name).sort()).toEqual(["check_plan", "get_status", "respond", "start_plan"]);
   });
 });

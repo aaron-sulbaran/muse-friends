@@ -4,6 +4,7 @@ import {
   type MemberId,
   type AgentMessage,
   type DropReason,
+  isPaymentType,
   type MessageRecord,
   type Plan,
   type Recommendation,
@@ -17,6 +18,7 @@ import { toCentralIso, windowHash, describeWindow } from "./windows";
 import { buildCards } from "./cards";
 import { allPairsAgreed, namesOf, planForContext } from "./group";
 import { withLock } from "./lock";
+import { commitPaymentCore } from "./payment-rules";
 import { newId, seatOf } from "./ids";
 import { passedOver } from "./thread";
 
@@ -45,6 +47,8 @@ export type CommitResult = {
 // go out together, and the whole step costs one store round trip however slow the store is. The rest
 // comes back as `finish`, so an inbox can answer 202 first.
 export async function commitMessageCore(store: Store, record: MessageRecord, redaction: Redaction | null = null): Promise<CommitResult> {
+  // Payments have a channel of their own: no plan transitions, no cards, no windows ledger.
+  if (isPaymentType(record.message.type)) return commitPaymentCore(store, record, redaction);
   const { message } = record;
   const at = message.at;
   const [existingPlan, priorRecords, existingThread] = await Promise.all([

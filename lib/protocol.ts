@@ -39,16 +39,25 @@ export const MAX_WINDOW_HOURS = 3;
 export const NOTE_MAX = 140;
 export const TITLE_MAX = 60;
 
-export const MESSAGE_TYPES = ["intent", "propose", "counter", "accept", "decline"] as const;
+// The negotiation types are what a model authors through send_to_friend_agent. payment and payment_received
+// belong to the payments channel: only the runtime writes them, after the wallet and the policy cap have been
+// checked, never a model through the negotiation tool.
+export const NEGOTIATION_TYPES = ["intent", "propose", "counter", "accept", "decline"] as const;
+export const NegotiationType = z.enum(NEGOTIATION_TYPES);
+export const PAYMENT_TYPES = ["payment", "payment_received"] as const;
+export const MESSAGE_TYPES = [...NEGOTIATION_TYPES, ...PAYMENT_TYPES] as const;
 export const MessageType = z.enum(MESSAGE_TYPES);
 export type MessageType = z.infer<typeof MessageType>;
+export function isPaymentType(type: MessageType): type is (typeof PAYMENT_TYPES)[number] {
+  return (PAYMENT_TYPES as readonly string[]).includes(type);
+}
 
 // A2A v0.3 task-state names, the subset this protocol uses.
 export const TASK_STATES = ["working", "input-required", "completed", "rejected", "failed"] as const;
 export const TaskState = z.enum(TASK_STATES);
 export type TaskState = z.infer<typeof TaskState>;
 
-export const REASONS = ["both_free", "interest_match", "no_overlap", "not_interested", "cap_reached"] as const;
+export const REASONS = ["both_free", "interest_match", "no_overlap", "not_interested", "cap_reached", "settle_up"] as const;
 export const Reason = z.enum(REASONS);
 export type Reason = z.infer<typeof Reason>;
 
@@ -112,6 +121,36 @@ export type Shared = z.infer<typeof Shared>;
 // The wire message
 // ---------------------------------------------------------------------------
 
+// Payments (Capital One Nessie sandbox, or the local ledger when no key is set). Whole dollars only.
+export const PAYMENT_MAX_DOLLARS = 500;
+export const PaymentOutcome = z.enum(["accepted", "declined"]);
+export type PaymentOutcome = z.infer<typeof PaymentOutcome>;
+
+const DollarAmount = z.number().int().min(1).max(PAYMENT_MAX_DOLLARS);
+const Balance = z.number().int().min(-10_000).max(1_000_000);
+
+// What a payment message carries. The first message (payment) says what left the payer's account; the answer
+// (payment_received) says what the receiver did with it: kept it (deposit, new balance) or sent it back (refund).
+export const Payment = z.strictObject({
+  paymentId: Id,
+  planId: Id,
+  amount: DollarAmount,
+  currency: z.literal("USD"),
+  // What it is for, in the sender's words. Scanned like a note: private details never travel.
+  reason: z.string().min(1).max(100),
+  // Which ledger moved the money: the Nessie sandbox, or the in-app local ledger when no key is set.
+  source: z.enum(["nessie", "local"]),
+  payerAccountId: Id,
+  withdrawalId: Id.optional(),
+  outcome: PaymentOutcome.optional(),
+  payeeAccountId: Id.optional(),
+  // accepted: the deposit into the receiver's account. declined: the refund deposit back into the payer's.
+  depositId: Id.optional(),
+  balanceBefore: Balance.optional(),
+  balanceAfter: Balance.optional(),
+});
+export type Payment = z.infer<typeof Payment>;
+
 type WindowRuleInput = {
   type: MessageType;
   reason: Reason;
@@ -139,6 +178,31 @@ function checkWindowRules(value: WindowRuleInput, ctx: z.RefinementCtx) {
     case "decline":
       if (count > 0) issue("decline carries no windows");
       return;
+    case "payment":
+    case "payment_received":
+      if (count > 0) issue("a payment carries no windows");
+      return;
+  }
+}
+
+// A payment message carries a payment, and only a payment message does.
+function checkPaymentShape(value: { type: MessageType; payment?: Payment }, ctx: z.RefinementCtx) {
+  const issue = (message: string) => ctx.addIssue({ code: "custom", message, path: ["payment"] });
+  const payment = value.payment;
+  if (!isPaymentType(value.type)) {
+    if (payment) issue("only a payment message carries a payment");
+    return;
+  }
+  if (!payment) return issue(`${value.type} needs a payment`);
+  if (value.type === "payment") {
+    if (!payment.withdrawalId) issue("payment needs the withdrawalId");
+    if (payment.outcome || payment.depositId) issue("payment cannot carry an outcome");
+    return;
+  }
+  if (!payment.outcome) return issue("payment_received needs an outcome");
+  if (!payment.depositId) issue("payment_received needs the depositId (or the refund id)");
+  if (payment.outcome === "accepted" && (payment.payeeAccountId === undefined || payment.balanceBefore === undefined || payment.balanceAfter === undefined)) {
+    issue("an accepted payment needs the payee account and the balance before and after");
   }
 }
 
@@ -156,6 +220,7 @@ export const AgentMessage = z
     reason: Reason,
     note: z.string().max(NOTE_MAX).optional(),
     shared: Shared.optional(),
+    payment: Payment.optional(),
     at: IsoDateTime,
   })
   .superRefine((message, ctx) => {
@@ -163,6 +228,7 @@ export const AgentMessage = z
       ctx.addIssue({ code: "custom", message: "from and to must differ", path: ["to"] });
     }
     checkWindowRules(message, ctx);
+    checkPaymentShape(message, ctx);
   });
 export type AgentMessage = z.infer<typeof AgentMessage>;
 
@@ -170,7 +236,7 @@ export type AgentMessage = z.infer<typeof AgentMessage>;
 // from, to, state, at, and builds `shared` from `share` through the sender's allowlist, so a
 // model can never forge identity, position, or state.
 const MessageDraftShape = z.strictObject({
-  type: MessageType.describe("intent opens, propose offers windows, counter answers with other windows, accept agrees to ONE window, decline ends it"),
+  type: NegotiationType.describe("intent opens, propose offers windows, counter answers with other windows, accept agrees to ONE window, decline ends it"),
   reason: Reason.describe("both_free: checked and it works; interest_match: shared interest; no_overlap: nothing fits; not_interested; cap_reached: out of messages"),
   activity: Activity.optional().describe("What the plan is, for example kind food, title Shawarma Point"),
   windows: z.array(Window).max(MAX_WINDOWS).optional().describe("Up to 3 windows copied exactly from your free blocks"),
@@ -210,6 +276,14 @@ export const SHARE_TIERS = ["close", "friend", "off"] as const;
 export const ShareTier = z.enum(SHARE_TIERS);
 export type ShareTier = z.infer<typeof ShareTier>;
 
+// The payments scope of a sharing policy: whether the owner's Muse may send money to this friend, and how much
+// per plan. Off unless the person turns it on; it is not one of the content categories and no tier turns it on.
+export const PaymentsScope = z.strictObject({
+  enabled: z.boolean(),
+  capPerPlan: z.number().int().min(0).max(PAYMENT_MAX_DOLLARS),
+});
+export type PaymentsScope = z.infer<typeof PaymentsScope>;
+
 // `owner` is whose policy this is; `friend` is who it governs. A new friend defaults to tier "off".
 export const SharePolicy = z
   .strictObject({
@@ -217,6 +291,7 @@ export const SharePolicy = z
     friend: MemberId,
     tier: ShareTier,
     categories: z.partialRecord(Category, z.boolean()),
+    payments: PaymentsScope.optional(),
   })
   .refine((policy) => policy.owner !== policy.friend, { message: "owner and friend must differ", path: ["friend"] });
 export type SharePolicy = z.infer<typeof SharePolicy>;
@@ -469,6 +544,10 @@ export const ACTIVITY_KINDS = [
   "busy_added",
   "room_reset",
   "turn_failed",
+  "payment_sent",
+  "payment_received",
+  "payment_declined",
+  "payment_failed",
 ] as const;
 export const ActivityKind = z.enum(ACTIVITY_KINDS);
 export type ActivityKind = z.infer<typeof ActivityKind>;
@@ -494,12 +573,29 @@ export type ActivityEvent = z.infer<typeof ActivityEvent>;
 export const DemoClock = z.strictObject({ now: IsoDateTime });
 export type DemoClock = z.infer<typeof DemoClock>;
 
+// A seat's wallet. The balance is the last one read back from the ledger, never computed here.
+export const Wallet = z.strictObject({
+  owner: AgentId,
+  customerId: Id,
+  accountId: Id,
+  nickname: z.string().min(1).max(60),
+  balance: z.number().int(),
+  startingBalance: z.number().int(),
+  source: z.enum(["nessie", "local"]),
+  updatedAt: IsoDateTime,
+});
+export type Wallet = z.infer<typeof Wallet>;
+
 // The single demo room. `simulatedFriend` means side b is played by a model (Michelle) because
 // only one judge is present; the UI must label it.
 export const Room = z.strictObject({
   id: z.literal("demo"),
   simulatedFriend: z.boolean(),
   resetCount: z.number().int().min(0),
+  // Each seat's wallet: a Nessie sandbox checking account, or a local-ledger account when no key is set.
+  wallets: z.partialRecord(AgentId, Wallet).optional(),
+  // The local ledger (account id to balance), used only while wallets are local. Never shown to the UI.
+  localLedger: z.record(z.string(), z.number().int()).optional(),
   updatedAt: IsoDateTime,
 });
 export type Room = z.infer<typeof Room>;

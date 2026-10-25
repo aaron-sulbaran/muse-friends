@@ -1,26 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { postSimulatedFriend } from "@/lib/ui/actions";
+import { postSimulatedFriendSwitch } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import { runInProgress, wantsSimulatedFriend } from "@/lib/ui/entry";
+import { FRIEND_PARAM, runInProgress, wantsSimulatedFriend } from "@/lib/ui/entry";
 import { namesFor } from "@/lib/ui/format";
 import { useMediaQuery } from "@/lib/ui/use-media-query";
 import { useReplay } from "@/lib/ui/use-replay";
 import { useSimulatedFriend } from "@/lib/ui/use-simulated-friend";
 import { useSnapshot } from "@/lib/ui/use-snapshot";
-import type { Role, UiMessage } from "@/lib/ui/types";
+import type { Role, UiMessage, UiPayment } from "@/lib/ui/types";
 import { ActivityPanel } from "./ActivityPanel";
 import { JsonDrawer } from "./JsonDrawer";
 import { MuseScreen } from "./MuseScreen";
 import { PausedNotice } from "./PausedNotice";
+import { PaymentDrawer } from "./PaymentDrawer";
 import { FitPhone } from "./PhoneFrame";
 
 /**
  * One phone alone, for a judge's own device. Under 600px the screen is the
  * whole page; wider, it sits in the bezel on the stage gradient. With no Activity
- * panel beside it, Activity opens as a sheet from the phone, and a pill switches sides.
- * Arriving at /a with the simulated-friend flag (the chooser's third option) starts that game once.
+ * panel beside it, Activity opens as a sheet (from the avatar), and Sprout's side has an Invite pill for bringing a
+ * real friend in. The room comes from `?room=`. Arriving at /a with the simulated-friend flag (what the root page
+ * sends a phone to) switches Michelle on once, unless a run is already going in the room.
  */
 export function PhoneRoute({ role }: { role: Role }) {
   const live = useSnapshot();
@@ -46,25 +48,28 @@ export function PhoneRoute({ role }: { role: Role }) {
     setPausedText(null);
   }, [stopReplay]);
   const [openMessage, setOpenMessage] = useState<UiMessage | null>(null);
+  const [openPayment, setOpenPayment] = useState<UiPayment | null>(null);
 
   const arrivedForFriend = useRef(false);
   const startedFriend = useRef(false);
   useEffect(() => {
     if (role !== "a" || !wantsSimulatedFriend(window.location.search)) return;
     arrivedForFriend.current = true;
-    window.history.replaceState(null, "", window.location.pathname);
+    // Take the flag out of the address so a reload does not act on it again, and keep the room.
+    const params = new URLSearchParams(window.location.search);
+    params.delete(FRIEND_PARAM);
+    const rest = params.toString();
+    window.history.replaceState(null, "", rest ? `${window.location.pathname}?${rest}` : window.location.pathname);
   }, [role]);
   const liveSnapshot = live.snapshot;
   useEffect(() => {
     if (!arrivedForFriend.current || startedFriend.current || !liveSnapshot) return;
     startedFriend.current = true;
-    // A run still going in the room is shown as it is, not wiped; the start card stays available if this fails.
-    if (runInProgress(liveSnapshot.plan)) return;
-    void postSimulatedFriend().then((result) => {
-      if (!result.ok && result.paused) pause(result.message);
-      refresh();
-    });
-  }, [liveSnapshot, pause, refresh]);
+    // A run still going in the room is shown as it is, not wiped; Michelle already on needs nothing. Switching her on
+    // starts no run (no model call): the card in the chat does that on a tap.
+    if (runInProgress(liveSnapshot.plan) || liveSnapshot.simulatedFriend) return;
+    void postSimulatedFriendSwitch(true).then(() => refresh());
+  }, [liveSnapshot, refresh]);
 
   if (!snapshot) return <div className="h-dvh bg-screen" />;
 
@@ -77,6 +82,7 @@ export function PhoneRoute({ role }: { role: Role }) {
       onChanged={refresh}
       readOnly={replay.active}
       onPaused={pause}
+      onOpenPayment={setOpenPayment}
       standalone={{
         activity: (close) => (
           <ActivityPanel
@@ -105,7 +111,12 @@ export function PhoneRoute({ role }: { role: Role }) {
       }}
     />
   );
-  const drawer = <JsonDrawer message={openMessage} budget={liveSnapshot?.budget ?? null} names={names} onClose={() => setOpenMessage(null)} />;
+  const drawer = (
+    <>
+      <JsonDrawer message={openMessage} budget={liveSnapshot?.budget ?? null} names={names} onClose={() => setOpenMessage(null)} />
+      {liveSnapshot ? <PaymentDrawer payment={openPayment} wallets={liveSnapshot.wallets} names={liveSnapshot.sides} onClose={() => setOpenPayment(null)} /> : null}
+    </>
+  );
   const notice =
     pausedText !== null && replay.active ? (
       <PausedNotice

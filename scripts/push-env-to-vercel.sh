@@ -9,6 +9,9 @@
 #                                                      into .env if they are missing, then push
 #   ./scripts/push-env-to-vercel.sh --with-cron-secret first generate CRON_SECRET into .env if it is
 #                                                      missing, then push (the flags combine)
+#   ./scripts/push-env-to-vercel.sh --with-judge-token first generate MCP_TOKEN_JUDGE into .env if it is
+#                                                      missing, then push. Setting it opens /connect and
+#                                                      the start_plan tools; leave it unset to keep them closed.
 #
 # Safe to re-run: it overwrites the same variables. Environment variables only reach deployments made
 # after the push, so redeploy afterwards (Deployments, the latest production deployment, Redeploy).
@@ -19,11 +22,13 @@ cd "$(dirname "$0")/.."
 dry_run=false
 with_mcp_tokens=false
 with_cron_secret=false
+with_judge_token=false
 for argument in "$@"; do
   case "$argument" in
     --dry-run) dry_run=true ;;
     --with-mcp-tokens) with_mcp_tokens=true ;;
     --with-cron-secret) with_cron_secret=true ;;
+    --with-judge-token) with_judge_token=true ;;
     *) echo "unknown option: $argument" >&2; exit 1 ;;
   esac
 done
@@ -103,10 +108,15 @@ if $with_cron_secret; then
   ensure_token CRON_SECRET 32
 fi
 
+if $with_judge_token; then
+  ensure_token MCP_TOKEN_JUDGE
+fi
+
 push MODEL_API_KEY secret
 push CRON_SECRET secret
 push MCP_TOKEN_A secret
 push MCP_TOKEN_B secret
+push MCP_TOKEN_JUDGE secret
 push SUPABASE_SERVICE_ROLE_KEY secret
 push SUPABASE_URL config
 push INSTAGRAM_ACCESS_TOKEN secret
