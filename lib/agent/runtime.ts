@@ -3,6 +3,7 @@ import { type ActivityEvent, type AgentId, type Plan, type Signal } from "@/lib/
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
+import { fallbackOpening, fallbackReply, type FallbackOutcome } from "./fallback";
 import { failThread } from "./inbound";
 import { newId } from "./ids";
 import { ownFreeBlocks } from "./calendar";
@@ -54,8 +55,23 @@ function logFailure(agent: AgentId, result: TurnResult): void {
   if (process.env.NODE_ENV !== "test") console.error(`agent turn failed (${agent})`, result.failure);
 }
 
+// A turn the model could not finish still gets an answer: the scripted fallback sends a message built in code.
+// Only when that cannot send either does the thread end as failed, and the reason says why: no free time at
+// all is no_overlap; anything else is that an agent could not reply.
+async function recoverOrFail(
+  options: RuntimeOptions & { agent: AgentId; contextId: string },
+  result: TurnResult,
+  fallback: () => Promise<FallbackOutcome>,
+): Promise<TurnResult> {
+  const outcome = await fallback();
+  if (outcome.sent) return { ...result, status: "completed", fallback: true };
+  const reason = outcome.reason === "no_windows" ? "no_overlap" : "agent_unavailable";
+  await failThread(options.store, options.contextId, options.agent, result.failure?.detail ?? "turn failed", options.wallNow?.(), reason);
+  return result;
+}
+
 // The initiator's turn: read the reel, extract the place from the caption, check the calendar,
-// and open the conversation. A turn that cannot produce a message ends the thread as failed.
+// and open the conversation. A turn the model cannot finish falls back to a scripted opening.
 export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; signalId: string; contextId: string }): Promise<TurnResult> {
   const { store, agent, signalId, contextId } = options;
   const ctx: AgentRuntimeContext = {
@@ -78,7 +94,7 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
   });
   if (result.status === "failed") {
     logFailure(agent, result);
-    await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+    return recoverOrFail(options, result, () => fallbackOpening(ctx));
   }
   return result;
 }
@@ -111,7 +127,7 @@ export async function runInboxTurn(options: RuntimeOptions & { agent: AgentId; c
   });
   if (result.status === "failed") {
     logFailure(agent, result);
-    await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+    return recoverOrFail(options, result, () => fallbackReply(ctx, { thread, mutualWindows, ledger }));
   }
   return result;
 }
