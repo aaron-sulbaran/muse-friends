@@ -167,7 +167,7 @@ describe("the seeded receipt", () => {
       from: "aaron",
       to: "lisa",
       receipt: { seeded: true, place: "Shawarma Point", total: 30 },
-      explanation: "Your plate, chicken shawarma: $13. Half of tax ($2): $1. Half of tip ($4): $2. Together $16.",
+      explanation: "Your plate, chicken shawarma: $13. Half of tax ($2): $1. Half of tip ($4): $2. You send $16.",
       confirmUrl: `/api/payments/${payment.id}/confirm`,
       declineUrl: `/api/payments/${payment.id}/decline`,
     });

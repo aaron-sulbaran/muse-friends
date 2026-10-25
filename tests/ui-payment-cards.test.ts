@@ -231,17 +231,17 @@ describe("the cards, state by state", () => {
 
 describe("the sheets", () => {
   it("the how-it-was-worked-out sheet lists every sourced line, the total, the tools and the paper-dollar line", () => {
-    const words = text(renderToStaticMarkup(createElement(ProvenanceSheet, { payment: payment({ explanation: "Your plate: $13. Together $16." }), onClose: () => {} })));
+    const words = text(renderToStaticMarkup(createElement(ProvenanceSheet, { payment: payment({ explanation: "Your plate: $13. You send $16." }), onClose: () => {} })));
     expect(words).toContain("How your Muse worked out $16");
     expect(words).toContain("Every line says where it came from.");
     expect(words).toContain("Your plate, chicken shawarma");
     expect(words).toContain("Seeded receipt, read with read_receipt");
-    expect(words).toContain("Together $16");
+    expect(words).toContain("You send $16");
     expect(words).toContain("Receipt total $30, a seeded receipt, fictional");
     expect(words).toContain("Tools called: read_receipt, get_wallet");
     expect(words).toContain("Ledger ids appear here after you send.");
     expect(words).toContain("Paper dollars in the Capital One sandbox. Not real money.");
-    expect(words).toContain("Your plate: $13. Together $16.");
+    expect(words).toContain("Your plate: $13. You send $16.");
   });
 
   it("the confirm sheet names who gets it, the amount and the reason, and holds the send behind the pill", () => {
