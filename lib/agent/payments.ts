@@ -2,20 +2,26 @@ import { z } from "zod";
 import {
   AgentId,
   AgentMessage,
+  BREAKDOWN_ESTIMATE,
+  BREAKDOWN_NOTE,
+  Breakdown,
   NOTE_MAX,
   PAYMENT_MAX_DOLLARS,
+  breakdownSum,
   type ActivityEvent,
-  type Payment,
   type MessageRecord,
+  type PaymentProposal,
 } from "@/lib/protocol";
 import { enforceSharePolicy, paymentsCheck } from "@/lib/policy";
 import type { ToolMeta } from "@/lib/model";
 import { displayName, getPersona } from "@/lib/seed/fixtures";
+import { findReceipt } from "@/lib/seed/receipts";
 import { summarizeToolCall } from "@/lib/tool-summary";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
 import { commitMessage } from "./inbound";
 import { newId, otherAgent } from "./ids";
+import { openProposalFor, putProposal } from "./proposal-store";
 import { paymentsFrom, sentOnPlan, SETTLEABLE_STATES, type PaymentView } from "./payment-rules";
 import { clientFor, paymentsEnabled, PAYMENTS_OFF_TEXT, refreshWallet, walletOf } from "./wallets";
 import { toCentralIso } from "./windows";
@@ -32,6 +38,8 @@ export type PaymentContext = {
   // A settle turn is about one plan; a payment turn is about one payment thread.
   planId?: string;
   contextId?: string;
+  // What the person said when they asked for the settle-up: a breakdown line may cite it as its source.
+  note?: string;
 };
 
 export type ToolError = { error: string };
@@ -46,7 +54,11 @@ export const SendMoneyArgs = z.strictObject({
   amount: z.number().int().min(1).max(PAYMENT_MAX_DOLLARS).describe("Whole US dollars, at least 1"),
   reason: z.string().min(1).max(100).describe("What it is for, in a few plain words, no private details"),
   note: z.string().max(NOTE_MAX).optional().describe("Optional friendly sentence for your friend, max 140 characters"),
+  breakdown: Breakdown.describe(
+    "The lines that add up to the amount, each { label, amount, source }. A deduction is a negative amount. source is the callId a tool returned (read_receipt returns its own callId), the word note (your person's note), or the word estimate. The lines must sum to the amount exactly.",
+  ),
 });
+export const ReadReceiptArgs = z.strictObject({ receipt: z.string().max(64).optional().describe("A receipt id; leave out to read the receipt for this plan's place") });
 export const PaymentIdArgs = z.strictObject({ paymentId: z.string().min(1).max(64) });
 export const DeclineArgs = z.strictObject({ paymentId: z.string().min(1).max(64), reason: z.string().max(NOTE_MAX).optional().describe("Why you are sending it back, one short sentence") });
 
@@ -83,7 +95,7 @@ async function failureRow(ctx: PaymentContext, text: string, extra: Partial<Acti
   });
 }
 
-async function send(ctx: PaymentContext, message: AgentMessage, proof: MessageRecord["proof"]): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function sendPaymentMessage(ctx: Pick<PaymentContext, "store" | "deliver">, message: AgentMessage, proof: MessageRecord["proof"]): Promise<{ ok: true } | { ok: false; error: string }> {
   const sender = getPersona(message.from);
   const policy = await ctx.store.getPolicy(message.from, message.to);
   const outcome = enforceSharePolicy({ message, policy, sender });
@@ -96,6 +108,25 @@ async function send(ctx: PaymentContext, message: AgentMessage, proof: MessageRe
   }
   const delivery = await ctx.deliver({ record, redaction: outcome.redaction });
   return delivery.ok ? { ok: true } : { ok: false, error: `the friend's inbox rejected it (${delivery.status}): ${delivery.error}` };
+}
+
+// Text the model wrote about a payment goes through the same scan as a note: a private event title or an off-category
+// value comes back as the fallback instead. Proposals are readable by both phones, so this runs when it is prepared.
+function scrubbed(agent: AgentId, friend: AgentId, policy: Awaited<ReturnType<Store["getPolicy"]>>, text: string, fallback: string): string {
+  const probe: AgentMessage = {
+    id: "msg_scrub",
+    contextId: "pay_scrub",
+    seq: 1,
+    from: agent,
+    to: friend,
+    type: "payment",
+    state: "working",
+    reason: "settle_up",
+    payment: { paymentId: "pay_scrub", planId: "plan_scrub", amount: 1, currency: "USD", reason: text.slice(0, 100), source: "local", payerAccountId: "acct_scrub", withdrawalId: "wd_scrub" },
+    at: "2026-10-25T00:00:00-05:00",
+  };
+  const out = enforceSharePolicy({ message: probe, policy, sender: getPersona(agent) }).message.payment!.reason;
+  return out === text.slice(0, 100) ? text : fallback;
 }
 
 // A friend's agent id, or their display name, read as the friend. A settle turn is between two people.
@@ -124,9 +155,11 @@ export async function getWallet(ctx: PaymentContext): Promise<Done<{ balance: nu
   };
 }
 
-// send_money: the payer's side. The withdrawal happens first and is undone (a refund deposit) if the message
-// cannot be delivered, so money never disappears into a failed hop.
-export async function sendMoney(ctx: PaymentContext, rawArgs: unknown, meta?: ToolMeta): Promise<Done<{ paymentId: string; amount: number; balanceAfter: number; withdrawalId: string }>> {
+// send_money: the payer's side, and since D28 it PREPARES a payment, it does not make one. The runtime checks the
+// payments scope and cap, the balance and the breakdown (the lines add up to the amount and every source is a tool
+// call from this turn, the person's note, or "estimate"), records a proposal on the room, and stops. No withdrawal,
+// no message to the friend: the person confirms (lib/agent/proposals.ts) and only then does money move.
+export async function sendMoney(ctx: PaymentContext, rawArgs: unknown, meta?: ToolMeta): Promise<Done<{ proposed: true; status: "proposed"; paymentId: string; amount: number; message: string }>> {
   if (!paymentsEnabled()) return fail(PAYMENTS_OFF_TEXT);
   const parsed = SendMoneyArgs.safeParse(rawArgs);
   if (!parsed.success) return fail(`Invalid arguments. ${z.prettifyError(parsed.error)}`);
@@ -140,66 +173,100 @@ export async function sendMoney(ctx: PaymentContext, rawArgs: unknown, meta?: To
   if (!plan.participants.includes(agent) || !plan.participants.includes(friend)) return fail("You and that friend are not both in this plan.");
   if (!SETTLEABLE_STATES.includes(plan.state)) return fail(`The plan is ${plan.state}. Money moves only once the plan is confirmed.`);
 
-  // The cap, as the sender's code sees it. The friend's inbox checks the same thing again.
+  // The cap, as the sender's code sees it. It is checked again when the person confirms, and in the friend's inbox.
   const policy = await store.getPolicy(agent, friend);
   const spent = await sentOnPlan(store, plan.id, agent);
   const refused = paymentsCheck(policy, args.amount, spent);
   if (refused) return fail(refused);
 
+  // The breakdown has to add up and every number has to say where it came from.
+  const sum = breakdownSum(args.breakdown);
+  if (sum !== args.amount) return fail(`The breakdown lines add up to $${sum}, not $${args.amount}. Fix the lines or the amount so they match exactly.`);
+  const callIds = new Set((meta?.finishedCalls ?? []).map((call) => call.callId));
+  const unsourced = args.breakdown.filter((line) => !(line.source === BREAKDOWN_ESTIMATE || (line.source === BREAKDOWN_NOTE && Boolean(ctx.note)) || callIds.has(line.source)));
+  if (unsourced.length > 0) {
+    return fail(
+      `These lines have no valid source: ${unsourced.map((line) => `"${line.label}" (source ${line.source})`).join("; ")}. A source is the callId a tool returned in this turn (read_receipt returns its own callId), ${ctx.note ? 'the word "note" (your person\'s note), ' : ""}or the word "estimate".`,
+    );
+  }
+
+  const open = await openProposalFor(store, plan.id, agent);
+  if (open) return fail(`You already prepared $${open.amount} (${open.paymentId}) and it is waiting for your person to confirm. Prepare nothing else until they decide.`);
   const wallet = await refreshWallet(store, agent, () => nowMs(ctx));
   if (wallet.error !== null) {
     await failureRow(ctx, `Payment failed, sandbox error: ${wallet.error}`, { planId: plan.id });
-    return fail(`Payment failed, sandbox error: ${wallet.error}. Nothing was sent.`);
+    return fail(`Payment failed, sandbox error: ${wallet.error}. Nothing was prepared.`);
   }
   if (wallet.data.balance < args.amount) return fail(`Your balance is $${wallet.data.balance}, which is less than $${args.amount}.`);
-  const payee = await walletOf(store, friend);
-  if (!payee) return fail(`${displayName(friend)} has no wallet, so there is nowhere to send money.`);
-  const client = clientFor(store, wallet.data.source);
-  if (!client) {
-    await failureRow(ctx, "Payment failed, sandbox error: sandbox not connected", { planId: plan.id });
-    return fail("Payment failed, sandbox error: sandbox not connected. Nothing was sent.");
-  }
+  if (!(await walletOf(store, friend))) return fail(`${displayName(friend)} has no wallet, so there is nowhere to send money.`);
 
   const paymentId = newId("pay", nowMs(ctx));
-  const withdrawal = await client.withdraw(wallet.data.accountId, { amount: args.amount, description: `Muse ${paymentId}: ${args.reason}` });
-  if (withdrawal.error !== null) {
-    await failureRow(ctx, `Payment failed, sandbox error: ${withdrawal.error}`, { planId: plan.id });
-    return fail(`Payment failed, sandbox error: ${withdrawal.error}. Nothing was sent.`);
-  }
-
   const at = toCentralIso(nowMs(ctx));
-  const payment: Payment = {
+  const readReceiptCall = (meta?.finishedCalls ?? []).some((call) => call.name === "read_receipt");
+  const receipt = readReceiptCall ? findReceipt({ place: plan.activity?.title }) : null;
+  const proposal: PaymentProposal = {
     paymentId,
     planId: plan.id,
+    payer: agent,
+    payee: friend,
     amount: args.amount,
-    currency: "USD",
-    reason: args.reason,
-    source: wallet.data.source,
-    payerAccountId: wallet.data.accountId,
-    withdrawalId: withdrawal.data.id,
-  };
-  const message: AgentMessage = {
-    id: newId("msg", nowMs(ctx)),
-    contextId: `pay_${paymentId}`,
-    seq: 1,
-    from: agent,
-    to: friend,
-    type: "payment",
-    state: "working",
-    reason: "settle_up",
+    reason: scrubbed(agent, friend, policy, args.reason, "Settling up"),
     ...(args.note ? { note: args.note } : {}),
-    payment,
-    at,
+    breakdown: args.breakdown.map((line) => ({ ...line, label: scrubbed(agent, friend, policy, line.label, "Item") })),
+    ...(meta?.finishedCalls?.length ? { calls: meta.finishedCalls.slice(-10) } : {}),
+    ...(receipt ? { receipt: { id: receipt.id, place: receipt.place, seeded: true as const, total: receipt.total } } : {}),
+    source: wallet.data.source,
+    status: "proposed",
+    proof: proofFrom(meta, { name: "send_money", args, output: { amount: args.amount, proposed: true } }),
+    proposedAt: at,
   };
-  const delivered = await send(ctx, message, proofFrom(meta, { name: "send_money", args, output: { amount: args.amount } }));
-  if (!delivered.ok) {
-    // The money left the account but the message did not arrive: put it back, and say so.
-    const refund = await client.deposit(wallet.data.accountId, { amount: args.amount, description: `Refund of Muse ${paymentId}: not delivered` });
-    await failureRow(ctx, `Payment failed, ${delivered.error}. ${refund.error === null ? "Refunded." : `Refund also failed: ${refund.error}`}`, { planId: plan.id, contextId: message.contextId });
-    return fail(`Payment failed: ${delivered.error}. ${refund.error === null ? "The money was returned to your wallet." : "The money could not be returned automatically."}`);
-  }
-  const after = await refreshWallet(store, agent, () => nowMs(ctx));
-  return { ok: true, paymentId, amount: args.amount, withdrawalId: withdrawal.data.id, balanceAfter: after.error === null ? after.data.balance : wallet.data.balance - args.amount };
+  await putProposal(store, proposal);
+  await store.appendEvent({
+    id: newId("evt", nowMs(ctx)),
+    at,
+    kind: "payment_proposed",
+    actor: "agent",
+    agent,
+    planId: plan.id,
+    text: `${displayName(agent)}'s Muse prepared $${args.amount} for ${displayName(friend)}: ${args.reason}. Waiting for ${displayName(agent)} to confirm; nothing has moved.`.slice(0, 240),
+  });
+  return { ok: true, proposed: true, status: "proposed", paymentId, amount: args.amount, message: "Prepared for your person to confirm. No money has moved, and only they can send it." };
+}
+
+// read_receipt: the seeded receipt for the plan's place. Its result carries its own callId so a breakdown line can cite
+// it, and says plainly that it is a seeded, fictional fixture.
+export async function readReceipt(ctx: PaymentContext, rawArgs: unknown, meta?: ToolMeta): Promise<Done<{ callId: string | undefined; seeded: true; receipt: unknown }>> {
+  if (!paymentsEnabled()) return fail(PAYMENTS_OFF_TEXT);
+  const parsed = ReadReceiptArgs.safeParse(rawArgs ?? {});
+  if (!parsed.success) return fail(`Invalid arguments. ${z.prettifyError(parsed.error)}`);
+  const plan = ctx.planId ? await ctx.store.getPlan(ctx.planId) : null;
+  const receipt = findReceipt({ id: parsed.data.receipt, place: plan?.activity?.title });
+  if (!receipt) return fail("There is no receipt on file for this plan.");
+  await ctx.store.appendEvent({
+    id: newId("evt", nowMs(ctx)),
+    at: toCentralIso(nowMs(ctx)),
+    kind: "receipt_read",
+    actor: "agent",
+    agent: ctx.agent,
+    planId: plan?.id,
+    text: `${displayName(ctx.agent)}'s Muse read the receipt for ${receipt.place} (seeded, fictional): $${receipt.total} total, paid by ${displayName(receipt.paidBy)}`.slice(0, 240),
+  });
+  return {
+    ok: true,
+    callId: meta?.callId,
+    seeded: true,
+    receipt: {
+      id: receipt.id,
+      place: receipt.place,
+      date: receipt.date,
+      paidBy: displayName(receipt.paidBy),
+      lines: receipt.lines.map((line) => ({ line: line.n, item: line.item, amount: line.amount, orderedBy: displayName(line.orderedBy) })),
+      tax: receipt.tax,
+      tip: receipt.tip,
+      total: receipt.total,
+      note: receipt.provenance.note,
+    },
+  };
 }
 
 async function openPayment(ctx: PaymentContext, paymentId: string): Promise<{ view: PaymentView } | ToolError> {
@@ -261,7 +328,7 @@ export async function acceptPayment(ctx: PaymentContext, rawArgs: unknown, meta?
     },
     at: toCentralIso(nowMs(ctx)),
   };
-  const delivered = await send(ctx, message, proofFrom(meta, { name: "accept_payment", args: parsed.data, output: { amount: view.amount } }));
+  const delivered = await sendPaymentMessage(ctx, message, proofFrom(meta, { name: "accept_payment", args: parsed.data, output: { amount: view.amount } }));
   if (!delivered.ok) {
     await failureRow(ctx, `Payment received but the receipt could not be delivered: ${delivered.error}`, { planId: view.planId, contextId: view.contextId });
     return fail(`The money arrived in your wallet, but telling your friend failed: ${delivered.error}.`);
@@ -313,7 +380,7 @@ export async function declinePayment(ctx: PaymentContext, rawArgs: unknown, meta
     },
     at: toCentralIso(nowMs(ctx)),
   };
-  const delivered = await send(ctx, message, proofFrom(meta, { name: "decline_payment", args: parsed.data, output: { amount: view.amount } }));
+  const delivered = await sendPaymentMessage(ctx, message, proofFrom(meta, { name: "decline_payment", args: parsed.data, output: { amount: view.amount } }));
   if (!delivered.ok) {
     await failureRow(ctx, `Payment refunded but the answer could not be delivered: ${delivered.error}`, { planId: view.planId, contextId: view.contextId });
     return fail(`The money was sent back, but telling your friend failed: ${delivered.error}.`);

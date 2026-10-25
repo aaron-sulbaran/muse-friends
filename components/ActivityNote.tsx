@@ -1,4 +1,4 @@
-import { CalendarX, Film, MessageCircle, Shield, ShieldAlert, TriangleAlert, Undo2, Wallet, type LucideIcon } from "lucide-react";
+import { CalendarX, Film, MessageCircle, Receipt, Shield, ShieldAlert, TriangleAlert, Undo2, Wallet, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
 
@@ -13,6 +13,9 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string }> = {
   payment_received: { icon: Wallet, title: "Money received" },
   payment_declined: { icon: Undo2, title: "Payment sent back" },
   payment_failed: { icon: TriangleAlert, title: "Payment failed" },
+  payment_proposed: { icon: Wallet, title: "Payment prepared" },
+  payment_cancelled: { icon: Undo2, title: "Payment declined by its person" },
+  receipt_read: { icon: Receipt, title: "Read a receipt" },
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */
