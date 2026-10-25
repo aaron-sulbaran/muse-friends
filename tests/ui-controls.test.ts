@@ -11,7 +11,7 @@ const open = () => renderToStaticMarkup(createElement(DemoControls, { snapshot: 
 
 describe("what each control says it does", () => {
   it("is one plain sentence per control, with no dash and no emoji", () => {
-    expect(Object.keys(controlInfo).sort()).toEqual(["invite", "jump", "leak", "loadReel", "replay", "reset", "scenario"]);
+    expect(Object.keys(controlInfo).sort()).toEqual(["invite", "jump", "leak", "loadReel", "replay", "replayTrip", "reset", "scenario"]);
     for (const sentence of Object.values(controlInfo)) {
       expect(sentence.endsWith(".")).toBe(true);
       expect(sentence.slice(0, -1)).not.toContain(".");

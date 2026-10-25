@@ -71,10 +71,10 @@ describe("the wallet history", () => {
   });
 
   it("groups by friend as History with Michelle once more than one friend has a payment", () => {
-    // Another friend's id is not in this build's list of people; the grouping works on whoever the counterpart is.
+    // A second friend: the grouping works on whoever the counterpart is, and Kai has a name in every room.
     const other = "kai" as unknown as UiPayment["to"];
     const groups = paymentHistory(withPayments([payment(), payment({ id: "pay_3", to: other, at: "2026-10-25T06:00:00-05:00" })]), "aaron");
-    expect(groups.map((group) => group.title)).toEqual(["History with a friend", "History with Michelle"]);
+    expect(groups.map((group) => group.title)).toEqual(["History with Kai", "History with Michelle"]);
     expect(groups[1].rows.map((row) => row.id)).toEqual(["pay_1"]);
   });
 
