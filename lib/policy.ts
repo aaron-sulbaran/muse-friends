@@ -264,6 +264,11 @@ export function validateIncoming(input: ValidateInput): IncomingCheck {
 
   const expectedSeq = (input.thread?.messageCount ?? 0) + 1;
   if (message.seq !== expectedSeq) return { ok: false, status: 409, error: `expected seq ${expectedSeq}` };
+  // An accept or a decline answers something. Without this, a lone one for a conversation the store has never seen (the room
+  // was reset under a running turn) would be committed as an opening, and the inbox would invent a pair plan around it.
+  if (!input.thread && message.seq === 1 && closesThread(message.type)) {
+    return { ok: false, status: 422, error: "a conversation opens with an intent, a proposal or a counter" };
+  }
   if (input.thread && ["rejected", "failed", "completed", "input-required"].includes(input.thread.state)) {
     return { ok: false, status: 409, error: "the conversation has already ended" };
   }
