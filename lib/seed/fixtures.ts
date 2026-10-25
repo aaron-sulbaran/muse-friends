@@ -307,7 +307,7 @@ const events: ActivityEvent[] = [
     agent: "aaron",
     contextId: SHAWARMA_CONTEXT_ID,
     planId: SHAWARMA_PLAN_ID,
-    text: `${SPROUT} read the reel caption: Shawarma Point, E 6th St, open until 9pm (extracted by the caption model)`,
+    text: `${SPROUT} read the reel caption: Shawarma Point, E 6th St, open until 9pm (extracted from caption)`,
   },
   {
     id: "evt_thread",
