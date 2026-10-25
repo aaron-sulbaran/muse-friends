@@ -1,7 +1,7 @@
 import type { RunBudget } from "@/lib/agent/caps";
 import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
-import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, MEMBER_IDS, type AgentId, type MemberId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { CATEGORIES, isCategoryAllowed, isPaymentType, MEMBER_IDS, type AgentId, type MemberId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
