@@ -7,8 +7,8 @@ import { MuseScreen } from "@/components/MuseScreen";
 import { snapshotAtPlanState } from "@/lib/seed/states";
 import { postAvailability } from "@/lib/ui/actions";
 import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
-import { copy } from "@/lib/ui/copy";
-import { freeChips } from "@/lib/ui/free-windows";
+import { copy, onboardingCopy } from "@/lib/ui/copy";
+import { availabilityOutcome, freeChips } from "@/lib/ui/free-windows";
 import { initialOnboarding, reduceOnboarding, type OnboardingAction } from "@/lib/ui/onboarding";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 import { threadLines } from "@/lib/ui/thread";
@@ -164,3 +164,41 @@ describe("what is posted", () => {
     expect(await postAvailability({ side: "b", windows, feels: null, name: "" })).toEqual({ ok: false, message: "Each window needs to be at least an hour." });
   });
 });
+
+describe("when the availability route is not there yet", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const answer = (status: number, body: BodyInit | null, type = "application/json") => vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status, headers: { "content-type": type } })));
+  const windows = [{ start: "2026-10-27T18:00:00-05:00", end: "2026-10-27T20:00:00-05:00" }];
+  const post = () => postAvailability({ side: "b", windows, feels: null, name: "" });
+
+  it("is told apart from a refusal: a 404 page or a 404 with no room code is a missing route", async () => {
+    answer(404, "<html>not found</html>", "text/html");
+    expect(await post()).toMatchObject({ ok: false, missing: true });
+    answer(404, JSON.stringify({ error: { message: "Not found" } }));
+    expect(await post()).toMatchObject({ ok: false, missing: true });
+    answer(405, null);
+    expect(await post()).toMatchObject({ ok: false, missing: true });
+  });
+
+  it("is not a missing route when a room ran out, or when the server refuses the windows", async () => {
+    answer(404, JSON.stringify({ error: { code: "no_such_room", message: "That room is gone." } }));
+    expect(await post()).toEqual({ ok: false, message: "That room is gone." });
+    answer(400, JSON.stringify({ error: { message: "Each window needs to be at least an hour." } }));
+    expect(await post()).not.toHaveProperty("missing");
+  });
+
+  it("lets onboarding finish on a missing route, with the times kept for a retry, and stops only on a refusal", () => {
+    expect(availabilityOutcome({ ok: true })).toEqual({ kind: "saved" });
+    expect(availabilityOutcome({ ok: false, message: "Request failed with 404", missing: true })).toEqual({ kind: "unsaved" });
+    expect(availabilityOutcome({ ok: false, message: "Each window needs to be at least an hour." })).toEqual({ kind: "refused", message: "Each window needs to be at least an hour." });
+  });
+
+  it("has the quiet line and its retry in plain words", () => {
+    expect(onboardingCopyLines()).toEqual(["Your free times are not saved yet.", "Try again"]);
+  });
+});
+
+function onboardingCopyLines() {
+  // Read through the copy module's own export so the words are the ones on screen.
+  return [onboardingCopy.freeNotSaved, onboardingCopy.freeRetry];
+}

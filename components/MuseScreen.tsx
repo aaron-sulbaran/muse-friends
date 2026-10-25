@@ -5,12 +5,12 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { ARRIVAL_AT_MS, ARRIVAL_LINGER_MS, withReelArrival, type ArrivalStage } from "@/lib/ui/arrival";
-import { copy } from "@/lib/ui/copy";
+import { copy, onboardingCopy } from "@/lib/ui/copy";
 import { discInitials, formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
 import { postAvailability, postChat, postDecision, postHandoff, postPrivacy, postReplan, postSignal, postSimulatedFriendSwitch, type Result } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import { runInProgress } from "@/lib/ui/entry";
-import { freeWindowsFor } from "@/lib/ui/free-windows";
+import { availabilityOutcome, freeWindowsFor } from "@/lib/ui/free-windows";
 import { friendsIndicator, pickerMode, ROOM_FRIEND, roomFriendTier, shareFriend, startRequest, startsRunAtDone } from "@/lib/ui/onboarding-flow";
 import { getRoom } from "@/lib/ui/room";
 import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
@@ -148,6 +148,8 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const friendsOff = onboardingOn && role === "a" && onboardingState.step === "done" && !onboardingState.friendsOn;
   const [freeError, setFreeError] = useState<string | null>(null);
   const [freeSaving, setFreeSaving] = useState(false);
+  // Set when the free times could not be saved because the route is not there yet: onboarding finished anyway, and the answers wait for a retry.
+  const [freeUnsaved, setFreeUnsaved] = useState(false);
   // After Done, Michelle's reel arrives as a new message and the run starts a beat later (see lib/ui/arrival.ts). Null is the
   // static chat: a reload, the stage, or a phone that never ran onboarding in this tab.
   const [arrival, setArrival] = useState<ArrivalStage | null>(null);
@@ -268,9 +270,22 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       const posted = await postAvailability({ side: role, windows: checked.windows, feels: checked.feels, name: onboardingState.name.trim() });
       setFreeSaving(false);
       onChanged();
-      if (!posted.ok) return setFreeError(posted.message);
+      const outcome = availabilityOutcome(posted);
+      if (outcome.kind === "refused") return setFreeError(outcome.message);
+      if (outcome.kind === "unsaved") setFreeUnsaved(true);
     }
     finishOnboarding();
+  }
+
+  /** Try the unsaved free times again, from the answers onboarding kept. A refusal is shown once and the retry is dropped. */
+  async function retryFree() {
+    const checked = freeWindowsFor(onboardingState.free, snapshot.now);
+    if (!checked.ok) return setFreeUnsaved(false);
+    const outcome = availabilityOutcome(await postAvailability({ side: role, windows: checked.windows, feels: checked.feels, name: onboardingState.name.trim() }));
+    onChanged();
+    if (outcome.kind === "unsaved") return;
+    setFreeUnsaved(false);
+    if (outcome.kind === "refused") setOnboardingError(outcome.message);
   }
 
   /**
@@ -522,6 +537,14 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 <div className="mt-3.5">
                   <TypingDots />
                 </div>
+              ) : null}
+              {freeUnsaved ? (
+                <p className="mt-3 text-[13px] leading-[18px] text-muted">
+                  {onboardingCopy.freeNotSaved}{" "}
+                  <button type="button" onClick={() => void retryFree()} className="font-semibold text-accent-dot hover:underline">
+                    {onboardingCopy.freeRetry}
+                  </button>
+                </p>
               ) : null}
               {onboardingError ? (
                 <p role="alert" className="mt-3 text-[13px] leading-[18px] text-withheld">

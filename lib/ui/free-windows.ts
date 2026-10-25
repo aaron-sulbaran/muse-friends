@@ -176,3 +176,12 @@ export function describeFree(windows: FreeWindow[]): string {
   });
   return [...new Set(parts)].join(", ");
 }
+
+/**
+ * What to do with the answer to posting someone's week: it is saved, it was refused and the person fixes it (the
+ * server's plain message), or the route is not there yet and onboarding goes on with the times kept for a retry.
+ */
+export function availabilityOutcome(result: { ok: true } | { ok: false; message: string; missing?: boolean }): { kind: "saved" } | { kind: "unsaved" } | { kind: "refused"; message: string } {
+  if (result.ok) return { kind: "saved" };
+  return result.missing ? { kind: "unsaved" } : { kind: "refused", message: result.message };
+}

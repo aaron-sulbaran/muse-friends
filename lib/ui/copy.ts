@@ -352,4 +352,6 @@ export const onboardingCopy = {
   sandboxLine: "In this sandbox your Muse only knows what you tell it here. In Muse it would know you, and it would suggest plans instead of asking.",
   skipFree: "Skip",
   freeSaving: "Saving...",
+  freeNotSaved: "Your free times are not saved yet.",
+  freeRetry: "Try again",
 } as const;

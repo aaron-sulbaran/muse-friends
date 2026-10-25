@@ -1,9 +1,9 @@
 import { getRoom, withRoom } from "./room";
 import type { Category, MemberId, Role, ShareTier } from "./types";
 
-export type Result = { ok: true } | { ok: false; message: string; paused?: boolean; refused?: boolean };
+export type Result = { ok: true } | { ok: false; message: string; paused?: boolean; refused?: boolean; missing?: boolean };
 
-type ErrorBody = { error?: string | { message?: string } | null; paused?: boolean; refused?: boolean; text?: string };
+type ErrorBody = { error?: string | { message?: string; code?: string } | null; paused?: boolean; refused?: boolean; text?: string };
 
 async function post(url: string, body: unknown): Promise<Result> {
   try {
@@ -18,7 +18,10 @@ async function post(url: string, body: unknown): Promise<Result> {
     const message = typeof error === "string" ? error : error?.message;
     // A paused budget (429) is not a failure: the page falls back to a recording and says why.
     if (response.status === 429 && payload?.paused === true) return { ok: false, message: payload.text ?? "Live runs paused, playing a recording", paused: true };
-    return { ok: false, message: message ?? payload?.text ?? `Request failed with ${response.status}`, ...(payload?.refused === true ? { refused: true } : {}) };
+    // A route that is not there (a 404 or 405 that is not a room that ran out) is a different thing from a refusal: the caller may carry on and retry.
+    const code = typeof error === "object" && error !== null ? error.code : undefined;
+    const missing = (response.status === 404 || response.status === 405) && code !== "no_such_room";
+    return { ok: false, message: message ?? payload?.text ?? `Request failed with ${response.status}`, ...(payload?.refused === true ? { refused: true } : {}), ...(missing ? { missing: true } : {}) };
   } catch {
     return { ok: false, message: "Could not reach the server" };
   }
