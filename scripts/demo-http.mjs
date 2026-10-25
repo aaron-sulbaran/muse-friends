@@ -76,6 +76,7 @@ async function run(label) {
   // 1. The reel arrives.
   const t0 = Date.now();
   const ack = await call("POST", "/api/signals", {});
+  if (ack.status === 429) console.log(`  The room is paused by a run cap (${ack.json?.reason}): "${ack.json?.text}". Demo runs count against the caps too.`);
   check(ack.status === 202, `POST /api/signals answered 202 in ${ack.ms}ms`);
   if (ack.status !== 202) return null;
   const { contextId, planId } = ack.json;
