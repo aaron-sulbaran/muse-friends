@@ -3,11 +3,14 @@ import { resetDemo, setPayments } from "@/lib/agent/controls";
 import { injectSignal, runInboxTurn } from "@/lib/agent/runtime";
 import { runPaymentTurn, runSettleTurn } from "@/lib/agent/payment-runtime";
 import { acceptPayment, declinePayment, getWallet, sendMoney, type PaymentContext } from "@/lib/agent/payments";
+import { confirmProposal } from "@/lib/agent/proposals";
+import { putProposal } from "@/lib/agent/proposal-store";
 import { paymentsFrom, sentOnPlan } from "@/lib/agent/payment-rules";
 import { agentToken, localDeliver, receiveMessage } from "@/lib/agent/wire";
 import { ensureWallets, refreshWallet, walletOf } from "@/lib/agent/wallets";
 import { NessieHttp, NessieWithLedger } from "@/lib/nessie";
-import { AgentMessage, SendToFriendArgs, type AgentId, type Plan, type SharePolicy } from "@/lib/protocol";
+import type { ToolMeta } from "@/lib/model";
+import { AgentMessage, SendToFriendArgs, type AgentId, type PaymentProposal, type Plan, type SharePolicy } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { JsonStore } from "@/lib/store/json";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
@@ -49,6 +52,26 @@ const ctxFor = (agent: AgentId, extra: Partial<PaymentContext> = {}): PaymentCon
 const balances = async () => ({ aaron: (await walletOf(store, "aaron"))!.balance, lisa: (await walletOf(store, "lisa"))!.balance });
 const payContext = async () => (await store.listThreads()).find((thread) => thread.contextId.startsWith("pay_"))!.contextId;
 
+// A one-line breakdown the Muse labels as its own estimate: the simplest valid proposal.
+const estimateOf = (amount: number) => [{ label: "My estimate", amount, source: "estimate" }];
+type MoneyArgs = { to: string; amount: number; reason: string; note?: string; breakdown?: Array<{ label: string; amount: number; source: string }> };
+const propose = (agent: AgentId, args: MoneyArgs, extra: Partial<PaymentContext> = {}, meta?: ToolMeta) => sendMoney(ctxFor(agent, extra), { breakdown: estimateOf(args.amount), ...args }, meta);
+const confirmAs = (agent: AgentId, paymentId: string, deliver = localDeliver(store, agent)) => confirmProposal({ store, wallNow, deliver }, paymentId, agent);
+// Prepare a payment and have the person confirm it: the only way money moves. Returns the old shape on success.
+async function pay(agent: AgentId, args: MoneyArgs, deliver = localDeliver(store, agent)) {
+  const proposed = await propose(agent, args);
+  if ("error" in proposed) return proposed;
+  const confirmed = await confirmAs(agent, proposed.paymentId, deliver);
+  if (!confirmed.ok) return { error: confirmed.error };
+  return { ok: true as const, paymentId: proposed.paymentId, amount: args.amount, balanceAfter: (await walletOf(store, agent))!.balance };
+}
+// A proposal row as the person's confirm leaves it, for tests that forge the message behind it.
+async function proposalRow(paymentId: string, patch: Partial<PaymentProposal> = {}) {
+  const wallet = (await walletOf(store, "aaron"))!;
+  await putProposal(store, { paymentId, planId: plan.id, payer: "aaron", payee: "lisa", amount: 5, reason: "coffee", breakdown: estimateOf(5), source: "local", status: "confirming", proposedAt: "2026-10-25T20:00:00-05:00", ...patch });
+  return wallet;
+}
+
 beforeEach(async () => {
   clock = Date.parse("2026-10-25T20:00:00-05:00");
   store = new JsonStore(null);
@@ -77,7 +100,7 @@ describe("wallets", () => {
 
   it("puts the same accounts back to their starting balance on Reset instead of making new ones", async () => {
     const before = (await walletOf(store, "aaron"))!;
-    await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 12, reason: "covering your plate" });
+    await pay("aaron", { to: "lisa", amount: 12, reason: "covering your plate" });
     expect((await balances()).aaron).toBe(108);
     await resetDemo(store, {}, { wallNow });
     const after = (await walletOf(store, "aaron"))!;
@@ -87,7 +110,7 @@ describe("wallets", () => {
 
   it("shows a visible 'sandbox not connected' flag in the snapshot, and the wallets and scope per side", async () => {
     const ui = toUiSnapshot(await store.snapshot(), { mode: "live" });
-    expect(ui.sandbox).toEqual({ enabled: true, connected: false, text: "Sandbox not connected, using a local ledger" });
+    expect(ui.sandbox).toEqual({ enabled: true, connected: false, text: "Sandbox not connected, local ledger" });
     expect(ui.wallets.aaron).toMatchObject({ balance: 120, nickname: "Sprout's wallet", source: "local" });
     expect(ui.wallets.lisa).toMatchObject({ balance: 80 });
     expect(ui.paymentsScope).toEqual({ aaron: { enabled: true, cap: 20 }, lisa: { enabled: false, cap: 0 } });
@@ -106,16 +129,16 @@ describe("wallets", () => {
 describe("the share policy's payments scope", () => {
   it("refuses when the person has not turned payments on, and nothing moves", async () => {
     await store.putPolicy(policy("aaron", 20, false));
-    const result = await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 5, reason: "pizza" });
+    const result = await pay("aaron", { to: "lisa", amount: 5, reason: "pizza" });
     expect(result).toMatchObject({ error: expect.stringContaining("Payments are off") });
     expect(await balances()).toEqual({ aaron: 120, lisa: 80 });
     expect(await store.listMessages()).toHaveLength(0);
   });
 
   it("refuses above the cap and counts what is already sent for the plan", async () => {
-    expect(await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 25, reason: "dinner" })).toMatchObject({ error: expect.stringContaining("over your person's cap of $20") });
-    expect(await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 12, reason: "my half" })).toMatchObject({ ok: true, amount: 12, balanceAfter: 108 });
-    const second = await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 10, reason: "dessert" });
+    expect(await pay("aaron", { to: "lisa", amount: 25, reason: "dinner" })).toMatchObject({ error: expect.stringContaining("over your person's cap of $20") });
+    expect(await pay("aaron", { to: "lisa", amount: 12, reason: "my half" })).toMatchObject({ ok: true, amount: 12, balanceAfter: 108 });
+    const second = await pay("aaron", { to: "lisa", amount: 10, reason: "dessert" });
     expect(second).toMatchObject({ error: expect.stringMatching(/\$12 is already sent.*at most \$8 more/) });
     expect(await balances()).toEqual({ aaron: 108, lisa: 80 });
   });
@@ -139,7 +162,7 @@ describe("the share policy's payments scope", () => {
 
 describe("send, accept, decline", () => {
   it("moves the balances, commits both messages in a payment thread, and writes the Activity rows with the ids", async () => {
-    const sent = await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 12, reason: "covering your plate", note: "My treat!" });
+    const sent = await pay("aaron", { to: "lisa", amount: 12, reason: "covering your plate", note: "My treat!" });
     expect(sent).toMatchObject({ ok: true, balanceAfter: 108 });
     const contextId = await payContext();
     expect(await balances()).toEqual({ aaron: 108, lisa: 80 });
@@ -158,15 +181,16 @@ describe("send, accept, decline", () => {
     expect(await store.getThread(contextId)).toMatchObject({ planId: plan.id, state: "completed", messageCount: 2, initiator: "aaron" });
 
     const rows = (await store.listEvents()).filter((event) => event.kind.startsWith("payment_"));
-    expect(rows.map((row) => row.kind)).toEqual(["payment_sent", "payment_received"]);
-    expect(rows[0].text).toMatch(/Sprout's Muse sent \$12 to Mochi's Muse: covering your plate \(local ledger, withdrawal wd_local_/);
-    expect(rows[1].text).toMatch(/Mochi's Muse accepted \$12 from Sprout: balance \$80 to \$92 \(local ledger, deposit dp_local_/);
+    expect(rows.map((row) => row.kind)).toEqual(["payment_proposed", "payment_sent", "payment_received"]);
+    expect(rows[0].text).toBe("Sprout's Muse prepared $12 for Mochi: covering your plate. Waiting for Sprout to confirm; nothing has moved.");
+    expect(rows[1].text).toMatch(/Sprout's Muse sent \$12 to Mochi's Muse: covering your plate \(local ledger, withdrawal wd_local_/);
+    expect(rows[2].text).toMatch(/Mochi's Muse accepted \$12 from Sprout: balance \$80 to \$92 \(local ledger, deposit dp_local_/);
     // A payment never touches the plan.
     expect(await store.getPlan(plan.id)).toMatchObject({ state: "confirmed" });
   });
 
   it("sends a declined payment straight back as a labeled refund and tells the payer", async () => {
-    const sent = (await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 15, reason: "ticket" })) as { paymentId: string };
+    const sent = (await pay("aaron", { to: "lisa", amount: 15, reason: "ticket" })) as { paymentId: string };
     const contextId = await payContext();
     expect(await balances()).toEqual({ aaron: 105, lisa: 80 });
 
@@ -184,7 +208,7 @@ describe("send, accept, decline", () => {
   });
 
   it("answers a payment only once, and only the person it was sent to", async () => {
-    const sent = (await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 5, reason: "coffee" })) as { paymentId: string };
+    const sent = (await pay("aaron", { to: "lisa", amount: 5, reason: "coffee" })) as { paymentId: string };
     const contextId = await payContext();
     expect(await acceptPayment(ctxFor("aaron", { contextId }), { paymentId: sent.paymentId })).toMatchObject({ error: "This payment is not addressed to you." });
     expect(await acceptPayment(ctxFor("lisa", { contextId }), { paymentId: sent.paymentId })).toMatchObject({ ok: true });
@@ -196,25 +220,29 @@ describe("send, accept, decline", () => {
 
   it("refuses more than the balance, an unknown friend, and a plan that is not confirmed", async () => {
     await store.putPolicy(policy("aaron", 500));
-    expect(await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 130, reason: "everything" })).toMatchObject({ error: "Your balance is $120, which is less than $130." });
-    expect(await sendMoney(ctxFor("aaron"), { to: "somebody", amount: 5, reason: "x" })).toMatchObject({ error: expect.stringContaining('(to: "lisa")') });
-    expect(await sendMoney(ctxFor("aaron"), { to: "Mochi", amount: 0, reason: "x" })).toMatchObject({ error: expect.stringContaining("Invalid arguments") });
-    expect(await sendMoney(ctxFor("aaron"), { to: "Mochi", amount: 5.5, reason: "x" })).toMatchObject({ error: expect.stringContaining("Invalid arguments") });
+    expect(await pay("aaron", { to: "lisa", amount: 130, reason: "everything" })).toMatchObject({ error: "Your balance is $120, which is less than $130." });
+    expect(await pay("aaron", { to: "somebody", amount: 5, reason: "x" })).toMatchObject({ error: expect.stringContaining('(to: "lisa")') });
+    expect(await pay("aaron", { to: "Mochi", amount: 0, reason: "x" })).toMatchObject({ error: expect.stringContaining("Invalid arguments") });
+    expect(await pay("aaron", { to: "Mochi", amount: 5.5, reason: "x" })).toMatchObject({ error: expect.stringContaining("Invalid arguments") });
     await store.putPlan({ ...plan, state: "awaiting_humans" });
-    expect(await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 5, reason: "x" })).toMatchObject({ error: expect.stringContaining("only once the plan is confirmed") });
+    expect(await pay("aaron", { to: "lisa", amount: 5, reason: "x" })).toMatchObject({ error: expect.stringContaining("only once the plan is confirmed") });
     expect(await balances()).toEqual({ aaron: 120, lisa: 80 });
   });
 
   it("keeps private details out of the reason, like a note", async () => {
-    await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 8, reason: "for after my Interview, Northwind Labs" });
+    await pay("aaron", { to: "lisa", amount: 8, reason: "for after my Interview, Northwind Labs" });
     const [payment] = await store.listMessages();
     expect(payment.message.payment?.reason).toBe("Settling up");
     expect(JSON.stringify(payment.message)).not.toMatch(/Northwind/i);
-    expect(payment.stamp.removed).toContain("events");
+    // Proposals are readable by both phones, so the private title is gone from the proposal itself.
+    expect(JSON.stringify(toUiSnapshot(await store.snapshot(), { mode: "live" }).payments)).not.toMatch(/Northwind/i);
+    const privateLabel = await propose("aaron", { to: "lisa", amount: 3, reason: "tacos", breakdown: [{ label: "After my Interview, Northwind Labs", amount: 3, source: "estimate" }] });
+    expect(privateLabel).toMatchObject({ ok: true });
+    expect(JSON.stringify((await store.getRoom()).proposals)).not.toMatch(/Northwind/i);
   });
 
   it("reads the wallet and the cap for the model", async () => {
-    await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 7, reason: "tacos" });
+    await pay("aaron", { to: "lisa", amount: 7, reason: "tacos" });
     expect(await getWallet(ctxFor("aaron"))).toMatchObject({ ok: true, balance: 113, capPerPlan: 20, sentOnThisPlan: 7, capLeft: 13, sandbox: expect.stringContaining("sandbox not connected") });
   });
 });
@@ -228,9 +256,15 @@ describe("the agents decide: nothing about the amount is scripted", () => {
   it("lets the payer's model pick the amount and the reason, and the friend's model accept through the inbox", async () => {
     await run([
       { calls: [{ name: "get_wallet", args: {} }] },
-      { calls: [{ name: "send_money", args: { to: "lisa", amount: 9, reason: "your half of the shawarma" } }] },
-      { text: "Sent." },
+      { calls: [{ name: "send_money", args: { to: "lisa", amount: 9, reason: "your half of the shawarma", breakdown: estimateOf(9) } }] },
+      { text: "I prepared $9 for you to confirm." },
     ]);
+    // The model prepared it; nothing has moved and the friend's Muse has heard nothing.
+    expect(await balances()).toEqual({ aaron: 120, lisa: 80 });
+    expect(await store.listMessages()).toHaveLength(0);
+    const [proposal] = Object.values((await store.getRoom()).proposals!);
+    expect(proposal).toMatchObject({ amount: 9, status: "proposed", payer: "aaron", payee: "lisa" });
+    expect((await confirmAs("aaron", proposal.paymentId)).ok).toBe(true);
     expect(await balances()).toEqual({ aaron: 111, lisa: 80 });
 
     installFakeModel([{ calls: [{ name: "get_wallet", args: {} }] }, { calls: [{ name: "accept_payment", args: { paymentId: paymentsFrom(await store.listMessages())[0].paymentId } }] }]);
@@ -243,7 +277,7 @@ describe("the agents decide: nothing about the amount is scripted", () => {
     const [payment, receipt] = await store.listMessages();
     expect(payment.proof?.toolCalls).toEqual([
       { name: "get_wallet", args: "", result: "balance read" },
-      { name: "send_money", args: "$9 to lisa", result: "withdrew $9, payment sent" },
+      { name: "send_money", args: "$9 to lisa, 1 line", result: "prepared $9, waiting for your person" },
     ]);
     expect(receipt.proof?.toolCalls).toEqual([
       { name: "get_wallet", args: "", result: "balance read" },
@@ -254,7 +288,10 @@ describe("the agents decide: nothing about the amount is scripted", () => {
 
   it("covers a friend's ticket just as well: a different amount, a different reason, the same code", async () => {
     await store.putPolicy(policy("aaron", 60));
-    await run([{ calls: [{ name: "send_money", args: { to: "Mochi", amount: 45, reason: "covering your concert ticket" } }] }, { text: "Done." }], "I'll cover Mochi's ticket");
+    await run([{ calls: [{ name: "send_money", args: { to: "Mochi", amount: 45, reason: "covering your concert ticket", breakdown: [{ label: "Her ticket", amount: 45, source: "note" }] } }] }, { text: "Done." }], "I'll cover Mochi's ticket");
+    const [proposal] = Object.values((await store.getRoom()).proposals!);
+    expect(proposal).toMatchObject({ amount: 45, reason: "covering your concert ticket", breakdown: [{ label: "Her ticket", amount: 45, source: "note" }] });
+    expect((await confirmAs("aaron", proposal.paymentId)).ok).toBe(true);
     expect((await store.listMessages())[0].message.payment).toMatchObject({ amount: 45, reason: "covering your concert ticket" });
     expect(await balances()).toEqual({ aaron: 75, lisa: 80 });
   });
@@ -267,7 +304,7 @@ describe("the agents decide: nothing about the amount is scripted", () => {
     expect(input).toContain("up to $20 per plan");
     expect(input).toContain("split it down the middle");
     expect(input).not.toMatch(/send_money.*amount.*\d/);
-    expect((model.calls[0].tools as Array<{ name: string }>).map((tool) => tool.name)).toEqual(["get_wallet", "send_money"]);
+    expect((model.calls[0].tools as Array<{ name: string }>).map((tool) => tool.name)).toEqual(["get_wallet", "read_receipt", "send_money"]);
   });
 
   it("lets the model decide not to pay", async () => {
@@ -288,7 +325,8 @@ describe("the agents decide: nothing about the amount is scripted", () => {
   });
 
   it("accepts the payment in code, marked as a fallback, when the receiving model cannot answer", async () => {
-    await run([{ calls: [{ name: "send_money", args: { to: "lisa", amount: 6, reason: "drinks" } }] }, { text: "Done." }]);
+    await run([{ calls: [{ name: "send_money", args: { to: "lisa", amount: 6, reason: "drinks", breakdown: estimateOf(6) } }] }, { text: "Done." }]);
+    await confirmAs("aaron", Object.keys((await store.getRoom()).proposals!)[0]);
     installFakeModel(Array.from({ length: 30 }, () => ({ error: 404, code: "model_not_found" })));
     process.env.MODEL_RETRY_SCALE = "0";
     const turn = await runPaymentTurn({ store, agent: "lisa", contextId: await payContext(), wallNow, deliver: localDeliver(store, "lisa") });
@@ -300,8 +338,8 @@ describe("the agents decide: nothing about the amount is scripted", () => {
 });
 
 describe("both ends validate", () => {
-  const forged = async (patch: Record<string, unknown> = {}, paymentPatch: Record<string, unknown> = {}) => {
-    const wallet = (await walletOf(store, "aaron"))!;
+  const forged = async (patch: Record<string, unknown> = {}, paymentPatch: Record<string, unknown> = {}, options: { proposal?: boolean } = {}) => {
+    const wallet = options.proposal === false ? (await walletOf(store, "aaron"))! : await proposalRow("pay_forged");
     const message = AgentMessage.parse({
       id: "msg_forged",
       contextId: "pay_forged",
@@ -323,11 +361,24 @@ describe("both ends validate", () => {
   });
 
   it("rejects a payment over the sender's cap, from an account that is not the sender's wallet, or for a plan that is not confirmed", async () => {
-    expect(await forged({}, { amount: 25 })).toMatchObject({ ok: false, status: 422, error: expect.stringContaining("over your person's cap") });
+    await proposalRow("pay_forged", { amount: 25, breakdown: estimateOf(25) });
+    expect(await forged({}, { amount: 25 }, { proposal: false })).toMatchObject({ ok: false, status: 422, error: expect.stringContaining("over your person's cap") });
+    await proposalRow("pay_forged");
     expect(await forged({}, { payerAccountId: "acct_someone_else" })).toMatchObject({ ok: false, status: 422, error: expect.stringContaining("does not come from the sender's own wallet") });
     expect(await forged({}, { planId: "plan_unknown" })).toMatchObject({ ok: false, status: 422, error: expect.stringContaining("plan that does not exist") });
     await store.putPlan({ ...plan, state: "negotiating" });
     expect(await forged()).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("confirmed") });
+    expect(await store.listMessages()).toHaveLength(0);
+  });
+
+  it("rejects a payment with no confirmed proposal behind it: nothing moves without the person's confirm", async () => {
+    expect(await forged({}, {}, { proposal: false })).toMatchObject({ ok: false, status: 422, error: expect.stringContaining("no confirmed proposal") });
+    await proposalRow("pay_forged", { status: "proposed" });
+    expect(await forged({}, {}, { proposal: false })).toMatchObject({ ok: false, status: 422, error: expect.stringContaining("no confirmed proposal") });
+    await proposalRow("pay_forged", { status: "declined" });
+    expect(await forged({}, {}, { proposal: false })).toMatchObject({ ok: false, status: 422, error: expect.stringContaining("no confirmed proposal") });
+    await proposalRow("pay_forged", { amount: 6, breakdown: estimateOf(6) });
+    expect(await forged({}, {}, { proposal: false })).toMatchObject({ ok: false, status: 422, error: expect.stringContaining("no confirmed proposal") });
     expect(await store.listMessages()).toHaveLength(0);
   });
 
@@ -337,7 +388,7 @@ describe("both ends validate", () => {
   });
 
   it("rejects an answer from the wrong person or for an amount that was not sent", async () => {
-    const sent = (await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 10, reason: "lunch" })) as { paymentId: string };
+    const sent = (await pay("aaron", { to: "lisa", amount: 10, reason: "lunch" })) as { paymentId: string };
     const contextId = await payContext();
     const wallet = (await walletOf(store, "lisa"))!;
     const payerAccountId = (await walletOf(store, "aaron"))!.accountId;
@@ -361,7 +412,7 @@ describe("both ends validate", () => {
   });
 
   it("goes through the real inbox route with the sender's bearer token", async () => {
-    const wallet = (await walletOf(store, "aaron"))!;
+    const wallet = await proposalRow("pay_http", { amount: 4, breakdown: estimateOf(4), reason: "boba" });
     (globalThis as { __museStore?: unknown }).__museStore = Promise.resolve(store);
     const { POST } = await import("@/app/api/agents/[id]/inbox/route");
     const message = AgentMessage.parse({
@@ -389,8 +440,8 @@ describe("when the ledger fails, the plan survives", () => {
     await store.putRoom({ ...(await store.getRoom()), wallets: { ...(await store.getRoom()).wallets, aaron: { ...wallet, source: "nessie" } } });
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ message: "boom" }), { status: 500 })));
 
-    const result = await sendMoney(ctxFor("aaron"), { to: "lisa", amount: 5, reason: "snack" });
-    expect(result).toMatchObject({ error: expect.stringMatching(/^Payment failed, sandbox error: sandbox error 500: boom\. Nothing was sent\.$/) });
+    const result = await pay("aaron", { to: "lisa", amount: 5, reason: "snack" });
+    expect(result).toMatchObject({ error: expect.stringMatching(/^Payment failed, sandbox error: sandbox error 500: boom\. Nothing moved\.$/) });
     expect(JSON.stringify(result)).not.toContain("test-key-never-printed");
     expect(await store.listMessages()).toHaveLength(0);
     const rows = (await store.listEvents()).filter((event) => event.kind === "payment_failed");
@@ -398,13 +449,16 @@ describe("when the ledger fails, the plan survives", () => {
     expect(rows[0].text).toContain("Payment failed, sandbox error");
     expect(rows[0].text).not.toContain("test-key-never-printed");
     expect(await store.getPlan(plan.id)).toMatchObject({ state: "confirmed" });
+    // The proposal stays on the card as failed, retryable, and says why.
+    const [proposal] = Object.values((await store.getRoom()).proposals!);
+    expect(proposal).toMatchObject({ status: "failed", error: expect.stringContaining("Nothing moved") });
   });
 
   it("gives the money back when the message to the friend cannot be delivered", async () => {
-    const result = await sendMoney(ctxFor("aaron", { deliver: async () => ({ ok: false, status: 503, error: "inbox down" }) }), { to: "lisa", amount: 10, reason: "dinner" });
-    expect(result).toMatchObject({ error: expect.stringContaining("The money was returned to your wallet") });
+    const result = await pay("aaron", { to: "lisa", amount: 10, reason: "dinner" }, async () => ({ ok: false, status: 503, error: "inbox down" }));
+    expect(result).toMatchObject({ error: expect.stringContaining("Your $10 is back") });
     expect(await balances()).toEqual({ aaron: 120, lisa: 80 });
-    expect((await store.listEvents()).some((event) => event.kind === "payment_failed" && /Refunded/.test(event.text))).toBe(true);
+    expect((await store.listEvents()).some((event) => event.kind === "payment_failed" && /Your \$10 is back/.test(event.text))).toBe(true);
   });
 
   it("does not fail a Reset when the sandbox is down", async () => {
@@ -572,7 +626,10 @@ describe("NessieWithLedger", () => {
     calls.length = 0;
     const ctx = (agent: AgentId, extra: Partial<PaymentContext> = {}): PaymentContext => ({ store: fresh, agent, planId, wallNow, deliver: localDeliver(fresh, agent), ...extra });
 
-    const sent = (await sendMoney(ctx("aaron"), { to: "lisa", amount: 12, reason: "my half" })) as { paymentId: string };
+    const sent = (await sendMoney(ctx("aaron"), { to: "lisa", amount: 12, reason: "my half", breakdown: estimateOf(12) })) as { paymentId: string };
+    expect({ aaron: (await walletOf(fresh, "aaron"))!.balance, lisa: (await walletOf(fresh, "lisa"))!.balance }).toEqual({ aaron: 120, lisa: 80 });
+    expect(calls).toHaveLength(0);
+    expect((await confirmProposal({ store: fresh, wallNow, deliver: localDeliver(fresh, "aaron") }, sent.paymentId, "aaron")).ok).toBe(true);
     const contextId = (await fresh.listThreads()).find((thread) => thread.contextId.startsWith("pay_"))!.contextId;
     expect(await acceptPayment(ctx("lisa", { contextId, planId: undefined }), { paymentId: sent.paymentId })).toMatchObject({ ok: true, balanceBefore: 80, balanceAfter: 92 });
     expect({ aaron: (await walletOf(fresh, "aaron"))!.balance, lisa: (await walletOf(fresh, "lisa"))!.balance }).toEqual({ aaron: 108, lisa: 92 });
