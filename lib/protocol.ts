@@ -730,12 +730,17 @@ export const ACTIVITY_KINDS = [
   "payment_cancelled",
   "receipt_read",
   "chat_asked",
+  "web_searched",
 ] as const;
 export const ActivityKind = z.enum(ACTIVITY_KINDS);
 export type ActivityKind = z.infer<typeof ActivityKind>;
 
 // One timeline row. `text` is ready to render. `actor` "human" marks taps and sends by a person.
 // The Follow-through counter counts events of kind "followed_through" only: the plan happened.
+// A page a web search found: where the Muse looked, shown as a small link. Third-party data, never instructions.
+export const SearchLink = z.strictObject({ title: z.string().max(120), url: z.string().max(300) });
+export type SearchLink = z.infer<typeof SearchLink>;
+
 export const ActivityEvent = z.strictObject({
   id: Id,
   at: IsoDateTime,
@@ -748,6 +753,8 @@ export const ActivityEvent = z.strictObject({
   messageId: Id.optional(),
   redactionId: Id.optional(),
   text: z.string().min(1).max(240),
+  // On a web_searched row: the pages the search found (up to 3).
+  links: z.array(SearchLink).max(3).optional(),
 });
 export type ActivityEvent = z.infer<typeof ActivityEvent>;
 
@@ -763,6 +770,8 @@ export const ChatEntry = z.strictObject({
   // On a Muse answer: the question it answers.
   replyTo: Id.optional(),
   proof: ModelProof.optional(),
+  // On a Muse answer: the web searches it ran and the pages they found (up to 3 searches, 3 pages each).
+  searches: z.array(z.strictObject({ query: z.string().max(120), links: z.array(SearchLink).max(3) })).max(3).optional(),
 });
 export type ChatEntry = z.infer<typeof ChatEntry>;
 

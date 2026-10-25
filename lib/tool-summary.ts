@@ -102,6 +102,11 @@ function resultLine(name: string, output: unknown, ok: boolean): string {
   }
 }
 
+// A hosted web search, for the same proof: the query the model chose and how many pages came back, never the pages.
+export function summarizeSearch(search: { query: string; results: unknown[] }): ToolCallSummary {
+  return { name: "web_search", args: oneLine(search.query || "(no query)"), result: oneLine(plural(search.results.length, "result")) };
+}
+
 export function summarizeToolCall(call: { name: string; args: unknown; output: unknown; ok: boolean }): ToolCallSummary {
   return { name: oneLine(call.name, NAME_MAX), args: oneLine(argsLine(call.name, call.args)), result: oneLine(resultLine(call.name, call.output, call.ok)) };
 }

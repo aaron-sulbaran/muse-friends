@@ -2,7 +2,11 @@ import OpenAI from "openai";
 import { setModelClient } from "@/lib/model";
 
 // A scripted stand-in for the Meta Model API: each create() call takes the next step.
+// A hosted web search the "API" ran before answering: a preface message, the search item with its hits, then the answer.
+export type FakeSearch = { query: string; results: Array<{ title: string; url: string }>; preface?: string };
+
 export type Step =
+  | { search: FakeSearch; text: string }
   | { calls: Array<{ name: string; args: unknown }>; text?: string; reasoning?: boolean }
   | { text: string }
   | { error: number; code?: string; requestId?: string };
@@ -27,6 +31,21 @@ export function installFakeModel(steps: Step[]) {
     responseCounter += 1;
     const id = `resp_${responseCounter}`;
     const output: unknown[] = [];
+    if ("search" in step) {
+      const preface = step.search.preface ?? "I'll look that up.";
+      output.push({ type: "reasoning", id: `rs_${responseCounter}`, summary: [], encrypted_content: "enc" });
+      output.push({ type: "message", role: "assistant", content: [{ type: "output_text", text: preface }] });
+      output.push({
+        type: "web_search_call",
+        id: `ws_${responseCounter}`,
+        status: "completed",
+        action: { type: "search", query: step.search.query },
+        results: step.search.results.map((hit) => ({ type: "text_result", title: hit.title, url: hit.url, snippet: "" })),
+      });
+      output.push({ type: "message", role: "assistant", content: [{ type: "output_text", text: step.text }] });
+      // The SDK's output_text glues every message together; the loop must not use it for the answer.
+      return { id, status: "completed", output, output_text: `${preface}${step.text}`, usage: { input_tokens: 10, output_tokens: 5, input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 2 } } };
+    }
     if ("calls" in step && step.reasoning !== false) {
       output.push({ type: "reasoning", id: `rs_${responseCounter}`, summary: [], encrypted_content: "enc" });
     }
