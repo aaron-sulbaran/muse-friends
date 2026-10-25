@@ -123,6 +123,14 @@ body {
   outline-offset: 2px;
 }
 
+/* Muse's check mark draws in: the ring (160ms), then the tick (240ms). Both paths are normalized with pathLength="1". */
+@keyframes check-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+.muse-check-ring { stroke-dasharray: 1; animation: check-draw 160ms var(--ease-out-soft) both; }
+.muse-check-tick { stroke-dasharray: 1; animation: check-draw 240ms var(--ease-out-soft) 160ms both; }
+
 /* Under reduced motion every entrance becomes a short fade and nothing loops. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -131,6 +139,8 @@ body {
     transition-duration: 120ms !important;
     scroll-behavior: auto !important;
   }
+  /* The check is shown drawn, not drawing. */
+  .muse-check-ring, .muse-check-tick { animation: none !important; stroke-dashoffset: 0; }
   @keyframes row-in { from { opacity: 0; } to { opacity: 1; } }
   @keyframes card-in { from { opacity: 0; } to { opacity: 1; } }
   @keyframes pop-in { from { opacity: 0; } to { opacity: 1; } }

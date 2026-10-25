@@ -55,7 +55,8 @@ export const copy = {
   acceptA: "Reach out",
   declineB: "Not now",
   acceptB: "Sounds good",
-  youSaidYes: "✓ You said yes",
+  // The check in front of these two lines is drawn by CheckMark (the chat marks them with check: true), not typed.
+  youSaidYes: "You said yes",
   youPassed: "You said not now",
   friendPassed: (friend: string) => `${capital(friend)} said not now.`,
   friendIsIn: (muse: string) => `${muse} is in`,
@@ -66,13 +67,14 @@ export const copy = {
   draftCopy: "Copy",
   draftCopied: "Copied",
   draftOpenWhatsApp: "Open WhatsApp",
-  draftHandedOff: "Continue this conversation in WhatsApp",
-  draftOpenAgain: "Open again",
+  // The longer line wraps in a phone-width pill, so the button says the short one and reads the long one aloud.
+  draftHandedOff: "Continue in WhatsApp",
+  draftHandedOffLabel: "Continue this conversation in WhatsApp",
   holdBubble: (when: string) => `I added a hold for ${when}.`,
   holdTitle: (activity: string, friend: string) => `${activity} with ${friend}`,
   holdAction: "Add to calendar",
   holdGoogle: "Add to Google Calendar",
-  holdAdded: "Added to your calendar",
+  holdOnCalendar: "On your calendar",
   holdChangePlans: "Change plans",
   /** A person's own words to the friend; the Muse never sends it. */
   changePlansDraft: "Hey, can we change our plans?",
@@ -83,7 +85,7 @@ export const copy = {
   outcomeDidnt: "Didn't happen",
   outcomeWentReply: "Love that. That's one plan that made it out of the chat.",
   outcomeDidntReply: (activity: string) => `No worries, plans slip. I'll keep ${activity} in mind for another time.`,
-  closingLine: "✓ Done. It's in Goals.",
+  closingLine: "Done. It's in Goals.",
   nudgeSent: (friend: string) => `Can you check with ${friend} about the shawarma reel?`,
   /** `asker` is "Alex's Muse", or the Muse's own name when the person has not given theirs. */
   friendMuseAsking: (asker: string) => `${asker} is asking about this reel.`,
@@ -240,6 +242,8 @@ export const copy = {
   replayStart: "Watch a recorded run",
   simulatedClock: "Simulated clock",
   simulatedFriendBanner: "Simulated friend, fictional, played by a model",
+  // With the model named: "Muse Spark 1.3", or the fallback that actually answered.
+  simulatedFriendBannerModel: (model: string) => `Simulated friend, fictional, played by ${model}`,
 
   // The opening moment after onboarding (D26): the reel arrives, Sprout reads it, and the offer lands.
   openingSenderLine: (friend: string) => `${capital(friend)} sent you a reel`,

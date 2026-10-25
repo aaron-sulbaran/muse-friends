@@ -1,6 +1,6 @@
 import { copy, onboardingCopy } from "./copy";
 import { googleCalendarUrl } from "./gcal";
-import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, listOf, namesFor } from "./format";
+import { daySeparatorFor, formatSpokenHour, formatWindow, formatWindowSpoken, listOf, namesFor } from "./format";
 import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib/seed/past-signals";
 import type { OnboardingState } from "./onboarding";
 import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
@@ -20,7 +20,7 @@ export type ChatItem =
   | { kind: "bubble"; id: string; from: "muse" | "user"; text: string }
   | { kind: "thread-line"; id: string; line: ThreadLine }
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
-  | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
+  | { kind: "reel-card"; id: string; poster: string; posterImage?: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; names: string[]; count: number }
   | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string }
   // A trip's group thread (lib/ui/group.ts): lines from people and their Muses, and the cards a person decides on.
@@ -33,9 +33,9 @@ export type ChatItem =
   | { kind: "payment-card"; id: string; payment: UiPayment; side: "payer" | "payee"; friendName: string; friendMuse: string }
   | { kind: "settle-card"; id: string; planId: string; offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>; friendName: string; friendMuse: string; museName: string }
   | { kind: "outcome-replies"; id: string; planId: string }
-  | { kind: "collapsed"; id: string; text: string }
+  | { kind: "collapsed"; id: string; text: string; check?: boolean }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
-  | { kind: "hold-row"; id: string; title: string; planId: string; googleUrl: string | null }
+  | { kind: "hold-row"; id: string; title: string; when: string; planId: string; googleUrl: string | null }
   | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend" | "plan-trip"; friendName: string }
   | { kind: "contact-entry"; id: string }
   | { kind: "onboarding-friends"; id: string }
@@ -195,7 +195,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
         items.push({ kind: "bubble", id: "proposal", from: "muse", text: proposalText(plan.window) });
       }
       if (myDecision === "accepted") {
-        items.push({ kind: "collapsed", id: "decision-collapsed", text: copy.youSaidYes });
+        items.push({ kind: "collapsed", id: "decision-collapsed", text: copy.youSaidYes, check: true });
         status = {
           glyph: "waiting-friend",
           text: copy.statusWaitingFriend(groupView ? listOf((pendingOthers.length > 0 ? pendingOthers : groupView.others).map((other) => other.name)) : theirs.human),
@@ -217,7 +217,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
       if (plan.window) {
         items.push({ kind: "bubble", id: "proposal", from: "muse", text: proposalText(plan.window) });
       }
-      items.push({ kind: "collapsed", id: "decision-collapsed", text: copy.youSaidYes });
+      items.push({ kind: "collapsed", id: "decision-collapsed", text: copy.youSaidYes, check: true });
       if (agreedCount > 0) items.push(agreedLine);
       if (role === initiatorRole && plan.draft) {
         items.push({ kind: "bubble", id: "draft-intro", from: "muse", text: groupView ? copy.groupDraftIntro(withWhom) : copy.draftIntroA(theirs.human) });
@@ -236,6 +236,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOpt
           kind: "hold-row",
           id: "hold-row",
           title: copy.holdTitle(plan.activityTitle, withWhom),
+          when: formatWindow(plan.window),
           planId: plan.id,
           googleUrl: googleCalendarUrl({
             title: copy.holdTitle(plan.activityTitle, withWhom),
@@ -326,7 +327,7 @@ function pushOutcome(items: ChatItem[], ending: ChatItem[], plan: UiPlan, role: 
   // The next idea comes from what the two already shared, never a repeat of the same place.
   const next = (outcome.nextIdeaId ? pastSignal(outcome.nextIdeaId) : undefined) ?? mostRecent(OTHER_SIGNALS);
   if (next) ending.push({ kind: "bubble", id: "next-idea", from: "muse", text: role === "a" ? next.nextIdea(friend) : next.nextIdeaMine(friend) });
-  ending.push({ kind: "collapsed", id: "closing", text: copy.closingLine });
+  ending.push({ kind: "collapsed", id: "closing", text: copy.closingLine, check: true });
 }
 
 function mostRecent(signals: PastSignal[]): PastSignal | undefined {
@@ -343,6 +344,7 @@ function demoReel(snapshot: UiSnapshot): PastSignal {
     caption: reel.caption,
     title: copy.reelLivePlace,
     image: reel.thumbnailUrl ?? undefined,
+    posterImage: reel.profilePictureUrl ?? undefined,
     permalink: reel.permalink,
     live: true,
   };
@@ -358,6 +360,7 @@ function pushPastSignal(items: ChatItem[], signal: PastSignal, role: Role, frien
       kind: "reel-card",
       id: `${signal.id}-card`,
       poster: signal.poster,
+      ...(signal.posterImage ? { posterImage: signal.posterImage } : {}),
       caption: signal.caption,
       place: signal.title,
       image: signal.image,

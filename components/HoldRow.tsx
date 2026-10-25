@@ -11,6 +11,8 @@ type Props = {
   /** The phone's role, so the calendar entry names the other person. */
   role: "a" | "b";
   title: string;
+  /** When it is, as the chat says it ("Tue 6 to 8 PM"); the confirmation row names the plan with it. */
+  when?: string;
   /** Prefilled Google Calendar event, or null when there is nothing to prefill. */
   googleUrl: string | null;
   /** A recording is on screen: show the row, but there is no real hold to download. */
@@ -22,17 +24,55 @@ type Props = {
 const pill = "rounded-full bg-group px-3.5 py-2 text-[13px] font-semibold leading-[18px] transition-colors";
 
 /**
- * The calendar hold as a Muse card: the plan's title and two ways to keep it. The .ics works with any
- * calendar; the Google link opens a prefilled event with no sign-in step. Once one is tapped the row says
- * what happened and keeps that link for a second tap, with Change plans beside it.
+ * The calendar hold as a Muse card: the plan's title and two ways to keep it. The .ics works with any calendar; the
+ * Google link opens a prefilled event with no sign-in step. Once one is tapped the card has been acted on, so it
+ * collapses to a confirmation row (kb/design/marks, "Done cards"): Muse's blue check, "On your calendar", the plan
+ * on the line under it, and Change plans at the right. The check and the title are the same link, so a second tap
+ * opens the event again.
  */
-export function HoldRow({ planId, role, title, googleUrl, disabled = false, initiallyAdded }: Props) {
+export function HoldRow({ planId, role, title, googleUrl, when, disabled = false, initiallyAdded }: Props) {
   const [added, setAdded] = useState<CalendarRoute | null>(initiallyAdded ?? null);
+  const icsHref = `/api/plans/${planId}/hold.ics?role=${role}`;
+  const taken = added === "google" && googleUrl ? "google" : added === "ics" ? "ics" : null;
   // The row swaps its buttons once one is tapped. Swapping inside the click detaches the tapped link before the
   // browser follows it (and "Change plans", the WhatsApp link, can land under the pointer), so wait a tick.
   const markAdded = (route: CalendarRoute) => setTimeout(() => setAdded(route), 0);
-  const icsHref = `/api/plans/${planId}/hold.ics?role=${role}`;
-  const taken = added === "google" && googleUrl ? "google" : added === "ics" ? "ics" : null;
+
+  if (taken && !disabled) {
+    const detail = when ? `${title}, ${when}` : title;
+    const content = (
+      <>
+        {/* The check draws in after the row has settled: the ring, then the tick. */}
+        <CheckMark className="size-5 [&_circle]:[animation-delay:240ms] [&_path]:[animation-delay:400ms]" />
+        <span className="min-w-0">
+          <span className="block text-[15px] font-semibold leading-5">{copy.holdOnCalendar}</span>
+          <span className="line-clamp-2 block text-[13px] leading-[18px] text-muted">{detail}</span>
+        </span>
+      </>
+    );
+    const rowLink = "flex min-w-0 flex-1 items-center gap-2.5";
+    return (
+      <section aria-label={detail} className="flex min-h-14 max-w-[92%] animate-card-in items-center gap-2.5 rounded-[18px] bg-surface py-3 pl-[14px] pr-3 shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+        {taken === "google" && googleUrl ? (
+          <a href={googleUrl} target="_blank" rel="noopener noreferrer" className={rowLink}>
+            {content}
+          </a>
+        ) : (
+          <a href={icsHref} download="hold.ics" className={rowLink}>
+            {content}
+          </a>
+        )}
+        <a
+          href={whatsAppUrl(copy.changePlansDraft)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-7 shrink-0 items-center rounded-full bg-group px-3 text-[13px] font-semibold transition-colors hover:bg-bubble-muse"
+        >
+          {copy.holdChangePlans}
+        </a>
+      </section>
+    );
+  }
 
   return (
     <section aria-label={title} className="max-w-[92%] animate-card-in rounded-card bg-surface p-3.5 shadow-float">
@@ -47,28 +87,6 @@ export function HoldRow({ planId, role, title, googleUrl, disabled = false, init
           <>
             <span className={`${pill} opacity-50`}>{copy.holdAction}</span>
             {googleUrl ? <span className={`${pill} opacity-50`}>{copy.holdGoogle}</span> : null}
-          </>
-        ) : taken ? (
-          <>
-            {taken === "google" && googleUrl ? (
-              <a href={googleUrl} target="_blank" rel="noopener noreferrer" className={`${pill} inline-flex items-center gap-1.5 hover:bg-bubble-muse`}>
-                <CheckMark />
-                {copy.holdAdded}
-              </a>
-            ) : (
-              <a href={icsHref} download="hold.ics" className={`${pill} inline-flex items-center gap-1.5 hover:bg-bubble-muse`}>
-                <CheckMark />
-                {copy.holdAdded}
-              </a>
-            )}
-            <a
-              href={whatsAppUrl(copy.changePlansDraft)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-full border border-bezel-line px-3.5 py-2 text-[13px] font-semibold leading-[18px] transition-colors hover:bg-group"
-            >
-              {copy.holdChangePlans}
-            </a>
           </>
         ) : (
           <>

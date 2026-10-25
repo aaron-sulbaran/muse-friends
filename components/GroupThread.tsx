@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, CircleDashed } from "lucide-react";
+import { CircleDashed } from "lucide-react";
 import { useState } from "react";
 import type { ChatItem } from "@/lib/ui/chat";
 import { postTripJoin } from "@/lib/ui/actions";
 import { answerWord, money, personOf, servedBy, tripDates, type GroupLine } from "@/lib/ui/group";
 import type { AvatarMood, MemberId, UiTrip } from "@/lib/ui/types";
 import { capital } from "@/lib/ui/tokens";
+import { CheckMark } from "./CheckMark";
 import { MuseAvatar } from "./MuseAvatar";
 import { PersonDisc } from "./PersonDisc";
 import { QuestionCard } from "./QuestionCard";
@@ -210,7 +211,7 @@ function PotCard({ item, readOnly, onChanged }: { item: Extract<ChatItem, { kind
                 </button>
               ) : deposit.status === "confirmed" ? (
                 <span className="flex shrink-0 items-center gap-1 text-[15px] font-semibold text-tracking">
-                  <Check className="size-4" strokeWidth={2.25} aria-hidden="true" />
+                  <CheckMark className="size-4" />
                   {money(deposit.amount)} in
                 </span>
               ) : (

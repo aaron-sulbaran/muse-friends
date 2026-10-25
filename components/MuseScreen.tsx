@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
 import { discInitials, formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
+import { modelLabel } from "@/lib/ui/model-name";
 import { postChat, postDecision, postHandoff, postPrivacy, postReplan, postSignal, postSimulatedFriendSwitch, type Result } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import { runInProgress } from "@/lib/ui/entry";
@@ -24,6 +25,7 @@ import { FriendPickerSheet } from "./FriendPickerSheet";
 import { FriendsOptInCard } from "./FriendsOptInCard";
 import { OptOutCard, TurnOnFriendsPill } from "./OptOutCard";
 import { ShareSheet } from "./ShareSheet";
+import { CheckMark } from "./CheckMark";
 import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
@@ -232,7 +234,8 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         return null; // drawn as a thread bubble in the list below, where its neighbors are known
       case "collapsed":
         return (
-          <p className="animate-fade-in text-[13px] leading-[18px] text-muted" style={{ paddingLeft: 4 }}>
+          <p className={`animate-fade-in text-[13px] leading-[18px] text-muted ${item.check ? "flex items-center gap-1.5" : ""}`} style={{ paddingLeft: 4 }}>
+            {item.check ? <CheckMark className="size-4" /> : null}
             {item.text}
           </p>
         );
@@ -266,7 +269,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} onPaused={onPaused} />;
       case "reel-card": {
-        const card = <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={item.live ? copy.reelLiveLabel : copy.reelLabel} />;
+        const card = <ReelCard image={item.image} poster={item.poster} posterImage={item.posterImage} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={item.live ? copy.reelLiveLabel : copy.reelLabel} />;
         if (item.align !== "left") return card;
         // The friend's reel is her message: her chip above it, her picture beside it, in the bubbles' column.
         return (
@@ -289,7 +292,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "outcome-replies":
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
-        return <HoldRow planId={item.planId} role={role} title={item.title} googleUrl={item.googleUrl} disabled={readOnly} />;
+        return <HoldRow planId={item.planId} role={role} title={item.title} when={item.when} googleUrl={item.googleUrl} disabled={readOnly} />;
       case "payment-card":
         return <PaymentCard payment={item.payment} side={item.side} friendName={item.friendName} friendMuse={item.friendMuse} onOpen={onOpenPayment} />;
       case "settle-card":
@@ -320,7 +323,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       {simulated && role === "b" ? (
         <p className="flex shrink-0 items-center justify-center gap-2 bg-group px-4 py-2 text-center text-[13px] font-semibold">
           <SimulatedFriendDisc size={20} />
-          {copy.simulatedFriendBanner}
+          {snapshot.simulatedFriendModel ? copy.simulatedFriendBannerModel(modelLabel(snapshot.simulatedFriendModel)) : copy.simulatedFriendBanner}
         </p>
       ) : null}
       {tab === "chat" ? (

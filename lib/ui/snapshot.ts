@@ -1,6 +1,7 @@
 import type { RunBudget } from "@/lib/agent/caps";
 import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
+import { modelId } from "@/lib/model";
 import { CATEGORIES, isCategoryAllowed, isPaymentType, MEMBER_IDS, type AgentId, type MemberId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { CONTACTS, getContact, isMutual } from "@/lib/seed/contacts";
@@ -36,6 +37,15 @@ const KNOWN_AGENTS: ReadonlySet<string> = new Set(MEMBER_IDS);
 
 function isKnownAgent(id: string | undefined): boolean {
   return id !== undefined && KNOWN_AGENTS.has(id);
+}
+
+/**
+ * The model that plays the simulated friend: the one on the proof of her latest model-made message (so a fallback turn
+ * honestly names the fallback), else the configured model before she has said anything.
+ */
+function modelPlayingHer(messages: UiMessage[]): string {
+  const latest = messages.filter((message) => message.from === "lisa" && message.proof).sort((first, second) => first.at.localeCompare(second.at)).at(-1);
+  return latest?.proof?.model ?? modelId();
 }
 
 /** The snapshot without any message, thread, redaction or timeline event that names an agent this build does not know. */
@@ -415,7 +425,7 @@ function toFollowThrough(events: StateSnapshot["events"], rename: (text: string)
 function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null {
   const media = state.signals.findLast((signal) => signal.provenance.source === "instagram_graph_api")?.media ?? before;
   if (!media) return null;
-  return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null };
+  return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null, profilePictureUrl: media.profile_picture_url ?? null };
 }
 
 /**
@@ -452,6 +462,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     mode: overlay.mode,
     ...(overlay.recording ? { recording: overlay.recording } : {}),
     simulatedFriend: state.room.simulatedFriend,
+    ...(state.room.simulatedFriend ? { simulatedFriendModel: modelPlayingHer(messages) } : {}),
     standIn,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa"), kai: displayName("kai") },
     messages,
