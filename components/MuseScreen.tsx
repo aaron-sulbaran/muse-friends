@@ -190,10 +190,10 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={`Open ${view.museName} settings`}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
+                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} mood={view.mood} />
               </button>
             ) : (
-              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
+              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} mood={view.mood} />
             )}
             <StatusPill name={view.museName} status={view.status} />
             {role === "b" && !readOnly ? (

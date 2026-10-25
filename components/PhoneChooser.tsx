@@ -28,7 +28,7 @@ export function PhoneChooser({ sides }: { sides: Record<Role, string> }) {
             href={simulatedFriendHref}
             className="mt-3 flex min-h-[72px] items-center gap-4 rounded-card bg-accent p-4 text-white shadow-float transition-[filter] hover:brightness-110 active:brightness-90"
           >
-            <MuseAvatar agent="lisa" simulated name="Michelle" size={44} />
+            <MuseAvatar agent="lisa" simulated name="Michelle" size={48} />
             <span className="min-w-0 flex-1">
               <span className="block text-[17px] font-semibold leading-[22px]">{copy.simulatedAction}</span>
               <span className="block text-[13px] leading-[18px] text-white/85">{copy.chooserAloneDetail}</span>
@@ -47,7 +47,7 @@ function SideLink({ href, agent, name, detail }: { href: string; agent: "aaron" 
       href={href}
       className="flex min-h-[72px] items-center gap-4 rounded-card bg-surface p-4 shadow-float transition-colors hover:bg-group active:bg-group"
     >
-      <MuseAvatar agent={agent} name={name} size={44} />
+      <MuseAvatar agent={agent} name={name} size={48} />
       <span className="min-w-0 flex-1">
         <span className="block text-[17px] font-semibold leading-[22px]">{copy.chooserSide(name)}</span>
         <span className="block text-[13px] leading-[18px] text-muted">{detail}</span>
