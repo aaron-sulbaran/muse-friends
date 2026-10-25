@@ -1,5 +1,5 @@
 import { getRoom, withRoom } from "./room";
-import type { Category, Role, ShareTier } from "./types";
+import type { Category, MemberId, Role, ShareTier } from "./types";
 
 export type Result = { ok: true } | { ok: false; message: string; paused?: boolean };
 
@@ -39,6 +39,16 @@ export function postHandoff(planId: string, role: Role, via: "whatsapp" | "copy"
 /** "The friend sent a reel": starts a real run. The agents take it from here and the Activity timeline fills as they talk. */
 export function postSignal() {
   return post("/api/signals", { scenario: "shawarma" });
+}
+
+/** "The friend sent a reel" for a plan of three: Sprout's Muse gets Mochi and Pebble together. Same caps and 429 as a pair. */
+export function postGroupSignal() {
+  return post("/api/signals", { scenario: "group" });
+}
+
+/** Pebble has no phone, so the coordinator's phone answers for them. Any member can be named; the server refuses a second answer. */
+export function postMemberDecision(planId: string, member: MemberId, choice: "accept" | "decline") {
+  return post(`/api/plans/${planId}/member-decision`, { member, choice });
 }
 
 /**

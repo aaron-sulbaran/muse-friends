@@ -76,7 +76,7 @@ describe("what the header avatar is doing", () => {
   });
 
   it("thinks while its own model call is in flight, and only that Muse does", () => {
-    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const, agents: ["aaron" as const] } };
     expect(viewForRole(inFlight, "a").mood).toBe("thinking");
     expect(viewForRole(inFlight, "b").mood).toBe("talking");
   });
@@ -246,7 +246,7 @@ describe("what the store can say that the recorded states do not", () => {
 
 describe("the status glyph follows what the Muse is doing", () => {
   it("thinks while its own call runs during a negotiation, and talks while it waits", () => {
-    const thinkingA = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    const thinkingA = { ...at("negotiating"), inFlight: { agent: "aaron" as const, agents: ["aaron" as const] } };
     expect(viewForRole(thinkingA, "a").status).toEqual({ glyph: "thinking", text: "thinking it over" });
     expect(viewForRole(thinkingA, "b").status).toEqual({ glyph: "talking", text: "talking to Sprout" });
     expect(viewForRole(thinkingA, "a").mood).toBe("thinking");
