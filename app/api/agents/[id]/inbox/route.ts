@@ -27,16 +27,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const result = await receiveMessage(store, { recipient: recipient.data, sender, envelope });
   if (!result.ok) return Response.json({ error: result.error }, { status: result.status });
 
-  if (result.runTurn) {
-    const origin = new URL(request.url).origin;
-    after(async () => {
-      try {
+  // Answer 202 now. The timeline rows and ledger finish after the response, then the receiving agent's turn.
+  const origin = new URL(request.url).origin;
+  after(async () => {
+    try {
+      await result.finish();
+      if (result.runTurn) {
         await runInboxTurn({ store, agent: recipient.data, contextId: result.body.contextId, deliver: httpDeliver(origin, recipient.data) });
-      } catch (error) {
-        console.error("inbox turn failed", error);
       }
-    });
-  }
+    } catch (error) {
+      console.error("inbox follow-up failed", error);
+    }
+  });
 
   // A2A-shaped acknowledgement: the task id is the thread, the state is the task state.
   return Response.json({ id: result.body.contextId, contextId: result.body.contextId, seq: result.body.seq, status: { state: result.body.state } }, { status: 202 });

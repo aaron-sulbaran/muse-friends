@@ -9,6 +9,7 @@ import { agentToken, authenticateSender, receiveMessage } from "@/lib/agent/wire
 import { injectSignal } from "@/lib/agent/runtime";
 import { CALENDAR_RANGE, PERSONAS, rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { JsonStore } from "@/lib/store/json";
+import { installFakeModel, removeFakeModel } from "./helpers/fakeModel";
 
 // `after` only works inside a request; tests collect the callbacks instead of running them.
 const scheduled: Array<() => unknown> = [];
@@ -255,8 +256,13 @@ describe("routes", () => {
     expect((await post("aaron", accept("m2", 2, "lisa", "working"), bearer("lisa"))).status).toBe(202);
     scheduled.length = 0;
     expect((await post("lisa", accept("m3", 3, "aaron", "input-required"), bearer("aaron"))).status).toBe(202);
-    expect(scheduled).toHaveLength(0);
+    // The deferred timeline writes still run after the response, but no further agent turn starts.
+    const model = installFakeModel([]);
+    for (const callback of scheduled.splice(0)) await callback();
+    expect(model.calls).toHaveLength(0);
+    removeFakeModel();
     expect((await store.getPlanByContext(contextId))?.state).toBe("awaiting_humans");
+    expect((await store.listEvents()).filter((event) => event.kind === "card_created")).toHaveLength(2);
   });
 
   it("injects a signal and schedules the initiator's turn", async () => {

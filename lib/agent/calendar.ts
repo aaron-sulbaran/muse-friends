@@ -12,9 +12,9 @@ export async function ownCalendar(store: Store, agent: AgentId): Promise<Calenda
 
 // Free blocks from the demo clock's "now" to the end of the seeded horizon, or the requested slice of it.
 export async function ownFreeBlocks(store: Store, agent: AgentId, range?: Window): Promise<Window[]> {
-  const { now } = await store.getClock();
+  const [{ now }, calendar] = await Promise.all([store.getClock(), ownCalendar(store, agent)]);
   const start = Math.max(toMs(now), toMs(CALENDAR_RANGE.start), range ? toMs(range.start) : 0);
   const end = Math.min(toMs(CALENDAR_RANGE.end), range ? toMs(range.end) : Infinity);
   if (end <= start) return [];
-  return freeBlocks(await ownCalendar(store, agent), { start: toCentralIso(start), end: toCentralIso(end) });
+  return freeBlocks(calendar, { start: toCentralIso(start), end: toCentralIso(end) });
 }
