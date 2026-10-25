@@ -88,8 +88,8 @@ export function SettleCard({ planId, role, offer, friendName, friendMuse, paymen
             disabled={waiting || readOnly}
             onChange={(event) => setNote(event.target.value)}
             placeholder={copy.settleNotePlaceholder}
-            aria-label={copy.settleNotePlaceholder}
-            className="mt-4 w-full rounded-full bg-group px-4 py-2.5 text-[15px] leading-5 outline-none placeholder:text-faint focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
+            aria-label={copy.settleNoteLabel}
+            className="mt-4 w-full truncate rounded-full bg-group px-4 py-2.5 text-[15px] leading-5 outline-none placeholder:text-faint focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
           />
           <button
             type="button"
