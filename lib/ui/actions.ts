@@ -65,6 +65,20 @@ export async function postReplan(planId: string, role: Role): Promise<Result> {
   return postSignal();
 }
 
+export type LeakAttempt = { id: string; label: string; status: number; error: string; rejected: boolean };
+
+/** "Try to leak": asks the server to forge two sends to Mochi's inbox and report what the inbox answered, verbatim. */
+export async function postLeakAttempt(): Promise<{ ok: true; attempts: LeakAttempt[] } | { ok: false; message: string }> {
+  try {
+    const response = await fetch("/api/proof/leak", { method: "POST" });
+    const body = (await response.json().catch(() => null)) as { data?: { attempts?: LeakAttempt[] } | null; error?: { message?: string } | null } | null;
+    if (response.ok && body?.data?.attempts) return { ok: true, attempts: body.data.attempts };
+    return { ok: false, message: body?.error?.message ?? `Request failed with ${response.status}` };
+  } catch {
+    return { ok: false, message: "Could not reach the server" };
+  }
+}
+
 export function postClockAdvance() {
   return post("/api/clock", { action: "advance" });
 }
