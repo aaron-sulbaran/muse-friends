@@ -1,9 +1,13 @@
+import { z } from "zod";
+import { closesThread, isForcedClose, nextThreadState } from "@/lib/agent/thread";
+import { isSubsetOfBlocks, windowHash } from "@/lib/agent/windows";
 import {
+  AgentMessage,
   CATEGORIES,
   SHARED_CATEGORIES,
   categoriesInMessage,
   isCategoryAllowed,
-  type AgentMessage,
+  type AgentId,
   type Category,
   type Persona,
   type PolicyStamp,
@@ -11,11 +15,13 @@ import {
   type SharePolicy,
   type Shared,
   type SharedCategory,
+  type Thread,
+  type Window,
 } from "@/lib/protocol";
 
 // Privacy enforced in code, outside the model. enforceSharePolicy runs at send after the model
 // has written the message; the inbox re-validates at receive (validateIncoming, added with the
-// inbox). Nothing here trusts the model to follow instructions.
+// inbox via validateIncoming below). Nothing here trusts the model to follow instructions.
 
 // Words long enough to identify a private event but too common to be worth blocking on their own.
 const COMMON_TITLE_WORDS = new Set(["friends", "meeting", "family"]);
@@ -162,4 +168,59 @@ export function enforceSharePolicy({ message, policy, sender, windowsDropped = 0
         };
 
   return { message: out, stamp, removed: removedList, redaction };
+}
+
+// ---------------------------------------------------------------------------
+// Receive side
+// ---------------------------------------------------------------------------
+
+export type IncomingCheck = { ok: true; message: AgentMessage } | { ok: false; status: 403 | 409 | 422; error: string };
+
+type ValidateInput = {
+  raw: unknown;
+  // Who the bearer token says is calling.
+  authenticatedSender: AgentId;
+  // Whose inbox this is.
+  recipient: AgentId;
+  thread: Thread | null;
+  prior: AgentMessage[];
+  // The sender's own verified free blocks and sharing policy, read by trusted server code. The
+  // receiving agent's model never sees either.
+  senderFreeBlocks: Window[];
+  senderPolicy: SharePolicy | null;
+  senderPersona: Persona;
+  rejectedWindowHashes: string[];
+};
+
+// Runs in the inbox before it answers 202: the same strict parse and caps, the identity and turn
+// checks, windows inside the sender's verified free blocks, the rejected-window ledger, and the
+// share policy applied once more. A message that fails is rejected and never reaches the other agent.
+export function validateIncoming(input: ValidateInput): IncomingCheck {
+  const parsed = AgentMessage.safeParse(input.raw);
+  if (!parsed.success) return { ok: false, status: 422, error: `Invalid message. ${z.prettifyError(parsed.error)}` };
+  const message = parsed.data;
+
+  if (message.from !== input.authenticatedSender) return { ok: false, status: 403, error: "from does not match the authenticated sender" };
+  if (message.to !== input.recipient) return { ok: false, status: 422, error: "to does not match this inbox" };
+
+  const expectedSeq = (input.thread?.messageCount ?? 0) + 1;
+  if (message.seq !== expectedSeq) return { ok: false, status: 409, error: `expected seq ${expectedSeq}` };
+  if (input.thread && ["rejected", "failed", "completed", "input-required"].includes(input.thread.state)) {
+    return { ok: false, status: 409, error: "the conversation has already ended" };
+  }
+  if (input.prior.at(-1)?.from === message.from) return { ok: false, status: 409, error: "not the sender's turn" };
+  if (isForcedClose(message.seq) && !closesThread(message.type)) return { ok: false, status: 422, error: "the sixth message must be an accept or a decline" };
+  if (message.state !== nextThreadState(message, input.prior)) return { ok: false, status: 422, error: "state does not follow from the thread" };
+
+  for (const window of message.windows ?? []) {
+    if (!isSubsetOfBlocks(window, input.senderFreeBlocks)) return { ok: false, status: 422, error: "a window is outside the sender's free blocks" };
+    if (input.rejectedWindowHashes.includes(windowHash(window))) return { ok: false, status: 422, error: "a window was already passed over in this conversation" };
+  }
+
+  const check = enforceSharePolicy({ message, policy: input.senderPolicy, sender: input.senderPersona });
+  if (check.removed.length > 0) {
+    return { ok: false, status: 422, error: `the message carries data the sender's sharing policy does not allow (${check.removed.join(", ")})` };
+  }
+
+  return { ok: true, message };
 }

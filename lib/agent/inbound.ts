@@ -5,6 +5,7 @@ import {
   type DropReason,
   type MessageRecord,
   type Plan,
+  type Recommendation,
   type Redaction,
   type Thread,
 } from "@/lib/protocol";
@@ -12,6 +13,7 @@ import { displayName } from "@/lib/seed/fixtures";
 import { canTransition, transitionPlan } from "@/lib/plans";
 import type { Store } from "@/lib/store";
 import { toCentralIso, windowHash, describeWindow } from "./windows";
+import { buildCards } from "./cards";
 import { newId } from "./ids";
 import { passedOver } from "./thread";
 
@@ -69,6 +71,7 @@ export async function commitMessage(store: Store, record: MessageRecord, redacti
     events.push({ id: newId("evt"), at, kind, actor, contextId: message.contextId, planId: plan.id, agent: message.from, text, ...extra });
 
   let nextPlan = plan;
+  let cards: Recommendation[] = [];
   if (opening) {
     nextPlan = transitionPlan(nextPlan, "negotiating", at);
     event("thread_opened", "agent", `${displayName(message.from)} opened a thread with ${displayName(message.to)}`);
@@ -95,6 +98,11 @@ export async function commitMessage(store: Store, record: MessageRecord, redacti
       window: message.windows?.[0],
     };
     event("plan_state", "system", `${displayName(message.from)} and ${displayName(message.to)} agreed on ${message.windows?.[0] ? describeWindow(message.windows[0]) : "a time"}. Waiting on both people.`, { agent: undefined });
+    nextPlan = { ...nextPlan, draft: buildCards(nextPlan, at).find((card) => card.draft)?.draft };
+    cards = buildCards(nextPlan, at);
+    for (const card of cards) {
+      event("card_created", "agent", `Card for ${displayName(card.forAgent)}: ${card.forAgent === nextPlan.initiator ? `reach out to ${displayName(card.friend)}` : `${displayName(card.friend)} is about to reach out`}`, { agent: card.forAgent });
+    }
   } else if (message.state === "rejected" && nextPlan.state === "negotiating") {
     nextPlan = transitionPlan(nextPlan, "dropped", at, { note: "A decline ended the thread", dropReason });
     event("plan_state", "system", "Plan dropped: the thread ended in a decline", { agent: undefined });
@@ -102,6 +110,7 @@ export async function commitMessage(store: Store, record: MessageRecord, redacti
 
   await store.putThread({ ...thread, state: message.state, messageCount: Math.max(thread.messageCount, message.seq), dropReason, updatedAt: at });
   await store.putPlan(nextPlan);
+  for (const card of cards) await store.putCard(card);
   for (const row of events) await store.appendEvent(row);
 }
 

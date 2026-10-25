@@ -5,9 +5,10 @@ import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
 import { failThread } from "./inbound";
 import { newId } from "./ids";
-import { agentInstructions, signalTurnInput } from "./prompts";
+import { ownFreeBlocks } from "./calendar";
+import { agentInstructions, inboxTurnInput, signalTurnInput } from "./prompts";
 import { buildTools } from "./tools";
-import { toCentralIso } from "./windows";
+import { describeWindow, intersectWindows, toCentralIso, windowHash } from "./windows";
 
 type RuntimeOptions = {
   store: Store;
@@ -75,4 +76,37 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
     await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
   }
   return result;
+}
+
+// The receiving agent's turn after a message lands in its inbox: read the thread, see which of the
+// friend's windows are also free (computed here), and answer through send_to_friend_agent.
+export async function runInboxTurn(options: RuntimeOptions & { agent: AgentId; contextId: string }): Promise<TurnResult> {
+  const { store, agent, contextId } = options;
+  const thread = (await store.listMessages(contextId)).map((record) => record.message);
+  const friendLast = [...thread].reverse().find((message) => message.from !== agent);
+  const nowMs = options.wallNow?.() ?? Date.now();
+
+  const ledger = new Set(await store.listRejectedWindows(contextId));
+  const allOffered = thread.flatMap((message) => message.windows ?? []);
+  const passedOver = allOffered.filter((window) => ledger.has(windowHash(window))).map((window) => `${describeWindowForLedger(window)}`);
+  const ownFree = await ownFreeBlocks(store, agent);
+  const mutualWindows = intersectWindows(friendLast?.windows ?? [], ownFree).filter((window) => !ledger.has(windowHash(window)));
+
+  const ctx: AgentRuntimeContext = { agent, store, wallNow: options.wallNow, contextId, deliver: options.deliver, windowRepairs: { used: 0 } };
+  const { tools, handlers } = buildTools(ctx);
+  const result = await runAgentTurn({
+    instructions: agentInstructions(agent),
+    input: inboxTurnInput({ agent, thread, mutualWindows, passedOver, nowMs }),
+    tools: tools.filter((tool) => ["get_my_calendar", "get_interests", "send_to_friend_agent"].includes(tool.name)),
+    handlers,
+    requiredTools: ["send_to_friend_agent"],
+  });
+  if (result.status === "failed") {
+    await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+  }
+  return result;
+}
+
+function describeWindowForLedger(window: { start: string; end: string }): string {
+  return `${describeWindow(window)} [${window.start} to ${window.end}]`;
 }

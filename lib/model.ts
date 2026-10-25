@@ -98,6 +98,14 @@ export function contextMode(): ContextMode {
   return process.env.MODEL_CHAIN_MODE === "chain" ? "chain" : "stateless";
 }
 
+type Effort = "minimal" | "low" | "medium" | "high";
+
+// "low" unless MODEL_EFFORT says otherwise (minimal, low, medium, high).
+function defaultEffort(): Effort {
+  const configured = process.env.MODEL_EFFORT;
+  return configured === "minimal" || configured === "medium" || configured === "high" ? configured : "low";
+}
+
 export type AgentTurnOptions = {
   instructions: string;
   // The thread history and the new message, as the user turn. A friend agent's words go here,
@@ -112,7 +120,7 @@ export type AgentTurnOptions = {
   finishOnRequired?: boolean;
   nudge?: string;
   maxToolCalls?: number;
-  effort?: "minimal" | "low" | "medium" | "high";
+  effort?: Effort;
   maxOutputTokens?: number;
   mode?: ContextMode;
 };
@@ -214,7 +222,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
       model: modelId(),
       instructions: options.instructions,
       tools,
-      reasoning: { effort: options.effort ?? "low" },
+      reasoning: { effort: options.effort ?? defaultEffort() },
       max_output_tokens: options.maxOutputTokens ?? 4096,
     } satisfies Partial<ResponseCreateParamsNonStreaming>;
     try {
