@@ -73,7 +73,11 @@ export type UiPlan = {
   droppedReason: string | null;
   /** When each state was reached, oldest first. */
   history: Array<{ state: PlanState; at: string }>;
+  /** What the people said about whether it happened; null until someone answers. */
+  outcome: UiOutcome | null;
 };
+
+export type UiOutcome = { result: "went" | "didnt"; at: string; nextIdeaId: string | null; chosenBy: "model" | "rule" | null };
 
 export type FollowThroughEvent = {
   id: string;

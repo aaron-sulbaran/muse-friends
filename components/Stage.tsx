@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useMediaQuery } from "@/lib/ui/use-media-query";
 import { copy } from "@/lib/ui/copy";
 import { formatClockLabel, namesFor } from "@/lib/ui/format";
 import { useReplay } from "@/lib/ui/use-replay";
@@ -11,6 +12,7 @@ import { ActivityPanel } from "./ActivityPanel";
 import { DemoControls } from "./DemoControls";
 import { FitPhone } from "./PhoneFrame";
 import { JsonDrawer } from "./JsonDrawer";
+import { MobileStage } from "./MobileStage";
 import { MuseScreen } from "./MuseScreen";
 import { PausedNotice } from "./PausedNotice";
 import { TopBar } from "./TopBar";
@@ -37,6 +39,7 @@ export function Stage() {
   const [openMessage, setOpenMessage] = useState<UiMessage | null>(null);
   const showPaused = pausedText !== null && replay.active;
   const names = snapshot ? namesFor(snapshot) : null;
+  const narrow = useMediaQuery("(max-width: 599px)");
 
   return (
     <div className="flex min-h-dvh flex-col bg-linear-to-b from-surface to-stage-end">
@@ -53,7 +56,7 @@ export function Stage() {
       ) : null}
       <main
         style={{ "--chrome": showPaused ? "152px" : "104px" } as React.CSSProperties}
-        className="grid flex-1 grid-cols-1 gap-6 px-4 pb-4 min-[600px]:grid-cols-2 min-[900px]:h-[calc(100dvh-var(--chrome))] min-[900px]:flex-none min-[900px]:grid-cols-[minmax(0,1fr)_minmax(440px,520px)_minmax(0,1fr)] min-[900px]:gap-10 min-[900px]:px-12">
+        className="grid flex-1 max-[599px]:hidden grid-cols-1 gap-6 px-4 pb-4 min-[600px]:grid-cols-2 min-[900px]:h-[calc(100dvh-var(--chrome))] min-[900px]:flex-none min-[900px]:grid-cols-[minmax(0,1fr)_minmax(440px,520px)_minmax(0,1fr)] min-[900px]:gap-10 min-[900px]:px-12">
         <div className="h-[640px] min-h-0 min-[900px]:order-1 min-[900px]:h-full">
           {snapshot ? (
             <FitPhone label={`${names?.muse.aaron ?? "Sprout"}'s side`}>
@@ -72,6 +75,11 @@ export function Stage() {
           ) : null}
         </div>
       </main>
+      {narrow ? (
+        <div className="min-[600px]:hidden">
+          <MobileStage snapshot={snapshot} connected={connected} readOnly={replay.active} onChanged={refresh} onOpenMessage={setOpenMessage} onPaused={pause} />
+        </div>
+      ) : null}
       <footer className="flex h-12 shrink-0 items-center justify-between px-6 min-[900px]:px-12">
         <DemoControls snapshot={snapshot} onChanged={refresh} replay={replay} onPaused={pause} />
         {snapshot?.clockSimulated ? (
