@@ -85,14 +85,17 @@ function inThreadOrder(records: MessageRecord[]): MessageRecord[] {
   );
 }
 
+// The service role client every server-side reader and writer of the project's database uses.
+export function createServiceClient(): SupabaseClient {
+  return createClient(requiredEnvironment("SUPABASE_URL"), requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"), {
+    auth: { persistSession: false, autoRefreshToken: false },
+    // A function instance can serve many requests; make sure no response is ever reused.
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
+  });
+}
+
 export function createSupabaseStore(options: SupabaseStoreOptions = {}): Store {
-  const db =
-    options.client ??
-    createClient(requiredEnvironment("SUPABASE_URL"), requiredEnvironment("SUPABASE_SERVICE_ROLE_KEY"), {
-      auth: { persistSession: false, autoRefreshToken: false },
-      // A function instance can serve many requests; make sure no response is ever reused.
-      global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
-    });
+  const db = options.client ?? createServiceClient();
 
   const raw: Store = {
     async getThread(contextId) {
