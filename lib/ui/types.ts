@@ -295,7 +295,7 @@ export type UiPayment = {
 export type PaymentsSettings = { enabled: boolean; cap: number };
 
 /** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
-export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
+export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null; profilePictureUrl: string | null };
 
 /** What Muse Spark read from the reel's caption, field by field; any of them can be missing. */
 export type UiReelRead = { place: string | null; area: string | null; hours: string | null };

@@ -24,6 +24,7 @@ import { FriendPickerSheet } from "./FriendPickerSheet";
 import { FriendsOptInCard } from "./FriendsOptInCard";
 import { OptOutCard, TurnOnFriendsPill } from "./OptOutCard";
 import { ShareSheet } from "./ShareSheet";
+import { CheckMark } from "./CheckMark";
 import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
@@ -232,7 +233,8 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         return null; // drawn as a thread bubble in the list below, where its neighbors are known
       case "collapsed":
         return (
-          <p className="animate-fade-in text-[13px] leading-[18px] text-muted" style={{ paddingLeft: 4 }}>
+          <p className={`animate-fade-in text-[13px] leading-[18px] text-muted ${item.check ? "flex items-center gap-1.5" : ""}`} style={{ paddingLeft: 4 }}>
+            {item.check ? <CheckMark className="size-4" /> : null}
             {item.text}
           </p>
         );
@@ -266,7 +268,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} onPaused={onPaused} />;
       case "reel-card": {
-        const card = <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={item.live ? copy.reelLiveLabel : copy.reelLabel} />;
+        const card = <ReelCard image={item.image} poster={item.poster} posterImage={item.posterImage} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={item.live ? copy.reelLiveLabel : copy.reelLabel} />;
         if (item.align !== "left") return card;
         // The friend's reel is her message: her chip above it, her picture beside it, in the bubbles' column.
         return (

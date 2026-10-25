@@ -32,7 +32,7 @@ describe("what each control says it does", () => {
 
 describe("the labels that follow the data", () => {
   it("names the reel once a live one has landed", () => {
-    const live: UiReel = { username: "the.foodie.patootie", caption: "x", permalink: "https://example.com", thumbnailUrl: null };
+    const live: UiReel = { username: "the.foodie.patootie", caption: "x", permalink: "https://example.com", thumbnailUrl: null, profilePictureUrl: null };
     expect(loadReelLabel(null)).toBe("Load the shawarma reel");
     expect(loadReelLabel(live)).toBe("Load @the.foodie.patootie's reel");
   });

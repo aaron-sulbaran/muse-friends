@@ -666,6 +666,8 @@ export const ReelMedia = z.strictObject({
   thumbnail_url: z.string().max(2000).optional(),
   timestamp: IsoDateTime,
   username: z.string().max(40),
+  // The poster's profile picture, read with the reel from /me (not a media field). Absent for the seeded reel.
+  profile_picture_url: z.string().max(2000).optional(),
 });
 export type ReelMedia = z.infer<typeof ReelMedia>;
 

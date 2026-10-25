@@ -51,7 +51,7 @@ describe("the opening moment, in the order it happens", () => {
   });
 
   it("credits a teammate's real reel, never the friend, and gives it the room of an embed", () => {
-    const withLive: UiSnapshot = { ...at("negotiating"), reel: { username: "slowweekends.tx", caption: "cabin", permalink: "https://www.instagram.com/reel/x/", thumbnailUrl: null } };
+    const withLive: UiSnapshot = { ...at("negotiating"), reel: { username: "slowweekends.tx", caption: "cabin", permalink: "https://www.instagram.com/reel/x/", thumbnailUrl: null, profilePictureUrl: null } };
     const moment = openingMoment(withLive, "Michelle");
     expect(moment.teammateLine).toBe("A teammate's reel, read live from Instagram");
     expect(moment.reel).toEqual({ compact: false, live: true });

@@ -1,16 +1,21 @@
-import { Bell, CalendarCheck, Check, ChevronLeft, Clock, Film, MessageCircle, Repeat, X, type LucideIcon } from "lucide-react";
+import { Bell, CalendarCheck, ChevronLeft, Clock, Film, MessageCircle, Repeat, X, type LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import { copy } from "@/lib/ui/copy";
+import { CheckMark } from "./CheckMark";
 import { goalDone, goalRowDetail, goalSteps, goalTitle, isTracked, type GoalContext } from "@/lib/ui/goals";
 import type { PlanState, UiPlan } from "@/lib/ui/types";
 
-const stepIcons: Record<PlanState, LucideIcon> = {
+/** A step's icon: a lucide icon, or Muse's blue check mark, which takes the same size props. */
+type StepIcon = LucideIcon | ComponentType<{ className?: string; strokeWidth?: number }>;
+
+const stepIcons: Record<PlanState, StepIcon> = {
   detected: Film,
   negotiating: MessageCircle,
   awaiting_humans: Clock,
-  confirmed: Check,
+  confirmed: CheckMark,
   scheduled: CalendarCheck,
   reminded: Bell,
-  happened: Check,
+  happened: CheckMark,
   followed_up: Repeat,
   dropped: X,
 };
@@ -37,9 +42,7 @@ export function GoalsTab({ plan, context, onOpen }: ListProps) {
           className="mt-3 flex w-full animate-card-in items-center gap-3 rounded-card bg-surface p-4 text-left shadow-float transition-colors hover:bg-group"
         >
           {goalDone(plan) ? (
-            <span aria-hidden="true" className="grid size-5 shrink-0 place-items-center rounded-full bg-tracking text-surface">
-              <Check className="size-3" strokeWidth={3} />
-            </span>
+            <CheckMark className="size-5" strokeWidth={2.5} />
           ) : (
             <span aria-hidden="true" className="size-5 shrink-0 rounded-full border-2 border-faint" />
           )}
@@ -79,7 +82,7 @@ export function GoalDetail({ plan, context, onBack }: DetailProps) {
       <ol className="mt-3">
         {steps.map((step, index) => {
           const last = index === steps.length - 1;
-          const Icon = last && goalDone(plan) ? Check : last && plan.outcome?.result === "didnt" ? X : stepIcons[step.state];
+          const Icon: StepIcon = last && goalDone(plan) ? CheckMark : last && plan.outcome?.result === "didnt" ? X : stepIcons[step.state];
           return (
             <li key={`${step.state}-${index}`} className="relative flex gap-3 pb-5 animate-row-in">
               {!last ? <span aria-hidden="true" className="absolute left-[13px] top-8 h-[calc(100%-2rem)] w-0.5 bg-bubble-muse" /> : null}

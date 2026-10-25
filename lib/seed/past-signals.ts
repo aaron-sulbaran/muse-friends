@@ -21,6 +21,8 @@ export type PastSignal = {
   title: string;
   /** Fictional poster handle, for a reel. */
   poster?: string;
+  /** The poster's real profile picture, only for a reel read live from their own Instagram; the letter circle stands in otherwise. */
+  posterImage?: string;
   /** Fictional caption, for a reel. */
   caption?: string;
   /** Under `public/`, for a reel's 9:16 thumbnail. */

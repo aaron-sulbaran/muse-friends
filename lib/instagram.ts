@@ -9,6 +9,8 @@ import { ReelMedia } from "@/lib/protocol";
 
 const GRAPH = "https://graph.instagram.com/v23.0";
 const FIELDS = "id,media_type,media_product_type,caption,permalink,thumbnail_url,timestamp,username";
+/** The token's own account: its username and profile picture (a User field of the Instagram API with Instagram Login). */
+const PROFILE_FIELDS = "username,profile_picture_url";
 /** The owner's Shawarma King reel. INSTAGRAM_REEL_ID picks another of their reels. */
 export const DEMO_REEL_ID = "18025507859870759";
 
@@ -42,7 +44,24 @@ async function fetchReel(token: string, id: string): Promise<ReelMedia | null> {
     // Instagram writes "2026-10-16T15:04:18+0000"; the protocol wants an offset with a colon.
     const timestamp = typeof media.timestamp === "string" ? new Date(media.timestamp).toISOString() : undefined;
     const parsed = ReelMedia.safeParse({ ...media, caption: media.caption ?? "", timestamp });
-    return parsed.success ? parsed.data : null;
+    if (!parsed.success) return null;
+    // Same pass, same cache: the poster's picture is asked only once the reel is known to be good, and never fails the reel.
+    const picture = await fetchProfilePicture(token);
+    return picture ? { ...parsed.data, profile_picture_url: picture } : parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+/** The owner's profile picture, or null when there is none, the request fails, or the link is not https. */
+async function fetchProfilePicture(token: string): Promise<string | null> {
+  try {
+    const url = `${GRAPH}/me?fields=${PROFILE_FIELDS}&access_token=${encodeURIComponent(token)}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+    if (!response.ok) return null;
+    const profile = (await response.json()) as Record<string, unknown>;
+    const picture = profile.profile_picture_url;
+    return typeof picture === "string" && picture.startsWith("https://") && picture.length <= 2000 ? picture : null;
   } catch {
     return null;
   }

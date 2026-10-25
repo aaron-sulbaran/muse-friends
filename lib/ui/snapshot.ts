@@ -415,7 +415,7 @@ function toFollowThrough(events: StateSnapshot["events"], rename: (text: string)
 function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null {
   const media = state.signals.findLast((signal) => signal.provenance.source === "instagram_graph_api")?.media ?? before;
   if (!media) return null;
-  return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null };
+  return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null, profilePictureUrl: media.profile_picture_url ?? null };
 }
 
 /**

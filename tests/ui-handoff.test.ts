@@ -1,43 +1,31 @@
-import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DraftCard } from "@/components/DraftCard";
 import { HoldRow } from "@/components/HoldRow";
 import { copy } from "@/lib/ui/copy";
-import { CHECK_MARK_SRC, whatsAppUrl } from "@/lib/ui/handoff";
+import { whatsAppUrl } from "@/lib/ui/handoff";
+
+const CHECK = 'data-mark="check"';
 
 const googleUrl = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Shawarma";
 const hold = { planId: "plan_1", role: "a" as const, title: "Shawarma with Michelle", googleUrl };
 const attr = (value: string) => value.replace(/&/g, "&amp;").replace(/'/g, "&#x27;");
-const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-
-describe("the green check mark", () => {
-  const file = readFileSync(`public${CHECK_MARK_SRC}`, "utf8");
-
-  it("is a custom SVG in the status-glyph style, not an emoji", () => {
-    expect(file.startsWith("<svg")).toBe(true);
-    expect(file).toContain('viewBox="0 0 24 24"');
-    expect(file).toContain("stroke-width:1.75");
-    expect(file).toContain("#019F38");
-    expect(file).toContain("prefers-reduced-motion");
-    expect(file).toMatch(/^[\x20-\x7e\n]+$/);
-  });
-});
+const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
 
 describe("the calendar row", () => {
   it("offers both ways to keep the hold before anything was tapped", () => {
     const html = renderToStaticMarkup(createElement(HoldRow, hold));
     expect(text(html)).toContain(copy.holdAction);
     expect(text(html)).toContain(copy.holdGoogle);
-    expect(html).not.toContain(CHECK_MARK_SRC);
+    expect(html).not.toContain(CHECK);
   });
 
   it("reads Added to your calendar with the check and a secondary Change plans after the Google link was tapped", () => {
     const html = renderToStaticMarkup(createElement(HoldRow, { ...hold, initiallyAdded: "google" }));
     expect(text(html)).toContain("Added to your calendar");
     expect(text(html)).toContain("Change plans");
-    expect(html).toContain(CHECK_MARK_SRC);
+    expect(html).toContain(CHECK);
     expect(text(html)).not.toContain(copy.holdGoogle);
   });
 
@@ -68,20 +56,31 @@ describe("the WhatsApp draft card", () => {
   const draft = "Michelle's in. Want to try the new shawarma place Tuesday at 6?";
   const render = (extra: object = {}) => renderToStaticMarkup(createElement(DraftCard, { draft, onHandoff: () => {}, ...extra }));
 
-  it("offers Copy and Open WhatsApp before the hand-off", () => {
+  it("offers Copy and Open WhatsApp, with the WhatsApp glyph, before the hand-off", () => {
     expect(text(render())).toContain(copy.draftOpenWhatsApp);
+    expect(render()).toContain('data-glyph="whatsapp"');
     expect(text(render())).not.toContain("Continue this conversation in WhatsApp");
   });
 
-  it("reads Continue this conversation in WhatsApp with the check, and Open again, after it", () => {
+  it("collapses to the draft and one secondary button after the hand-off: no Copy, no Open", () => {
     const html = render({ initiallyOpened: true });
-    expect(text(html)).toContain("Continue this conversation in WhatsApp");
-    expect(text(html)).toContain("Open again");
+    expect(text(html)).toContain(draft);
+    expect(text(html)).toContain("Continue in WhatsApp");
+    expect(text(html)).not.toContain(copy.draftCopy);
     expect(text(html)).not.toContain(copy.draftOpenWhatsApp);
-    expect(html).toContain(CHECK_MARK_SRC);
+    expect(text(html)).not.toContain("Open again");
+    expect(html.match(/<a /g)).toHaveLength(1);
+    expect(html).not.toContain("<button");
+    expect(html).toContain("w-full");
+    expect(html).toContain('data-glyph="whatsapp"');
+    // The glyph carries Muse's check as a badge; the long label is read aloud, the short one is shown.
+    expect(html).toContain(CHECK);
+    expect(html).toContain(`aria-label="${copy.draftHandedOffLabel}"`);
+    expect(copy.draftHandedOff).toBe("Continue in WhatsApp");
+    expect(copy.draftHandedOffLabel).toBe("Continue this conversation in WhatsApp");
   });
 
-  it("keeps Open again pointed at the same draft, so the second tap still opens WhatsApp", () => {
+  it("keeps the one button pointed at the same draft, so the second tap still opens WhatsApp", () => {
     const html = render({ initiallyOpened: true });
     expect(html).toContain(`href="${attr(whatsAppUrl(draft))}"`);
   });
