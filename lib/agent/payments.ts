@@ -117,7 +117,7 @@ export async function getWallet(ctx: PaymentContext): Promise<Done<{ balance: nu
     ok: true,
     balance: wallet.data.balance,
     nickname: wallet.data.nickname,
-    sandbox: wallet.data.source === "nessie" ? "Capital One Nessie sandbox" : "local demo ledger (sandbox not connected)",
+    sandbox: wallet.data.source === "nessie" ? "Capital One Nessie sandbox (balances kept by Muse)" : "local demo ledger (sandbox not connected)",
     capPerPlan: cap,
     sentOnThisPlan: spent,
     capLeft: Math.max(0, cap - spent),

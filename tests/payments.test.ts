@@ -6,7 +6,7 @@ import { acceptPayment, declinePayment, getWallet, sendMoney, type PaymentContex
 import { paymentsFrom, sentOnPlan } from "@/lib/agent/payment-rules";
 import { agentToken, localDeliver, receiveMessage } from "@/lib/agent/wire";
 import { ensureWallets, refreshWallet, walletOf } from "@/lib/agent/wallets";
-import { NessieHttp } from "@/lib/nessie";
+import { NessieHttp, NessieWithLedger } from "@/lib/nessie";
 import { AgentMessage, SendToFriendArgs, type AgentId, type Plan, type SharePolicy } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { JsonStore } from "@/lib/store/json";
@@ -468,27 +468,118 @@ describe("the Nessie client", () => {
     expect((await client.getAccount("acct1")).error).toBe("the sandbox answered in a shape we do not know");
   });
 
-  it("makes wallets on the real sandbox when the key is set, once, and re-balances them on Reset", async () => {
+  it("makes wallets on the real sandbox when the key is set, keeping the balances in our own ledger", async () => {
     process.env.NESSIE_KEY = "abc123";
     const fresh = new JsonStore(null);
-    stub([
-      json({ objectCreated: { _id: "c1" } }), json({ objectCreated: { _id: "a1" } }), json({ _id: "a1", balance: 120 }, 200),
-      json({ objectCreated: { _id: "c2" } }), json({ objectCreated: { _id: "a2" } }), json({ _id: "a2", balance: 80 }, 200),
-    ]);
+    stub([json({ objectCreated: { _id: "c1" } }), json({ objectCreated: { _id: "a1" } }), json({ objectCreated: { _id: "c2" } }), json({ objectCreated: { _id: "a2" } })]);
     expect((await ensureWallets(fresh, wallNow)).errors).toEqual([]);
+    // Two customers and two accounts were written to the sandbox; the sandbox's balance was never read.
+    expect(calls.map((call) => `${call.init.method} ${new URL(call.url).pathname}`)).toEqual(["POST /customers", "POST /customers/c1/accounts", "POST /customers", "POST /customers/c2/accounts"]);
     expect(await walletOf(fresh, "aaron")).toMatchObject({ accountId: "a1", source: "nessie", balance: 120 });
-    expect(toUiSnapshot(await fresh.snapshot(), { mode: "live" }).sandbox).toEqual({ enabled: true, connected: true, text: "Capital One Nessie sandbox" });
-    // Reset: the accounts are read, found short, topped up with a deposit, and read again. No new customers.
-    stub([
-      json({ _id: "a1", balance: 108 }, 200), json({ objectCreated: { _id: "dp" } }), json({ _id: "a1", balance: 120 }, 200),
-      json({ _id: "a2", balance: 80 }, 200),
-    ]);
+    expect((await fresh.getRoom()).localLedger).toEqual({ a1: 120, a2: 80 });
+    expect(toUiSnapshot(await fresh.snapshot(), { mode: "live" }).sandbox).toEqual({ enabled: true, connected: true, text: "Capital One Nessie sandbox, balances kept by Muse" });
+
+    // Reset: our ledger says Sprout spent $12, so the same account is topped back up with a deposit record. No new customers.
+    await fresh.putRoom({ ...(await fresh.getRoom()), localLedger: { a1: 108, a2: 80 } });
+    stub([json({ objectCreated: { _id: "dp1" } })]);
     expect((await ensureWallets(fresh, wallNow)).errors).toEqual([]);
-    expect(calls.map((call) => `${call.init.method} ${new URL(call.url).pathname}`)).toEqual(["GET /accounts/a1", "POST /accounts/a1/deposits", "GET /accounts/a1", "GET /accounts/a2"]);
-    // The balance on the room is whatever the ledger last said, read back, never computed.
-    stub([json({ _id: "a1", balance: 117 }, 200)]);
-    expect((await refreshWallet(fresh, "aaron", wallNow)).data?.balance).toBe(117);
-    expect((await walletOf(fresh, "aaron"))!.balance).toBe(117);
+    expect(calls.map((call) => `${call.init.method} ${new URL(call.url).pathname}`)).toEqual(["POST /accounts/a1/deposits"]);
+    expect((await fresh.getRoom()).localLedger).toEqual({ a1: 120, a2: 80 });
+  });
+
+  it("never asks the sandbox for a balance: the wallet reads our ledger, whatever the sandbox's balance field says", async () => {
+    process.env.NESSIE_KEY = "abc123";
+    const fresh = new JsonStore(null);
+    stub([json({ objectCreated: { _id: "c1" } }), json({ objectCreated: { _id: "a1" } }), json({ objectCreated: { _id: "c2" } }), json({ objectCreated: { _id: "a2" } })]);
+    await ensureWallets(fresh, wallNow);
+    stub([json({ _id: "a1", balance: 50 }, 200)]);
+    const wallet = await refreshWallet(fresh, "aaron", wallNow);
+    expect(wallet.data?.balance).toBe(120);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("NessieWithLedger", () => {
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  const json = (body: unknown, status = 201) => new Response(JSON.stringify(body), { status });
+  const stub = (respond: (url: string, init: RequestInit) => Response) => {
+    calls.length = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return respond(url, init);
+    }));
+  };
+  const memory = (initial: Record<string, number> = {}) => {
+    let ledger = { ...initial };
+    return { read: async () => ({ ...ledger }), write: async (next: Record<string, number>) => void (ledger = { ...next }), exclusive: <T,>(work: () => Promise<T>) => work(), snapshot: () => ledger };
+  };
+  const made = () => {
+    const storage = memory();
+    return { storage, client: new NessieWithLedger(new NessieHttp({ key: "abc123" }), storage) };
+  };
+
+  it("keeps the balance in the ledger and the transactions in Nessie: a withdrawal and a deposit write records and move our balance", async () => {
+    const { storage, client } = made();
+    stub((url) => (url.includes("/accounts?") || url.endsWith("/accounts") ? json({ objectCreated: { _id: "acct" } }) : json({ objectCreated: { _id: "tx1" } })));
+    await storage.write({ acct: 50, other: 50 });
+    expect(await client.withdraw("acct", { amount: 7, description: "x" })).toEqual({ data: { id: "tx1" }, error: null });
+    expect(storage.snapshot().acct).toBe(43);
+    expect(await client.deposit("other", { amount: 7, description: "y" })).toEqual({ data: { id: "tx1" }, error: null });
+    expect(storage.snapshot().other).toBe(57);
+    expect(calls.map((call) => new URL(call.url).pathname)).toEqual(["/accounts/acct/withdrawals", "/accounts/other/deposits"]);
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({ amount: 7, status: "completed", medium: "balance" });
+  });
+
+  it("answers a balance read from the ledger without a request, even when the sandbox would say the opening balance", async () => {
+    const { storage, client } = made();
+    await storage.write({ acct: 43 });
+    stub(() => json({ _id: "acct", balance: 50 }, 200));
+    expect(await client.getAccount("acct")).toEqual({ data: { id: "acct", balance: 43, nickname: "" }, error: null });
+    expect(calls).toHaveLength(0);
+    expect(await client.getAccount("nope")).toEqual({ data: null, error: "no such account" });
+  });
+
+  it("refuses an overdraft itself, before the sandbox is asked, and moves nothing when the sandbox refuses a write", async () => {
+    const { storage, client } = made();
+    await storage.write({ acct: 10 });
+    stub(() => json({ message: "boom" }, 500));
+    expect(await client.withdraw("acct", { amount: 11, description: "x" })).toEqual({ data: null, error: "insufficient funds" });
+    expect(calls).toHaveLength(0);
+    expect((await client.withdraw("acct", { amount: 5, description: "x" })).error).toBe("sandbox error 500: boom");
+    expect((await client.deposit("acct", { amount: 5, description: "x" })).error).toBe("sandbox error 500: boom");
+    expect(storage.snapshot().acct).toBe(10);
+    expect(await client.deposit("unknown", { amount: 5, description: "x" })).toEqual({ data: null, error: "no such account" });
+  });
+
+  it("reads the transaction records back by id", async () => {
+    const http = new NessieHttp({ key: "abc123" });
+    stub((url) => (url.includes("/withdrawals/") ? json({ _id: "w1", amount: 7, status: "completed", description: "x" }, 200) : json({ _id: "d1", amount: 7 }, 200)));
+    expect(await http.getWithdrawal("w1")).toEqual({ data: { id: "w1", amount: 7, status: "completed", description: "x" }, error: null });
+    expect(await http.getDeposit("d1")).toEqual({ data: { id: "d1", amount: 7, status: "", description: "" }, error: null });
+    expect(calls.map((call) => new URL(call.url).pathname)).toEqual(["/withdrawals/w1", "/deposits/d1"]);
+  });
+
+  it("moves the wallet chip's balance through a whole payment on the real sandbox, on our ledger, with one record each side", async () => {
+    process.env.NESSIE_KEY = "abc123";
+    const fresh = new JsonStore(null);
+    let n = 0;
+    stub((url) => (url.endsWith("/customers") || url.endsWith("/accounts") ? json({ objectCreated: { _id: `id${++n}` } }) : json({ objectCreated: { _id: `tx${++n}` } })));
+    await ensureWallets(fresh, wallNow);
+    const { planId } = await injectSignal(fresh, { ...rawShawarmaSignal(), id: "sig_real" }, wallNow);
+    const base = (await fresh.getPlan(planId))!;
+    await fresh.putPlan({ ...base, state: "confirmed", activity: { kind: "food", title: "Shawarma Point" } });
+    await fresh.putPolicy(policy("aaron", 20));
+    calls.length = 0;
+    const ctx = (agent: AgentId, extra: Partial<PaymentContext> = {}): PaymentContext => ({ store: fresh, agent, planId, wallNow, deliver: localDeliver(fresh, agent), ...extra });
+
+    const sent = (await sendMoney(ctx("aaron"), { to: "lisa", amount: 12, reason: "my half" })) as { paymentId: string };
+    const contextId = (await fresh.listThreads()).find((thread) => thread.contextId.startsWith("pay_"))!.contextId;
+    expect(await acceptPayment(ctx("lisa", { contextId, planId: undefined }), { paymentId: sent.paymentId })).toMatchObject({ ok: true, balanceBefore: 80, balanceAfter: 92 });
+    expect({ aaron: (await walletOf(fresh, "aaron"))!.balance, lisa: (await walletOf(fresh, "lisa"))!.balance }).toEqual({ aaron: 108, lisa: 92 });
+    expect(toUiSnapshot(await fresh.snapshot(), { mode: "live" }).wallets).toMatchObject({ aaron: { balance: 108 }, lisa: { balance: 92 } });
+    // The sandbox saw exactly the two records and was never asked for a balance.
+    expect(calls.map((call) => `${call.init.method} ${new URL(call.url).pathname.replace(/\/[^/]+(?=\/(withdrawals|deposits))/, "/:account")}`)).toEqual(["POST /accounts/:account/withdrawals", "POST /accounts/:account/deposits"]);
+    expect(paymentsFrom(await fresh.listMessages())[0]).toMatchObject({ source: "nessie", status: "received", balanceBefore: 80, balanceAfter: 92 });
   });
 });
 
