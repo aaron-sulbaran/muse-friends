@@ -168,6 +168,12 @@ function couldNot(name: string, context: ToolLineContext): string | undefined {
       return "send the payment back";
     case "web_search":
       return "search the web";
+    case "nessie_transfer":
+    case "ledger_transfer":
+      return "send the transfer";
+    case "nessie_deposit":
+    case "ledger_deposit":
+      return "record the deposit";
     default:
       return undefined;
   }
@@ -235,6 +241,17 @@ export function toolLine(call: UiToolCall, context: ToolLineContext): string {
     case "decline_payment": {
       const amount = result.match(/^refunded \$(\S+)$/)?.[1];
       return amount ? `Sent the payment back, refunded $${amount}` : "Sent the payment back";
+    }
+    // The sandbox (or local ledger) moving the money: the amount, the transfer id, never the raw account id.
+    case "nessie_transfer":
+    case "ledger_transfer":
+    case "nessie_deposit":
+    case "ledger_deposit": {
+      const sending = name.endsWith("_transfer");
+      const amount = args.match(/^\$(\S+)/)?.[1];
+      const id = result.match(/^(?:withdrawal|deposit) (\S+) recorded$/)?.[1];
+      const through = name.startsWith("nessie") ? "the Capital One sandbox" : "the local ledger";
+      return `${sending ? "Sent" : "Received"} ${amount ? `$${amount}` : "the money"} through ${through}${id ? `, ${sending ? "transfer" : "deposit"} ${id}` : ""}`;
     }
     case "get_plan":
       return result === "no plan yet" ? "Looked for a plan, none yet" : "Read the plan";

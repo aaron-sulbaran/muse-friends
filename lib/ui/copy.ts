@@ -33,6 +33,8 @@ export const copy = {
   thinking: (who: string, count: number) => `${who} ${count === 1 ? "is" : "are"} thinking`,
   /** The Activity row for a call that is running; the seconds are counted beside it. */
   working: (who: string, count: number) => `${who} ${count === 1 ? "is" : "are"} working`,
+  /** The same row while a payment turn runs: the payer's Muse preparing the amount, or sending it. */
+  settlingUp: (who: string, count: number) => `${who} ${count === 1 ? "is" : "are"} settling up`,
 
   // Status lines are words only; the state's animated glyph (public/status) comes from the phone view.
   statusReading: (friend: string) => `reading ${friend}'s reel`,

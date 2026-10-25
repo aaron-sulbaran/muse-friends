@@ -47,18 +47,26 @@ describe("the counter formatting", () => {
 });
 
 describe("when a running call started", () => {
-  it("is the since the snapshot carries, when it is a time a moment ago", () => {
-    const now = Date.parse("2026-10-25T10:30:10-05:00");
-    expect(inFlightSince({ agent: "aaron", agents: ["aaron"], since: "2026-10-25T10:30:03-05:00" }, now)).toBe(Date.parse("2026-10-25T10:30:03-05:00"));
+  const now = Date.parse("2026-10-25T10:30:10-05:00");
+  const flight = (since: Partial<Record<"aaron" | "lisa", string>> | undefined, agents: Array<"aaron" | "lisa"> = ["aaron"]) => ({ agent: agents[0]!, agents, ...(since ? { since } : {}) });
+
+  it("is the since the snapshot carries for the running agent, when it is a time a moment ago", () => {
+    expect(inFlightSince(flight({ aaron: "2026-10-25T10:30:03-05:00" }), now)).toBe(Date.parse("2026-10-25T10:30:03-05:00"));
+  });
+
+  it("is the earliest start when more than one Muse is running", () => {
+    const both = flight({ aaron: "2026-10-25T10:30:06-05:00", lisa: "2026-10-25T10:30:02-05:00" }, ["aaron", "lisa"]);
+    expect(inFlightSince(both, now)).toBe(Date.parse("2026-10-25T10:30:02-05:00"));
   });
 
   it("is nothing when there is no since, it is not a time, or it is in the future or long ago", () => {
-    const now = Date.parse("2026-10-25T10:30:10-05:00");
-    expect(inFlightSince({ agent: "aaron", agents: ["aaron"] }, now)).toBeUndefined();
-    expect(inFlightSince({ agent: "aaron", agents: ["aaron"], since: "soon" }, now)).toBeUndefined();
-    expect(inFlightSince({ agent: "aaron", agents: ["aaron"], since: "2026-10-25T10:31:10-05:00" }, now)).toBeUndefined();
-    expect(inFlightSince({ agent: "aaron", agents: ["aaron"], since: "2026-10-25T09:00:00-05:00" }, now)).toBeUndefined();
+    expect(inFlightSince(flight(undefined), now)).toBeUndefined();
+    expect(inFlightSince(flight({}), now)).toBeUndefined();
+    expect(inFlightSince(flight({ aaron: "soon" }), now)).toBeUndefined();
+    expect(inFlightSince(flight({ aaron: "2026-10-25T10:31:10-05:00" }), now)).toBeUndefined();
+    expect(inFlightSince(flight({ aaron: "2026-10-25T09:00:00-05:00" }), now)).toBeUndefined();
     expect(inFlightSince(null, now)).toBeUndefined();
+    expect(inFlightSince({ agent: "aaron", agents: ["aaron"], since: "2026-10-25T10:30:03-05:00" } as never, now)).toBeUndefined();
   });
 });
 
@@ -92,6 +100,12 @@ describe("the row for a call that is running", () => {
     const html = render({ initialSeconds: 7 }, replay);
     expect(text(html)).toContain(`${who} is working`);
     expect(text(html)).not.toMatch(/\d+ s\b/);
+  });
+
+  it("says settling up while a payment turn runs", () => {
+    const paying = { ...snapshot, inFlight: { agent: "aaron" as const, agents: ["aaron" as const], payment: true as const } };
+    const who = namesFor(paying).muse.aaron;
+    expect(text(render({ initialSeconds: 4 }, paying))).toContain(`${who} is settling up, 4 s`);
   });
 
   it("is nothing when nobody is running", () => {
@@ -195,15 +209,26 @@ describe("the tool lines under a payment's rows", () => {
   const names = namesFor({ sides: { aaron: "Sprout", lisa: "Mochi", kai: "Pebble" }, humans: { aaron: "Aaron", lisa: "Michelle" } });
   const proposed: UiNote = { id: "n1", kind: "payment_proposed", at: "2026-10-27T20:00:01-05:00", text: "Sprout prepared a payment", payer: "aaron", toolCalls: calls };
 
-  it("take the calls and the payer from the plan's payment", () => {
-    expect(paymentNoteExtras([payment()], "plan_1")).toEqual({ payer: "aaron", toolCalls: calls });
-    expect(paymentNoteExtras([payment({ id: "pay_0", toolCalls: undefined }), payment()], "plan_1").toolCalls).toBe(calls);
+  const transfer = { name: "nessie_transfer", args: "$15.20 from acct_a", result: "withdrawal wd_9 recorded", ms: 1200 };
+  const deposit = { name: "nessie_deposit", args: "$15.20 to acct_b", result: "deposit dp_9 recorded", ms: 900 };
+  const accept = { name: "accept_payment", args: "pay_1", result: "deposited $15.20", ms: 150 };
+  const full = payment({ toolCalls: [...calls, transfer, accept, deposit] });
+
+  it("give the proposed row the payer's own calls, the sent row the transfer, the received row the deposit", () => {
+    expect(paymentNoteExtras([full], "plan_1", "payment_proposed")).toEqual({ payer: "aaron", toolCalls: calls });
+    expect(paymentNoteExtras([full], "plan_1", "payment_sent")).toEqual({ payer: "aaron", toolCalls: [transfer] });
+    expect(paymentNoteExtras([full], "plan_1", "payment_received")).toEqual({ payer: "aaron", toolCalls: [accept, deposit] });
   });
 
-  it("take only the payer when the payment recorded no calls, and nothing when there is no payment", () => {
-    expect(paymentNoteExtras([payment({ toolCalls: undefined })], "plan_1")).toEqual({ payer: "aaron" });
-    expect(paymentNoteExtras([payment()], "plan_other")).toEqual({});
-    expect(paymentNoteExtras([payment()], undefined)).toEqual({});
+  it("take the latest payment of the plan", () => {
+    expect(paymentNoteExtras([payment({ id: "pay_0", toolCalls: [] }), payment()], "plan_1", "payment_proposed").toolCalls).toEqual(calls);
+  });
+
+  it("take only the payer when the payment recorded no calls of that kind, and nothing when there is no payment", () => {
+    expect(paymentNoteExtras([payment({ toolCalls: undefined })], "plan_1", "payment_proposed")).toEqual({ payer: "aaron" });
+    expect(paymentNoteExtras([payment()], "plan_1", "payment_sent")).toEqual({ payer: "aaron" });
+    expect(paymentNoteExtras([payment()], "plan_other", "payment_proposed")).toEqual({});
+    expect(paymentNoteExtras([payment()], undefined, "payment_proposed")).toEqual({});
   });
 
   it("name the people, from the payer's side", () => {
@@ -226,5 +251,34 @@ describe("the tool lines under a payment's rows", () => {
   it("show no lines under a payment row that recorded none", () => {
     const html = renderToStaticMarkup(createElement(ActivityNote, { note: { ...proposed, toolCalls: undefined }, names }));
     expect(html).not.toContain("data-line");
+  });
+});
+
+describe("the sandbox transfer, said in plain words with its time", () => {
+  const context: ToolLineContext = { to: "Michelle's Muse", owner: "Aaron", person: () => "Michelle" };
+  const line = (call: { name: string; args: string; result: string; ms?: number }) => {
+    const [item] = toolLines([call], context);
+    return `${item!.text}${item!.time ? `, ${item!.time}` : ""}`;
+  };
+
+  it("says the money went through the Capital One sandbox, with the transfer id and how long it took", () => {
+    expect(line({ name: "nessie_transfer", args: "$15.20 from acct_abc", result: "withdrawal wd_123 recorded", ms: 1200 })).toBe("Sent $15.20 through the Capital One sandbox, transfer wd_123, 1.2 s");
+  });
+
+  it("says the same for the local ledger when there is no key", () => {
+    expect(line({ name: "ledger_transfer", args: "$16 from the local ledger", result: "withdrawal wd_5 recorded", ms: 40 })).toBe("Sent $16 through the local ledger, transfer wd_5, 0.0 s");
+  });
+
+  it("says what the friend's side received", () => {
+    expect(line({ name: "nessie_deposit", args: "$15.20 to acct_def", result: "deposit dp_7 recorded", ms: 800 })).toBe("Received $15.20 through the Capital One sandbox, deposit dp_7, 0.8 s");
+    expect(line({ name: "ledger_deposit", args: "$16 to the local ledger", result: "deposit dp_8 recorded" })).toBe("Received $16 through the local ledger, deposit dp_8");
+  });
+
+  it("never shows the raw account id", () => {
+    expect(line({ name: "nessie_transfer", args: "$15.20 from acct_abc", result: "withdrawal wd_123 recorded" })).not.toContain("acct_abc");
+  });
+
+  it("says what failed, and why", () => {
+    expect(line({ name: "nessie_transfer", args: "$15.20 from acct_abc", result: "error: insufficient funds" })).toBe("Could not send the transfer: insufficient funds");
   });
 });

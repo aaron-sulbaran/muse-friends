@@ -31,7 +31,7 @@ export function WorkingRow({ snapshot, names, initials, initialSeconds }: Props)
           <MuseAvatar agent={agent} initial={initials[agent]} name={names.muse[agent]} size={36} />
         </span>
         <span className="text-[15px] leading-5">
-          {copy.working(listOf(agents.map((member) => names.muse[member])), agents.length)}
+          {(snapshot.inFlight.payment ? copy.settlingUp : copy.working)(listOf(agents.map((member) => names.muse[member])), agents.length)}
           {live ? (
             <>
               , <Elapsed flight={snapshot.inFlight} initialSeconds={initialSeconds} />
