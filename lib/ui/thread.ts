@@ -58,6 +58,15 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
     }
   }
 
+  // Your own private conversation with your Muse (D31): your question, and its answer as an aside. Only side a has one.
+  if (role === "a") {
+    for (const entry of snapshot.chat) {
+      const sender: Sender = entry.from === "user" ? { kind: "you", name: names.human[me] } : muse(me);
+      lines.push({ id: `thread-chat-${entry.id}`, sender, text: entry.text, onlyYou: true, ...(entry.from === "user" ? { to: snapshot.sides[me] } : {}), at: entry.at });
+    }
+    lines.sort((first, second) => Date.parse(first.at ?? "") - Date.parse(second.at ?? ""));
+  }
+
   // The simulated friend always sits in the second seat.
   const decision = plan.decisions.b;
   if (snapshot.simulatedFriend && decision !== "pending") {

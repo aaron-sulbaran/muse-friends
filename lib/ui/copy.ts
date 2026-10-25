@@ -10,7 +10,18 @@ export function recordingDate(iso: string): string {
 
 export const copy = {
   brand: "Muse Friends",
-  tagline: "A proposal for Muse",
+  // One string, so swapping in the Meta lockup later (once Meta clears it) is this line and nothing else.
+  tagline: "a proposal for Muse",
+  howItWorks: "How it works",
+  // The stage header's three moments, in the order they happen. The lines are the CDO's (header-activity README).
+  momentSaidYes: "Said yes",
+  momentSaidYesLine: "Both people tapped Set it up on the plan.",
+  momentMessageSent: "Message sent",
+  momentMessageSentLine: "The plan went out to both people's chats.",
+  momentTheyWent: "They went",
+  momentTheyWentLine: "Both people tapped We went after the plan. This is the number we measure: plans that happened, not messages sent.",
+  momentNotYet: "Not yet",
+  momentShow: "Show in conversation",
   activityTitle: "Activity",
   activityEmpty: (first: string, second: string) => `Nothing yet. When ${first} and ${second} talk, every message shows up here.`,
   reconnecting: "Reconnecting...",
@@ -133,10 +144,6 @@ export const copy = {
   modelErrorSecond: (muse: string) => `Still no answer from ${muse}. Use Replay to keep going.`,
   failedPlan: (muse: string) => `${muse} didn't answer, so this plan stopped.`,
 
-  followThrough: "Follow-through",
-  agentMessagesNotCounted: (count: number) => `Agent messages: ${count} (not counted)`,
-  humanTapsNotCounted: (count: number) => `Taps and sends: ${count} (not counted)`,
-  followThroughEmpty: "Nothing has happened yet. This counts plans that actually took place.",
 
   liveLabel: "Live",
   replayLabel: "Replay of a recorded run",
@@ -165,6 +172,14 @@ export const copy = {
   /** What the simulated friend says once she has decided, scripted to the plan's state. */
   threadFriendYes: "Yes, I'm in.",
   threadFriendNo: "Not this time, sorry.",
+
+  // The composer at the bottom of Sprout's phone (D31, D32): talk to the friend, or ask your own Muse in private.
+  composerMessage: (friend: string) => `Message ${friend}`,
+  composerAskPill: (muse: string) => `Ask ${muse}`,
+  composerAskPlaceholder: (muse: string) => `Ask ${muse} privately`,
+  composerAskUnavailable: (muse: string) => `Asking ${muse} is not available yet`,
+  composerSend: "Send",
+  composerSending: "Sending",
 
   drawerClose: "Close",
   drawerCopy: "Copy JSON",
