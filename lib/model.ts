@@ -111,6 +111,9 @@ export type TurnFailure = {
   // The same thing at finer grain: too many tool calls, no tool call after the nudge, or the model API failed.
   detail: "tool_cap" | "no_tool_call" | "api_error";
   message?: string;
+  // The x-request-id of each failed API call this turn made, in order (oldest first), so the next burst of 404s gives
+  // the Meta reps ids to look up. Only on an API error that carried one.
+  requestIds?: string[];
 };
 
 export type ModelCallTrace = {
@@ -210,6 +213,28 @@ function isModelNotFound(error: unknown): boolean {
   return error instanceof OpenAI.APIError && error.status === 404 && (error.code === "model_not_found" || /requested model was not found/i.test(error.message));
 }
 
+// The id Meta's API stamps on every response, error or not (the x-request-id header; the SDK reads it onto the error).
+export function requestIdOf(error: unknown): string | undefined {
+  if (!(error instanceof OpenAI.APIError)) return undefined;
+  return error.requestID ?? error.headers?.get("x-request-id") ?? undefined;
+}
+
+// The ids of the failed calls behind the error a call finally throws, kept beside it (weakly: nothing is added to the
+// error object itself) so the turn's failure can quote them. One id is the common case; a 404 burst has one per attempt.
+const requestTrail = new WeakMap<object, string[]>();
+
+function failed(error: unknown, ids: string[]): never {
+  if (typeof error === "object" && error !== null) requestTrail.set(error, ids.filter((id) => id !== ""));
+  throw error;
+}
+
+function requestIdsOf(error: unknown): string[] | undefined {
+  const trail = typeof error === "object" && error !== null ? requestTrail.get(error) : undefined;
+  const ids = trail ?? [requestIdOf(error) ?? ""];
+  const known = ids.filter((id) => id !== "");
+  return known.length > 0 ? known : undefined;
+}
+
 // Which model a turn is calling. Starts on the configured one; once a fallback has answered the rest of the turn stays
 // on it, so the reasoning items it replays come from one model and a down model is not retried on every call.
 type ModelRoute = { models: string[]; index: number };
@@ -225,16 +250,18 @@ async function createResponse(params: Omit<ResponseCreateParamsNonStreaming, "mo
   let chainRetries = 0;
   let notFoundRetries = 0;
   let retriesOnThisModel = 0;
+  const ids: string[] = [];
   for (;;) {
     const model = route.models[route.index];
     try {
       const response = await client.responses.create({ ...params, model });
       return { response, chainRetries, model, fallbackFrom: route.index > 0 ? route.models[0] : undefined };
     } catch (error) {
+      ids.push(requestIdOf(error) ?? "");
       if (isModelNotFound(error)) {
         const hasNext = route.index < route.models.length - 1;
         if (hasNext && retriesOnThisModel >= PRIMARY_NOT_FOUND_RETRIES) {
-          if (process.env.NODE_ENV !== "test") console.warn(`model ${model} answered 404 model_not_found; trying ${route.models[route.index + 1]}`);
+          if (process.env.NODE_ENV !== "test") console.warn(`model ${model} answered 404 model_not_found${describeRequestId(ids.at(-1))}; trying ${route.models[route.index + 1]}`);
           route.index += 1;
           retriesOnThisModel = 0;
           continue;
@@ -245,11 +272,11 @@ async function createResponse(params: Omit<ResponseCreateParamsNonStreaming, "mo
           retriesOnThisModel += 1;
           continue;
         }
-        return slowTail(client, params, route, error);
+        return slowTail(client, params, route, error, ids);
       }
       const status = statusOf(error);
       const retriable = params.previous_response_id && (status === 400 || status === 404);
-      if (!retriable || chainRetries >= CHAIN_RETRY_DELAYS_MS.length) throw error;
+      if (!retriable || chainRetries >= CHAIN_RETRY_DELAYS_MS.length) failed(error, ids);
       await sleep(CHAIN_RETRY_DELAYS_MS[chainRetries]);
       chainRetries += 1;
     }
@@ -259,9 +286,9 @@ async function createResponse(params: Omit<ResponseCreateParamsNonStreaming, "mo
 // The slow tail after the ladder: every model has answered 404 through it. Each tick tries the models in order (the
 // configured one first), so the model that comes back first answers, and the call is sticky on it. Gives up with the last 404
 // once the tail's time is used up.
-async function slowTail(client: OpenAI, params: Omit<ResponseCreateParamsNonStreaming, "model">, route: ModelRoute, last: unknown): Promise<Created> {
+async function slowTail(client: OpenAI, params: Omit<ResponseCreateParamsNonStreaming, "model">, route: ModelRoute, last: unknown, ids: string[]): Promise<Created> {
   const tailMs = notFoundTailMs();
-  if (tailMs > 0 && process.env.NODE_ENV !== "test") console.warn(`every model answered 404 model_not_found; retrying every ${NOT_FOUND_TAIL_INTERVAL_MS / 1000}s for up to ${tailMs / 1000}s`);
+  if (tailMs > 0 && process.env.NODE_ENV !== "test") console.warn(`every model answered 404 model_not_found${describeRequestId(ids.at(-1))}; retrying every ${NOT_FOUND_TAIL_INTERVAL_MS / 1000}s for up to ${tailMs / 1000}s`);
   const started = Date.now();
   let waited = 0;
   let failure = last;
@@ -275,13 +302,18 @@ async function slowTail(client: OpenAI, params: Omit<ResponseCreateParamsNonStre
         const response = await client.responses.create({ ...params, model: route.models[index] });
         return { response, chainRetries: 0, model: route.models[index], fallbackFrom: index > 0 ? route.models[0] : undefined };
       } catch (error) {
-        if (!isModelNotFound(error)) throw error;
+        ids.push(requestIdOf(error) ?? "");
+        if (!isModelNotFound(error)) failed(error, ids);
         failure = error;
       }
     }
   }
   route.index = 0;
-  throw failure;
+  return failed(failure, ids);
+}
+
+function describeRequestId(id: string | undefined): string {
+  return id ? ` (request id ${id})` : "";
 }
 
 // Stateless replay can be rejected when a reasoning item is malformed; drop reasoning items and retry once.
@@ -371,7 +403,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
         }
       }
     } catch (error) {
-      return finish("failed", { reason: "model_error", detail: "api_error", message: describeError(error) });
+      return finish("failed", { reason: "model_error", detail: "api_error", message: describeError(error), requestIds: requestIdsOf(error) });
     }
 
     const functionCalls = response.output.filter((item) => item.type === "function_call");
