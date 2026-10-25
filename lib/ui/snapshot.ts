@@ -284,6 +284,20 @@ function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null 
   return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null };
 }
 
+/**
+ * What a phone is allowed to read. The chat with a Muse (D31) belongs to the person on side a, and the snapshot is
+ * otherwise the same for both phones, so a request that says it is side b (`/api/state?role=b`) gets the snapshot
+ * without any chat line and without the "You asked" rows. No role, or `a`, is the full view the stage and the gate
+ * use. Anything else fails closed and gets the restricted view. If side b ever gets a chat, its lines are hidden from
+ * side a the same way: the lines would carry their side and this is the one place that filters them.
+ */
+export const CHAT_SIDE = "a";
+
+export function forRole(snapshot: UiSnapshot, role: string | null | undefined): UiSnapshot {
+  if (role === undefined || role === null || role === CHAT_SIDE) return snapshot;
+  return { ...snapshot, chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked") };
+}
+
 /** The latest caption read: what the model found, not the sentence the timeline says about it. */
 function reelReadFor(state: StateSnapshot): UiReelRead | null {
   const extracted = state.signals.findLast((signal) => signal.extracted !== undefined)?.extracted;

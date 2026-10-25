@@ -39,7 +39,8 @@ describe("a Muse's line for each turn that changed the plan", () => {
     const lines = threadLines(run, "a");
     expect(kinds(lines)).toEqual(["friend-muse", "your-muse", "friend-muse"]);
     expect(lines.map((line) => line.sender.name)).toEqual(["Mochi", "Sprout", "Mochi"]);
-    expect(lines.map((line) => line.sender.owner)).toEqual(["Mochi", "Sprout", "Mochi"]);
+    // The friend's Muse is "your friend's Muse" until someone says who the friend is; never "Mochi's Muse".
+    expect(lines.filter((line) => line.sender.kind === "friend-muse").map((line) => line.sender.owner)).toEqual(["your friend", "your friend"]);
     expect(lines.map((line) => line.sender.agent)).toEqual(["lisa", "aaron", "lisa"]);
   });
 
@@ -50,7 +51,7 @@ describe("a Muse's line for each turn that changed the plan", () => {
   it("names the people who own the Muses when the friend is Michelle", () => {
     const lines = threadLines({ ...run, simulatedFriend: true }, "a");
     expect(lines.map((line) => line.sender.name)).toEqual(["Mochi", "Sprout", "Mochi"]);
-    expect(lines.map((line) => line.sender.owner)).toEqual(["Michelle", "Sprout", "Michelle"]);
+    expect(lines.filter((line) => line.sender.kind === "friend-muse").map((line) => line.sender.owner)).toEqual(["Michelle", "Michelle"]);
   });
 
   it("leaves the opening intent out, because it opens the thread rather than moving the plan", () => {
