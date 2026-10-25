@@ -39,6 +39,12 @@ export const copy = {
   followUp: (friend: string) => `How was it? Want me to find a time with ${friend} next month?`,
   dropped: (friend: string) => `${friend}'s Muse couldn't find a time that works this week. I'll keep an eye out.`,
 
+  sendReelTitle: (friend: string) => `Send ${friend} the shawarma reel?`,
+  sendReelDetail: "A fictional reel, shaped like an Instagram post.",
+  sendReelAction: (friend: string) => `Send to ${friend}`,
+  simulatedTitle: "No friend here?",
+  simulatedDetail: "Play with a simulated friend: Michelle, fictional, played by a model.",
+  simulatedAction: "Play with a simulated friend",
   oldExchangeThem: "We should try that shawarma place!",
   oldExchangeYou: "Yes, let's go!",
 

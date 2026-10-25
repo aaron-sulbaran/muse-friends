@@ -34,6 +34,21 @@ export function postSignal() {
   return post("/api/signals", { scenario: "shawarma" });
 }
 
+/**
+ * A lone judge brings in the simulated friend: the room switches over (which clears
+ * the stage), then the simulated friend sends the shawarma reel, which starts a real run.
+ */
+export async function postSimulatedFriend(): Promise<Result> {
+  const switched = await post("/api/controls", { type: "simulated_friend", on: true });
+  if (!switched.ok) return switched;
+  return postSignal();
+}
+
+/** Asks the simulated friend to answer her card. Safe to repeat: the server answers once. */
+export function postSimulatedAnswer(planId: string) {
+  return post("/api/simulated-friend", { planId });
+}
+
 export function postClockAdvance() {
   return post("/api/clock", { action: "advance" });
 }

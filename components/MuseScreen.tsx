@@ -13,6 +13,7 @@ import { DraftCard } from "./DraftCard";
 import { HoldRow } from "./HoldRow";
 import { MuseAvatar } from "./MuseAvatar";
 import { RecommendationCard } from "./RecommendationCard";
+import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
 import { TabBar } from "./TabBar";
 
@@ -23,6 +24,8 @@ type Props = {
   framed: boolean;
   /** Called after an action so the caller can refresh the snapshot at once. */
   onChanged: () => void;
+  /** True while a recording is on screen: nothing here may touch live state. */
+  readOnly?: boolean;
 };
 
 function StatusBar({ time }: { time: string }) {
@@ -45,7 +48,7 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
 }
 
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
-export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
+export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false }: Props) {
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -58,6 +61,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
   }, [view.items.length, thinking]);
 
   async function decide(planId: string, choice: "accept" | "decline") {
+    if (readOnly) return;
     setPending(true);
     await postDecision(planId, role, choice);
     setPending(false);
@@ -65,6 +69,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
   }
 
   async function handoff(planId: string, via: "whatsapp" | "copy") {
+    if (readOnly) return;
     await postHandoff(planId, role, via);
     onChanged();
   }
@@ -88,14 +93,16 @@ export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
             role={role}
             view={view}
             simulatedFriend={simulated}
-            pending={pending}
+            pending={pending || readOnly}
             onDecide={(choice) => decide(item.plan.id, choice)}
           />
         );
       case "draft-card":
         return <DraftCard draft={item.draft} onHandoff={(via) => handoff(item.plan.id, via)} />;
+      case "start-card":
+        return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
-        return <HoldRow planId={item.planId} role={role} title={item.title} action={item.detail} />;
+        return <HoldRow planId={item.planId} role={role} title={item.title} action={item.detail} disabled={readOnly} />;
     }
   }
 
@@ -105,7 +112,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
       <header className="relative flex shrink-0 flex-col items-center gap-1.5 pb-3 pt-2">
         <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
         <StatusPill name={view.museName} status={view.status} />
-        {role === "b" ? (
+        {role === "b" && !readOnly ? (
           <button
             type="button"
             onClick={() => setSheetOpen(true)}

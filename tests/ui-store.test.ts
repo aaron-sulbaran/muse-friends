@@ -74,3 +74,24 @@ describe("the UI over Lane A's real lifecycle and controls", () => {
     expect(snapshot.followThrough.events).toHaveLength(0);
   });
 });
+
+describe("a simulated friend is Michelle in every sentence about her", () => {
+  it("renames the persona in the draft, notes, and timeline text, and leaves the raw message as sent", async () => {
+    const store = await freshStore();
+    await store.putRoom({ ...(await store.getRoom()), simulatedFriend: true });
+    await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", choice: "accept" });
+    await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "accept" });
+    const snapshot = await ui(store);
+    expect(snapshot.plan?.draft).toContain("Hey Michelle");
+    expect(snapshot.plan?.draft).not.toContain("Mochi");
+    expect(snapshot.notes.map((note) => note.text).join(" ")).not.toContain("Mochi");
+    expect(snapshot.messages[0].note).not.toContain("Mochi");
+    expect(JSON.stringify(snapshot.messages[0].raw)).toContain("Mochi");
+  });
+
+  it("leaves the text alone when the friend is real", async () => {
+    const store = await freshStore();
+    const snapshot = await ui(store);
+    expect(snapshot.plan?.draft).toContain("Hey Mochi");
+  });
+});

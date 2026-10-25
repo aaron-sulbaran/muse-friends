@@ -1,5 +1,6 @@
 import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
+import { simulatedFriend } from "./tokens";
 import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiPlan, UiSnapshot } from "./types";
 
 /*
@@ -15,6 +16,17 @@ export type UiOverlay = {
 
 /** Taps and sends that move a plan along. Not the outcome, so never counted. */
 const humanTapKinds = new Set(["human_decision", "handoff_opened"]);
+
+/**
+ * With a simulated friend, side b's person is Michelle, but the agents and the fixtures write text with
+ * the persona name. People see Michelle in every sentence about her; the raw JSON in the drawer stays as sent.
+ */
+function renameFor(state: StateSnapshot): (text: string) => string {
+  if (!state.room.simulatedFriend) return (text) => text;
+  const persona = displayName("lisa");
+  const pattern = new RegExp(`\\b${persona}\\b`, "g");
+  return (text) => text.replace(pattern, simulatedFriend.human);
+}
 
 function latestPlan(plans: Plan[]): Plan | null {
   return plans.at(-1) ?? null;
@@ -42,6 +54,7 @@ function placeFor(plan: Plan, state: StateSnapshot): string | null {
 }
 
 function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
+  const rename = renameFor(state);
   return {
     id: plan.id,
     contextId: plan.contextId,
@@ -55,7 +68,7 @@ function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
       a: (plan.decisions.aaron ?? "pending") as Decision,
       b: (plan.decisions.lisa ?? "pending") as Decision,
     },
-    draft: plan.draft ?? null,
+    draft: plan.draft ? rename(plan.draft) : null,
     droppedReason: plan.state === "dropped" ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null) : null,
     history: plan.history.map(({ state, at }) => ({ state, at })),
   };
@@ -81,13 +94,14 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
 
 const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed"]);
 
-function toNotes(events: StateSnapshot["events"]): UiNote[] {
+function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
   return events
     .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]))
-    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: event.text }));
+    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(event.text) }));
 }
 
 function toUiMessages(state: StateSnapshot): UiMessage[] {
+  const rename = renameFor(state);
   return state.messages.map((record) => {
     const { message } = record;
     const rejected = record.delivery !== "delivered";
@@ -102,7 +116,7 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
       activity: message.activity ? { title: message.activity.title, place: message.activity.place } : undefined,
       windows: message.windows,
       reason: message.reason,
-      note: message.note,
+      note: message.note ? rename(message.note) : undefined,
       shared: record.stamp.passed,
       removed: record.stamp.removed,
       at: message.at,
@@ -142,8 +156,8 @@ function sharingFor(owner: AgentId, state: StateSnapshot): SharingSettings {
 }
 
 /** The counter counts one thing: plans that happened. Lane A marks that moment with a followed_through event. */
-function toFollowThrough(events: StateSnapshot["events"]): FollowThroughEvent[] {
-  return events.filter((event) => event.kind === "followed_through").map((event) => ({ id: event.id, label: event.text, at: event.at }));
+function toFollowThrough(events: StateSnapshot["events"], rename: (text: string) => string): FollowThroughEvent[] {
+  return events.filter((event) => event.kind === "followed_through").map((event) => ({ id: event.id, label: rename(event.text), at: event.at }));
 }
 
 export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapshot {
@@ -156,10 +170,10 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: toNotes(state.events),
+    notes: toNotes(state.events, renameFor(state)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
-      events: toFollowThrough(state.events),
+      events: toFollowThrough(state.events, renameFor(state)),
       agentMessageCount: messages.length,
       humanTapCount: state.events.filter((event) => event.actor === "human" && humanTapKinds.has(event.kind)).length,
     },
