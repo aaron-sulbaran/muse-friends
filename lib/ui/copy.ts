@@ -18,6 +18,7 @@ export const copy = {
   /** `reelOwner` is already possessive: "Lisa's" or "your". */
   cardReason: (reelOwner: string) => `Based on ${reelOwner} reel and both calendars.`,
   placeKeptPrivate: "Place kept private",
+  cardReplan: "That time doesn't work for me",
   declineA: "Not now",
   acceptA: "Reach out",
   declineB: "Not now",
@@ -35,6 +36,8 @@ export const copy = {
   holdBubble: (when: string) => `I added a hold for ${when}.`,
   holdTitle: (activity: string, friend: string) => `${activity} with ${friend}`,
   holdAction: "Add to calendar",
+  holdGoogle: "Add to Google Calendar",
+  holdDetails: (first: string, second: string) => `${first} and ${second} planned this in Muse Friends.`,
   reminder: (activity: string, friend: string, time: string) => `${activity} with ${friend} at ${time}.`,
   followUp: (friend: string) => `How was it? Want me to find a time with ${friend} next month?`,
   dropped: (friend: string) => `${friend}'s Muse couldn't find a time that works this week. I'll keep an eye out.`,

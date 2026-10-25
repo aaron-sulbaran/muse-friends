@@ -90,6 +90,25 @@ describe("the journey, phone by phone", () => {
     for (const role of ["a", "b"] as Role[]) expect(kinds(viewForRole(at("scheduled"), role).items)).toContain("hold-row");
   });
 
+  it("the hold row offers a prefilled Google Calendar event naming the other person, in UTC, with the place", () => {
+    const row = viewForRole(at("scheduled"), "a").items.find((item) => item.kind === "hold-row");
+    const url = new URL(row && row.kind === "hold-row" && row.googleUrl ? row.googleUrl : "");
+    expect(url.searchParams.get("text")).toBe("Shawarma Point with Mochi");
+    expect(url.searchParams.get("dates")).toBe("20261027T230000Z/20261028T010000Z");
+    expect(url.searchParams.get("details")).toBe("Sprout and Mochi planned this in Muse Friends.");
+    expect(url.searchParams.get("location")).toBe("E 6th St, Austin");
+    const other = viewForRole(at("scheduled"), "b").items.find((item) => item.kind === "hold-row");
+    expect(new URL(other && other.kind === "hold-row" && other.googleUrl ? other.googleUrl : "").searchParams.get("text")).toBe("Shawarma Point with Sprout");
+  });
+
+  it("the Google Calendar link never carries a place that was withheld", () => {
+    const state = snapshotAtPlanState("scheduled");
+    state.redactions.push({ id: "red_x", contextId: state.threads[0].contextId, messageId: state.messages[1].message.id, from: "lisa", to: "aaron", removed: ["location"], detail: "Location removed.", at: state.clock.now });
+    const row = viewForRole(toUiSnapshot(state, live), "a").items.find((item) => item.kind === "hold-row");
+    const url = new URL(row && row.kind === "hold-row" && row.googleUrl ? row.googleUrl : "");
+    expect(url.searchParams.has("location")).toBe(false);
+  });
+
   it("reminded and followed up add a day separator and the Muse's line", () => {
     const reminded = viewForRole(at("reminded"), "a").items;
     expect(reminded.some((item) => item.kind === "bubble" && item.text.startsWith("Shawarma Point with Mochi at 6"))).toBe(true);

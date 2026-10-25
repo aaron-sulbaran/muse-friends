@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
 import { formatStatusBarTime, namesFor } from "@/lib/ui/format";
-import { postDecision, postHandoff } from "@/lib/ui/actions";
+import { postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import type { Role, UiSnapshot } from "@/lib/ui/types";
 import { ChatBubble, DaySeparator, TypingDots } from "./ChatBubble";
@@ -53,6 +53,7 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
 export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false }: Props) {
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
+  const [replanError, setReplanError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("chat");
   const [goalOpen, setGoalOpen] = useState(false);
@@ -76,6 +77,16 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     setPending(true);
     await postDecision(planId, role, choice);
     setPending(false);
+    onChanged();
+  }
+
+  async function replan(planId: string) {
+    if (readOnly) return;
+    setPending(true);
+    setReplanError(null);
+    const result = await postReplan(planId, role);
+    setPending(false);
+    if (!result.ok) setReplanError(result.message);
     onChanged();
   }
 
@@ -106,6 +117,8 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             simulatedFriend={simulated}
             pending={pending || readOnly}
             onDecide={(choice) => decide(item.plan.id, choice)}
+            onReplan={() => replan(item.plan.id)}
+            error={replanError}
           />
         );
       case "draft-card":
@@ -113,7 +126,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
-        return <HoldRow planId={item.planId} role={role} title={item.title} action={item.detail} disabled={readOnly} />;
+        return <HoldRow planId={item.planId} role={role} title={item.title} googleUrl={item.googleUrl} disabled={readOnly} />;
     }
   }
 
