@@ -348,7 +348,7 @@ function paymentToolCalls(event: StateSnapshot["events"][number], state: StateSn
 }
 
 /** Whose Muse prepared a plan's payment, so a payment row's tool lines name who confirms. */
-function paymentPayer(payments: UiPayment[], planId: string | undefined): MemberId | undefined {
+export function paymentPayer(payments: UiPayment[], planId: string | undefined): MemberId | undefined {
   return planId ? payments.filter((entry) => entry.planId === planId).at(-1)?.from : undefined;
 }
 

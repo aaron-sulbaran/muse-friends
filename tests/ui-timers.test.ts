@@ -8,7 +8,7 @@ import { ToolLines } from "@/components/ToolLines";
 import { WorkingRow } from "@/components/WorkingRow";
 import { snapshotAtPlanState } from "@/lib/seed/states";
 import { discInitials, formatDuration, formatElapsed, namesFor } from "@/lib/ui/format";
-import { paymentNoteExtras, toUiSnapshot } from "@/lib/ui/snapshot";
+import { paymentPayer, toUiSnapshot } from "@/lib/ui/snapshot";
 import { inFlightSince } from "@/lib/ui/timers";
 import { noteLineContext, toolCallsOf, toolLines, type ToolLineContext } from "@/lib/ui/tools";
 import type { UiNote, UiPayment, UiSnapshot } from "@/lib/ui/types";
@@ -139,11 +139,11 @@ describe("how long each landed row took", () => {
 describe("each tool's own time", () => {
   const context: ToolLineContext = { to: "Michelle's Muse", owner: "Aaron", person: () => "Michelle" };
 
-  it("is read from ms, or from durationMs, as a whole number of milliseconds", () => {
+  it("is read from ms, as a whole number of milliseconds", () => {
     const calls = toolCallsOf({
       toolCalls: [
         { name: "get_my_calendar", args: "2026-10-25 to 2026-10-31", result: "13 free blocks, 14 busy", ms: 412.6 },
-        { name: "get_wallet", args: "", result: "balance read", durationMs: 90 },
+        { name: "get_wallet", args: "", result: "balance read", ms: 90 },
         { name: "read_signal", args: "", result: "reel from Mochi", ms: -4 },
         { name: "read_receipt", args: "", result: "seeded receipt read", ms: "fast" },
       ],
@@ -209,26 +209,15 @@ describe("the tool lines under a payment's rows", () => {
   const names = namesFor({ sides: { aaron: "Sprout", lisa: "Mochi", kai: "Pebble" }, humans: { aaron: "Aaron", lisa: "Michelle" } });
   const proposed: UiNote = { id: "n1", kind: "payment_proposed", at: "2026-10-27T20:00:01-05:00", text: "Sprout prepared a payment", payer: "aaron", toolCalls: calls };
 
-  const transfer = { name: "nessie_transfer", args: "$15.20 from acct_a", result: "withdrawal wd_9 recorded", ms: 1200 };
-  const deposit = { name: "nessie_deposit", args: "$15.20 to acct_b", result: "deposit dp_9 recorded", ms: 900 };
-  const accept = { name: "accept_payment", args: "pay_1", result: "deposited $15.20", ms: 150 };
-  const full = payment({ toolCalls: [...calls, transfer, accept, deposit] });
-
-  it("give the proposed row the payer's own calls, the sent row the transfer, the received row the deposit", () => {
-    expect(paymentNoteExtras([full], "plan_1", "payment_proposed")).toEqual({ payer: "aaron", toolCalls: calls });
-    expect(paymentNoteExtras([full], "plan_1", "payment_sent")).toEqual({ payer: "aaron", toolCalls: [transfer] });
-    expect(paymentNoteExtras([full], "plan_1", "payment_received")).toEqual({ payer: "aaron", toolCalls: [accept, deposit] });
+  it("take the payer from the plan's latest payment", () => {
+    expect(paymentPayer([payment({ id: "pay_0", from: "lisa", to: "aaron" }), payment()], "plan_1")).toBe("aaron");
+    expect(paymentPayer([payment({ from: "lisa", to: "aaron" })], "plan_1")).toBe("lisa");
   });
 
-  it("take the latest payment of the plan", () => {
-    expect(paymentNoteExtras([payment({ id: "pay_0", toolCalls: [] }), payment()], "plan_1", "payment_proposed").toolCalls).toEqual(calls);
-  });
-
-  it("take only the payer when the payment recorded no calls of that kind, and nothing when there is no payment", () => {
-    expect(paymentNoteExtras([payment({ toolCalls: undefined })], "plan_1", "payment_proposed")).toEqual({ payer: "aaron" });
-    expect(paymentNoteExtras([payment()], "plan_1", "payment_sent")).toEqual({ payer: "aaron" });
-    expect(paymentNoteExtras([payment()], "plan_other", "payment_proposed")).toEqual({});
-    expect(paymentNoteExtras([payment()], undefined, "payment_proposed")).toEqual({});
+  it("have no payer when the plan has no payment", () => {
+    expect(paymentPayer([payment()], "plan_other")).toBeUndefined();
+    expect(paymentPayer([payment()], undefined)).toBeUndefined();
+    expect(paymentPayer([], "plan_1")).toBeUndefined();
   });
 
   it("name the people, from the payer's side", () => {
