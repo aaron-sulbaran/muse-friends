@@ -358,7 +358,7 @@ export function categoriesInMessage(message: {
 // Sharing policy and what enforcement leaves behind
 // ---------------------------------------------------------------------------
 
-export const SHARE_TIERS = ["close", "friend", "off"] as const;
+export const SHARE_TIERS = ["close", "friend", "acquaintance", "off"] as const;
 export const ShareTier = z.enum(SHARE_TIERS);
 export type ShareTier = z.infer<typeof ShareTier>;
 
@@ -386,11 +386,15 @@ export type SharePolicy = z.infer<typeof SharePolicy>;
 export const TIER_DEFAULTS: Record<ShareTier, Record<Category, boolean>> = {
   close: { food: true, events: true, availability: true, location: true, interests: true },
   friend: { food: true, events: true, availability: true, location: false, interests: true },
+  // Someone met once or twice: interests and food, and free windows only (windows are never more than that).
+  acquaintance: { food: true, events: false, availability: true, location: false, interests: true },
   off: { food: false, events: false, availability: false, location: false, interests: false },
 };
 
 export function isCategoryAllowed(policy: SharePolicy | null | undefined, category: Category): boolean {
   if (!policy || policy.tier === "off") return false;
+  // An acquaintance never learns where someone is, whatever the per-category switches say.
+  if (policy.tier === "acquaintance" && category === "location") return false;
   return policy.categories[category] ?? TIER_DEFAULTS[policy.tier][category];
 }
 
@@ -587,6 +591,9 @@ export const Plan = z.strictObject({
   activity: Activity.optional(),
   window: Window.optional(),
   decisions: z.record(AgentId, Decision),
+  // The contact the person chose to follow up with, when the plan came from a follow-up instead of a reel.
+  // Chosen by the person, never inferred.
+  target: Id.optional(),
   // Present when this plan is a group of three.
   group: PlanGroup.optional(),
   // "hangout" when absent. A trip is a group plan months out; see TripState.

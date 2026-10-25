@@ -1,3 +1,4 @@
+import type { Contact } from "@/lib/seed/contacts";
 import { MAX_WINDOW_HOURS, THREAD_CAP, type ActivityEvent, type AgentMessage, type MemberId, type Plan, type PlanGroup, type SendToFriendArgs, type Signal, type Window } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import type { AgentRuntimeContext } from "./context";
@@ -21,24 +22,30 @@ const MIN_WINDOW_MS = HOUR_MS;
 
 export type FallbackOutcome = { sent: true } | { sent: false; reason: "no_windows" | "send_failed"; error?: string };
 
-function capLength(window: Window): Window {
-  const end = Math.min(toMs(window.end), toMs(window.start) + MAX_WINDOW_HOURS * HOUR_MS);
+// When in the day a plan of this kind happens, and how long a window may be.
+type Part = { from: number; to: number; maxHours: number };
+const EVENING_PART: Part = { from: EVENING.from, to: EVENING.to, maxHours: MAX_WINDOW_HOURS };
+// A coffee with an acquaintance: mid-morning to early evening, one to two hours.
+const COFFEE_PART: Part = { from: 10, to: 19, maxHours: 2 };
+
+function capLength(window: Window, maxHours: number = MAX_WINDOW_HOURS): Window {
+  const end = Math.min(toMs(window.end), toMs(window.start) + maxHours * HOUR_MS);
   return { start: window.start, end: toCentralIso(end) };
 }
 
 // Up to three windows, earliest first, one per day: the evening part of each free block when there is one
 // (a meal or a hang is an evening plan), otherwise any free stretch of an hour or more.
-export function fallbackWindows(free: Window[], skip: Set<string> = new Set()): Window[] {
+export function fallbackWindows(free: Window[], skip: Set<string> = new Set(), part: Part = EVENING_PART): Window[] {
   const evenings: Window[] = [];
   for (const block of free) {
     let day = Date.parse(`${block.start.slice(0, 10)}T00:00:00-05:00`);
     while (day < toMs(block.end)) {
-      const evening = { start: toCentralIso(day + EVENING.from * HOUR_MS), end: toCentralIso(day + EVENING.to * HOUR_MS) };
-      evenings.push(...intersectWindows([block], [evening]).map(capLength));
+      const evening = { start: toCentralIso(day + part.from * HOUR_MS), end: toCentralIso(day + part.to * HOUR_MS) };
+      evenings.push(...intersectWindows([block], [evening]).map((window) => capLength(window, part.maxHours)));
       day += 24 * HOUR_MS;
     }
   }
-  const anytime = free.filter((block) => toMs(block.end) - toMs(block.start) >= MIN_WINDOW_MS).map(capLength);
+  const anytime = free.filter((block) => toMs(block.end) - toMs(block.start) >= MIN_WINDOW_MS).map((block) => capLength(block, part.maxHours));
   const picked: Window[] = [];
   const days = new Set<string>();
   for (const window of [...evenings, ...anytime]) {
@@ -138,6 +145,20 @@ export async function fallbackReply(
     return send(ctx, { type: "counter", reason: "no_overlap", windows: own, note: "Those do not fit me, here are times I am free." }, "its free windows");
   }
   return send(ctx, { type: "decline", reason: "no_overlap", note: "I cannot find a time that works." }, "a decline, no shared free time");
+}
+
+// The opening of a follow-up with an acquaintance could not be written by the model: a low-key coffee, up to
+// three daytime windows of one to two hours from the person's own calendar, and a short note that says they met.
+// What it shares is limited by the acquaintance tier, as for any message.
+export async function fallbackFollowUp(ctx: AgentRuntimeContext, contact: Contact): Promise<FallbackOutcome> {
+  const free = await ownFreeBlocks(ctx.store, ctx.agent);
+  const windows = fallbackWindows(free, new Set(), COFFEE_PART);
+  if (windows.length === 0) return { sent: false, reason: "no_windows" };
+  return send(
+    ctx,
+    { type: "intent", reason: "interest_match", activity: { kind: "events", title: "Coffee" }, windows, note: "Good meeting you. Want to grab a coffee?", share: ["interests"] },
+    `its free windows for a coffee with ${contact.displayName}`,
+  );
 }
 
 // The coordinator of a group could not open it: the same intent to every member that has not heard from it yet,

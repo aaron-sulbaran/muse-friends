@@ -8,7 +8,8 @@ import {
   type MessageRecord,
   type Window,
 } from "@/lib/protocol";
-import { enforceSharePolicy, projectShared } from "@/lib/policy";
+import { enforceSharePolicy, projectShared, startGate } from "@/lib/policy";
+import { getContact } from "@/lib/seed/contacts";
 import { getPersona } from "@/lib/seed/fixtures";
 import type { ToolMeta } from "@/lib/model";
 import type { AgentRuntimeContext } from "./context";
@@ -66,12 +67,18 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
   const contextId = ctx.contexts?.[friend] ?? ctx.contextId;
 
   const { store } = ctx;
+  // Second lock on the same door: a thread for a follow-up opens only for a contact who passes the gate,
+  // whoever calls this and however.
+  if (ctx.target && !(await store.getThread(ctx.contextId))) {
+    const contact = getContact(ctx.target);
+    if (!contact || !startGate(contact).ok) return fail("This person does not follow you back, so no conversation can be opened with them.");
+  }
   const nowMs = ctx.wallNow?.() ?? Date.now();
   const at = toCentralIso(nowMs);
 
   const thread = await store.getThread(contextId);
   const prior = (await store.listMessages(contextId)).map((record) => record.message);
-  if (!thread && !ctx.signalId) return fail("There is no open conversation to send into.");
+  if (!thread && !ctx.signalId && !ctx.target) return fail("There is no open conversation to send into.");
   if (thread && ENDED.has(thread.state)) return fail("This conversation has already ended. Do not send anything else.");
 
   const seq = (thread?.messageCount ?? 0) + 1;

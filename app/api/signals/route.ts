@@ -1,9 +1,10 @@
 import { after } from "next/server";
 import { z } from "zod";
-import { reserveRun, runBudget } from "@/lib/agent/caps";
+import { refundRun, reserveRun, runBudget } from "@/lib/agent/caps";
+import { startFollowUp } from "@/lib/agent/followup";
 import { startGroup } from "@/lib/agent/group";
 import { driveTrip, startTrip } from "@/lib/agent/trip";
-import { injectSignal, runSignalTurn } from "@/lib/agent/runtime";
+import { injectSignal, runFollowUpTurn, runSignalTurn } from "@/lib/agent/runtime";
 import { newId } from "@/lib/agent/ids";
 import { httpDeliver } from "@/lib/agent/wire";
 import { getLiveReel } from "@/lib/instagram";
@@ -12,13 +13,21 @@ import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
 import { modelPlayers } from "@/lib/ui/group-players";
 
-// "Lisa sent Aaron a reel": injects the signal and starts the receiving agent's turn after responding.
-// The reel is read live from its owner's Instagram (lib/instagram.ts) when a token is set, else the seeded,
-// fictional one; either way the caption is read by Muse Spark live.
+// Starts a plan. Three ways in, seeded by default:
+//   {} or { scenario: "shawarma" }               "Lisa sent Aaron a reel": injects the reel and starts the
+//                                                receiving agent's turn after responding. The reel is read live
+//                                                from its owner's Instagram (lib/instagram.ts) when a token is
+//                                                set, else the seeded, fictional one; either way the caption is
+//                                                read by Muse Spark live.
+//   { scenario: "follow_up", target: "<id>" }    a person names someone they met and their Muse reaches out.
+//                                                The contact is the person's choice. It starts only if you
+//                                                and the contact follow each other (409 not_mutual otherwise,
+//                                                with the refusal logged on the timeline and no thread).
 //
 // Live runs spend Muse credits, so each start is counted against a per-room and a global hourly cap
 // (lib/agent/caps.ts). Past either, the answer is 429 { paused: true, text: "Live runs paused, playing a
-// recording" }: the room is meant to fall back to Replay. GET returns the counters for the JSON drawer.
+// recording" }: the room is meant to fall back to Replay. A start that writes nothing (an unknown contact) gives its slot back; a refusal keeps it.
+// GET returns the counters for the JSON drawer.
 //
 // scenario "group" is the same reel, but Sprout makes it a plan for three (Mochi and Pebble): one pair thread per
 // friend, the protocol unchanged, a groupId on each thread, one plan with a group on it.
@@ -27,7 +36,10 @@ import { modelPlayers } from "@/lib/ui/group-players";
 // the chat. Sprout asks each Muse a bounded question; a model plays the people who are not in the room (lib/agent/trip.ts).
 export const maxDuration = 300;
 
-const Body = z.strictObject({ scenario: z.enum(["shawarma", "group", "trip"]).default("shawarma") });
+const Body = z.union([
+  z.strictObject({ scenario: z.enum(["shawarma", "group", "trip"]).default("shawarma") }),
+  z.strictObject({ scenario: z.literal("follow_up"), target: z.string().min(1).max(40) }),
+]);
 
 export async function GET() {
   return Response.json({ budget: runBudget() }, { headers: { "Cache-Control": "no-store" } });
@@ -47,6 +59,31 @@ export async function POST(request: Request) {
   }
   const budget = reserved.budget;
   const store = await getStore();
+
+  const origin = new URL(request.url).origin;
+
+  if (body.data.scenario === "follow_up") {
+    const started = await startFollowUp(store, { target: body.data.target });
+    if (!started.ok) {
+      // Nothing was written or started (an unknown contact), so the slot goes back.
+      refundRun();
+      return Response.json({ error: started.error }, { status: started.status });
+    }
+    if (!started.started) {
+      // The gate refused: no model call, but the refusal writes a plan and timeline rows, so it keeps its slot.
+      // A public URL cannot be used to flood the store with refusals.
+      return Response.json({ refused: true, reason: started.reason, text: started.text, contactId: started.contact.id, planId: started.planId }, { status: 409 });
+    }
+    const { contextId, planId, contact } = started;
+    after(async () => {
+      try {
+        await runFollowUpTurn({ store, agent: "aaron", contact, contextId, deliver: httpDeliver(origin, "aaron") });
+      } catch (error) {
+        console.error("follow-up turn failed", error);
+      }
+    });
+    return Response.json({ contextId, planId, contactId: contact.id, status: { state: "working" }, budget }, { status: 202 });
+  }
 
   if (body.data.scenario === "trip") {
     const started = await startTrip(store);
@@ -78,7 +115,6 @@ export async function POST(request: Request) {
         },
       }
     : { ...seeded, id: newId("sig") };
-  const origin = new URL(request.url).origin;
 
   if (body.data.scenario === "group") {
     const started = await startGroup(store, signal);
@@ -97,7 +133,6 @@ export async function POST(request: Request) {
   }
 
   const { contextId, planId } = await injectSignal(store, signal);
-
   after(async () => {
     try {
       await runSignalTurn({ store, agent: signal.to, signalId: signal.id, contextId, deliver: httpDeliver(origin, signal.to) });

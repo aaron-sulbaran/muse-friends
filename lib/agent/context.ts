@@ -15,6 +15,8 @@ export type AgentRuntimeContext = {
   wallNow?: () => number;
   // The signal this turn is about (the agent that received the reel).
   signalId?: string;
+  // The contact a follow-up is for, chosen by the person. Like a signal, it is what lets a turn open a thread.
+  target?: string;
   // Who this turn may message. Defaults to the other phone seat; a group turn lists its members, and the third
   // friend's turn lists the coordinator.
   counterparts?: MemberId[];

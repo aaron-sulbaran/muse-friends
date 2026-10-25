@@ -1,5 +1,5 @@
 import { getRoom, withRoom } from "./room";
-import type { Category, MemberId, Role } from "./types";
+import type { Category, MemberId, Role, ShareTier } from "./types";
 
 export type Result = { ok: true } | { ok: false; message: string; paused?: boolean };
 
@@ -154,7 +154,7 @@ export function postReset() {
   return post("/api/controls", { type: "reset" });
 }
 
-export type PrivacyChange = { tier: "close" | "friend" | "off" } | { category: Category; on: boolean };
+export type PrivacyChange = { tier: ShareTier } | { category: Category; on: boolean };
 
 export function postPrivacy(change: PrivacyChange) {
   return post("/api/controls", { type: "privacy", side: "b", ...change });
