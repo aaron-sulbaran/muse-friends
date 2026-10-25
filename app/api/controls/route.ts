@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { resetDemo, setSharePolicy } from "@/lib/agent/controls";
-import { Category, ShareTier } from "@/lib/protocol";
+import { resetDemo, setPayments, setSharePolicy } from "@/lib/agent/controls";
+import { otherAgent } from "@/lib/agent/ids";
+import { Category, PAYMENT_MAX_DOLLARS, ShareTier } from "@/lib/protocol";
+import { ROLE_TO_AGENT } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
 import { readSnapshot } from "@/lib/ui/source";
 
@@ -20,8 +22,18 @@ const privacySchema = z
     message: "Send a tier, or a category with on",
   });
 
+/** Lets a person's Muse settle up with their friend, up to a cap per plan, or switches it off. Either side may. */
+const paymentsSchema = z.object({
+  type: z.literal("payments"),
+  side: z.enum(["a", "b"]),
+  enabled: z.boolean(),
+  /** Whole dollars per plan; when on and left out, the last cap is kept (20 the first time). */
+  cap: z.number().int().min(0).max(PAYMENT_MAX_DOLLARS).optional(),
+});
+
 const bodySchema = z.union([
   privacySchema,
+  paymentsSchema,
   z.object({ type: z.literal("reset") }),
   z.object({ type: z.literal("simulated_friend"), on: z.boolean() }),
 ]);
@@ -45,6 +57,12 @@ export async function POST(request: Request) {
     // Switching who plays side b starts the room over, so the judge begins from the empty stage.
     const { resetCount } = await resetDemo(store, { simulatedFriend: body.on });
     return NextResponse.json({ data: { simulatedFriend: body.on, resetCount }, error: null });
+  }
+  if (body.type === "payments") {
+    const owner = ROLE_TO_AGENT[body.side];
+    const result = await setPayments(store, { owner, friend: otherAgent(owner), enabled: body.enabled, capPerPlan: body.cap });
+    if (!result.ok) return refuse(result.error, result.status);
+    return NextResponse.json({ data: { payments: result.value.policy.payments }, error: null });
   }
   if (body.tier === "off") return refuse("Turning sharing off ends the plan, so it stays on in this demo", 409);
   if (body.category === "availability" && body.on === false) {

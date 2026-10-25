@@ -1,8 +1,10 @@
 import type { RunBudget } from "@/lib/agent/caps";
-import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
+import { paymentsEnabled } from "@/lib/agent/wallets";
+import { CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
-import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiSnapshot } from "./types";
+import type { Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -114,7 +116,7 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed", "busy_added"]);
+const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed", "busy_added", "payment_sent", "payment_received", "payment_declined", "payment_failed"]);
 
 function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
   return events
@@ -124,7 +126,8 @@ function toNotes(events: StateSnapshot["events"], rename: (text: string) => stri
 
 function toUiMessages(state: StateSnapshot): UiMessage[] {
   const rename = renameFor(state);
-  return state.messages.map((record) => {
+  // Payments have a channel of their own (UiSnapshot.payments); they are not chat bubbles.
+  return state.messages.filter((record) => !isPaymentType(record.message.type)).map((record) => {
     const { message } = record;
     const rejected = record.delivery !== "delivered";
     return {
@@ -203,5 +206,45 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
     budget: overlay.budget ?? null,
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
+    wallets: { aaron: walletFor("aaron", state), lisa: walletFor("lisa", state) },
+    payments: paymentsFrom(state.messages).map(toUiPayment),
+    paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
+    sandbox: sandboxFor(state),
+  };
+}
+
+function walletFor(owner: AgentId, state: StateSnapshot): UiWallet | null {
+  const wallet = state.room.wallets?.[owner];
+  return wallet ? { balance: wallet.balance, nickname: wallet.nickname, source: wallet.source, accountId: wallet.accountId } : null;
+}
+
+function paymentsScopeFor(owner: AgentId, state: StateSnapshot): PaymentsSettings {
+  const scope = state.policies.find((candidate) => candidate.owner === owner)?.payments;
+  return { enabled: Boolean(scope?.enabled && scope.capPerPlan > 0), cap: scope?.capPerPlan ?? 0 };
+}
+
+function sandboxFor(state: StateSnapshot): UiSnapshot["sandbox"] {
+  const wallets = Object.values(state.room.wallets ?? {});
+  const connected = wallets.length > 0 && wallets.every((wallet) => wallet.source === "nessie");
+  const enabled = paymentsEnabled();
+  return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox" : "Sandbox not connected, using a local ledger" };
+}
+
+function toUiPayment(view: PaymentView): UiPayment {
+  return {
+    id: view.paymentId,
+    planId: view.planId,
+    from: view.payer,
+    to: view.payee,
+    amount: view.amount,
+    reason: view.reason,
+    ...(view.note ? { note: view.note } : {}),
+    status: view.status,
+    source: view.source,
+    ...(view.withdrawalId ? { withdrawalId: view.withdrawalId } : {}),
+    ...(view.depositId ? { depositId: view.depositId } : {}),
+    ...(view.balanceBefore !== undefined ? { balanceBefore: view.balanceBefore } : {}),
+    ...(view.balanceAfter !== undefined ? { balanceAfter: view.balanceAfter } : {}),
+    at: view.at,
   };
 }

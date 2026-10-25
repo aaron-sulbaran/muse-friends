@@ -1,4 +1,4 @@
-import { CalendarX, Film, MessageCircle, Shield, type LucideIcon } from "lucide-react";
+import { CalendarX, Film, MessageCircle, Shield, TriangleAlert, Undo2, Wallet, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
 
@@ -7,6 +7,10 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string }> = {
   thread_opened: { icon: MessageCircle, title: "Opened a thread" },
   policy_changed: { icon: Shield, title: "Changed sharing" },
   busy_added: { icon: CalendarX, title: "Marked a time busy" },
+  payment_sent: { icon: Wallet, title: "Sent money" },
+  payment_received: { icon: Wallet, title: "Money received" },
+  payment_declined: { icon: Undo2, title: "Payment sent back" },
+  payment_failed: { icon: TriangleAlert, title: "Payment failed" },
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */
