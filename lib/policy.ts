@@ -171,6 +171,26 @@ export function enforceSharePolicy({ message, policy, sender, windowsDropped = 0
 }
 
 // ---------------------------------------------------------------------------
+// The start-path gate: no mutual follow, no thread
+// ---------------------------------------------------------------------------
+
+export const REFUSAL_REASONS = ["not_mutual"] as const;
+export type RefusalReason = (typeof REFUSAL_REASONS)[number];
+
+// Fixed copy per reason code: what the timeline shows is chosen from here, never written by a model.
+export const REFUSAL_TEXT: Record<RefusalReason, (name: string) => string> = {
+  not_mutual: (name) => `No thread opened: you and ${name} do not follow each other.`,
+};
+
+export type StartGate = { ok: true } | { ok: false; reason: RefusalReason };
+
+// Agents only coordinate between people who already know each other. A follow-up with a contact starts
+// only if both people follow each other; the contact is named by the person, never picked by the agent.
+export function startGate(contact: { youFollow: boolean; followsYou: boolean }): StartGate {
+  return contact.youFollow && contact.followsYou ? { ok: true } : { ok: false, reason: "not_mutual" };
+}
+
+// ---------------------------------------------------------------------------
 // Receive side
 // ---------------------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-import type { Category, Role } from "./types";
+import type { Category, Role, ShareTier } from "./types";
 
 export type Result = { ok: true } | { ok: false; message: string };
 
@@ -57,7 +57,7 @@ export function postReset() {
   return post("/api/controls", { type: "reset" });
 }
 
-export type PrivacyChange = { tier: "close" | "friend" | "off" } | { category: Category; on: boolean };
+export type PrivacyChange = { tier: ShareTier } | { category: Category; on: boolean };
 
 export function postPrivacy(change: PrivacyChange) {
   return post("/api/controls", { type: "privacy", side: "b", ...change });
