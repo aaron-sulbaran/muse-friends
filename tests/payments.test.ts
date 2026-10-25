@@ -275,13 +275,15 @@ describe("the agents decide: nothing about the amount is scripted", () => {
 
     // Each payment message carries the tools the agent called on the way to it, one line each, no balance.
     const [payment, receipt] = await store.listMessages();
-    expect(payment.proof?.toolCalls).toEqual([
-      { name: "get_wallet", args: "", result: "balance read" },
+    expect(payment.proof?.toolCalls).toMatchObject([
+      { name: "get_wallet", args: "", result: "balance read", ms: expect.any(Number) },
       { name: "send_money", args: "$9 to lisa, 1 line", result: "prepared $9, waiting for your person" },
+      { name: "ledger_transfer", args: "$9 from the local ledger", result: expect.stringMatching(/^withdrawal .+ recorded$/), ms: expect.any(Number) },
     ]);
-    expect(receipt.proof?.toolCalls).toEqual([
+    expect(receipt.proof?.toolCalls).toMatchObject([
       { name: "get_wallet", args: "", result: "balance read" },
       { name: "accept_payment", args: payment.message.payment!.paymentId, result: "deposited $9" },
+      { name: "ledger_deposit", args: "$9 to the local ledger", result: expect.stringMatching(/^deposit .+ recorded$/), ms: expect.any(Number) },
     ]);
     expect(JSON.stringify([payment.proof, receipt.proof])).not.toMatch(/\b(120|111|89|80)\b/);
   });

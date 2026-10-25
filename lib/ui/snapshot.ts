@@ -1,5 +1,6 @@
 import type { RunBudget } from "@/lib/agent/caps";
 import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
+import { PAYING_TTL_MS } from "@/lib/agent/paying";
 import { paymentsEnabled } from "@/lib/agent/wallets";
 import { modelId } from "@/lib/model";
 import { CATEGORIES, isCategoryAllowed, isPaymentType, MEMBER_IDS, type AgentId, type MemberId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
@@ -27,6 +28,8 @@ export type UiOverlay = {
   budget?: RunBudget | null;
   /** The demo reel read live from Instagram before any run has started (lib/instagram.ts). */
   liveReel?: ReelMedia | null;
+  /** The wall clock in milliseconds, for tests; Date.now() otherwise. */
+  nowMs?: number;
 };
 
 /*
@@ -296,6 +299,30 @@ function privacySentence(text: string, recipient: AgentId, muse: (agent: AgentId
   return `Held back: an out-of-turn message from ${from} was stopped before it reached ${to}`;
 }
 
+const LEDGER_CALL = /^(nessie|ledger)_/;
+
+/**
+ * The tools behind a payment row. "Prepared" shows the proposing Muse's own calls. "Sent" shows only the call to the
+ * ledger that moved the money (the Muse's calls already sit under "prepared"). "Received" and "declined" show the
+ * receiving Muse's calls, the deposit or refund included.
+ */
+function paymentToolCalls(event: StateSnapshot["events"][number], state: StateSnapshot): UiNote["toolCalls"] {
+  const proofOf = () => state.messages.find((record) => record.message.id === event.messageId)?.proof;
+  switch (event.kind) {
+    case "payment_proposed": {
+      const paymentId = event.contextId?.startsWith("pay_") ? event.contextId.slice(4) : undefined;
+      return toolCallsOf(paymentId ? state.room.proposals?.[paymentId]?.proof : undefined);
+    }
+    case "payment_sent":
+      return toolCallsOf({ toolCalls: proofOf()?.toolCalls?.filter((call) => LEDGER_CALL.test(call.name)) });
+    case "payment_received":
+    case "payment_declined":
+      return toolCallsOf(proofOf());
+    default:
+      return undefined;
+  }
+}
+
 function toNotes(state: StateSnapshot, rename: (text: string) => string, payments: UiPayment[], muse: (agent: AgentId) => string = displayName): UiNote[] {
   const chat = state.room.chat ?? [];
   const followUps = new Map(state.plans.filter((plan) => plan.target !== undefined).map((plan) => [plan.id, plan]));
@@ -309,7 +336,10 @@ function toNotes(state: StateSnapshot, rename: (text: string) => string, payment
       return [{ id: event.id, kind: "message_rejected", at: event.at, text: privacySentence(event.text, event.agent ?? "lisa", muse), detail: text }];
     }
     const base = { id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text };
-    if (event.kind !== "chat_asked" || !event.messageId) return [base];
+    if (event.kind !== "chat_asked" || !event.messageId) {
+      const paymentCalls = paymentToolCalls(event, state);
+      return [paymentCalls ? { ...base, toolCalls: paymentCalls } : base];
+    }
     // A "You asked" row carries the tools the Muse used, read from the proof on its answer.
     const answer = chat.find((entry) => entry.id === event.messageId);
     const toolCalls = toolCallsOf(answer?.proof);
@@ -400,17 +430,22 @@ function toUiMessages(state: StateSnapshot, rename: (text: string) => string): U
 /**
  * Whose model call is running right now: for each pair thread still working, the receiver of its last message, or
  * the initiator before the first. A plan for three has two pair threads, so both friends can be thinking at once.
+ * `since` is when each of them started: the time of the message that handed them the turn (or the plan, before the
+ * first message). While the payer's Muse is settling up (the room's `paying` marker, ignored after two minutes) that
+ * is the whole answer.
  */
-function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["inFlight"] {
+function deriveInFlight(state: StateSnapshot, plan: Plan | null, nowMs: number): UiSnapshot["inFlight"] {
+  const paying = state.room.paying;
+  if (paying && nowMs - Date.parse(paying.since) < PAYING_TTL_MS) return { agent: paying.agent, agents: [paying.agent], since: { [paying.agent]: paying.since }, payment: true };
   if (!plan) return null;
   // A trip waits on people most of the time; the coordinator is only thinking while it composes the itinerary.
   if (plan.kind === "trip") {
     const composing = plan.state === "negotiating" && plan.group?.members.every((member) => plan.trip?.answers[member]) && !plan.trip?.itinerary;
-    return composing ? { agent: plan.group!.coordinator, agents: [plan.group!.coordinator] } : null;
+    return composing ? { agent: plan.group!.coordinator, agents: [plan.group!.coordinator], since: { [plan.group!.coordinator]: plan.updatedAt } } : null;
   }
   const groupId = plan.group?.groupId;
   const threads = groupId ? state.threads.filter((candidate) => candidate.groupId === groupId) : state.threads.filter((candidate) => candidate.contextId === plan.contextId);
-  if (threads.length === 0) return plan.state === "detected" ? { agent: plan.initiator, agents: [plan.initiator] } : null;
+  if (threads.length === 0) return plan.state === "detected" ? { agent: plan.initiator, agents: [plan.initiator], since: { [plan.initiator]: plan.createdAt } } : null;
   const thinking: Array<{ agent: MemberId; at: string }> = [];
   for (const thread of threads) {
     if (thread.state !== "working") continue;
@@ -420,7 +455,12 @@ function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["in
   if (thinking.length === 0) return null;
   const agents = [...new Set(thinking.map((entry) => entry.agent))];
   const latest = [...thinking].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0].agent;
-  return { agent: latest, agents };
+  const since: Partial<Record<MemberId, string>> = {};
+  for (const entry of thinking) {
+    const known = since[entry.agent];
+    if (!known || Date.parse(entry.at) < Date.parse(known)) since[entry.agent] = entry.at;
+  }
+  return { agent: latest, agents, since };
 }
 
 /** An agent's turn that produced no message ends the thread as failed and leaves a turn_failed event naming the agent. */
@@ -530,7 +570,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
       agentMessageCount: messages.length,
       humanTapCount: state.events.filter((event) => event.actor === "human" && humanTapKinds.has(event.kind)).length,
     },
-    inFlight: deriveInFlight(state, plan),
+    inFlight: deriveInFlight(state, plan, overlay.nowMs ?? Date.now()),
     budget: overlay.budget ?? null,
     reel: reelFor(state, overlay.liveReel ?? null),
     reelRead: reelReadFor(state),

@@ -60,8 +60,8 @@ describe("runAgentTurn (stateless, the default)", () => {
       },
     });
     expect(seen[0][1]).toEqual([]);
-    expect(seen[1][1]).toEqual([{ name: "get_my_calendar", args: "2026-10-26 to 2026-10-27", result: "3 free blocks, 1 busy" }]);
-    expect(seen[2][1]).toEqual([
+    expect(seen[1][1]).toMatchObject([{ name: "get_my_calendar", args: "2026-10-26 to 2026-10-27", result: "3 free blocks, 1 busy" }]);
+    expect(seen[2][1]).toMatchObject([
       { name: "get_my_calendar", args: "2026-10-26 to 2026-10-27", result: "3 free blocks, 1 busy" },
       { name: "get_interests", args: "food", result: "2 interests" },
     ]);

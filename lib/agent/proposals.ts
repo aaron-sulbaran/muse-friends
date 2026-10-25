@@ -1,14 +1,16 @@
-import { AgentMessage, type AgentId, type PaymentProposal } from "@/lib/protocol";
+import { AgentMessage, type AgentId, type PaymentProposal, type Wallet } from "@/lib/protocol";
 import { paymentsCheck } from "@/lib/policy";
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
 import { newId } from "./ids";
 import { withLock } from "./lock";
-import { sendPaymentMessage } from "./payments";
+import { sandboxCall, sendPaymentMessage, withSandboxCall } from "./payments";
 import { sentOnPlan, SETTLEABLE_STATES } from "./payment-rules";
+import { whilePaying } from "./paying";
 import { getProposal, putProposal } from "./proposal-store";
 import { clientFor, paymentsEnabled, PAYMENTS_OFF_TEXT, refreshWallet, walletOf } from "./wallets";
+import type { NessieClient } from "@/lib/nessie";
 import { toCentralIso } from "./windows";
 
 // The person's side of a proposed payment (D28). The Muse prepared and explained it; the person decides.
@@ -78,8 +80,16 @@ async function confirmLocked(ctx: ProposalContext, paymentId: string, by: AgentI
   const client = clientFor(store, wallet.data.source);
   if (!client) return failed(ctx, proposal, "Payment failed, sandbox error: sandbox not connected. Nothing moved.");
 
+  // From here the payer's Muse is settling up, and the room says so until the money has moved or the attempt has failed.
+  return whilePaying(store, proposal.payer, () => moveMoney(ctx, proposal, wallet.data, client), ctx.wallNow);
+}
+
+async function moveMoney(ctx: ProposalContext, proposal: PaymentProposal, wallet: Wallet, client: NessieClient): Promise<ProposalOutcome> {
+  const { store } = ctx;
   await putProposal(store, { ...proposal, status: "confirming", error: undefined });
-  const withdrawal = await client.withdraw(wallet.data.accountId, { amount: proposal.amount, description: `Muse ${proposal.paymentId}: ${proposal.reason}` });
+  const transferStarted = Date.now();
+  const withdrawal = await client.withdraw(wallet.accountId, { amount: proposal.amount, description: `Muse ${proposal.paymentId}: ${proposal.reason}` });
+  const transferMs = Date.now() - transferStarted;
   if (withdrawal.error !== null) return failed(ctx, proposal, `Payment failed, sandbox error: ${withdrawal.error}. Nothing moved.`);
 
   const message = AgentMessage.parse({
@@ -98,17 +108,17 @@ async function confirmLocked(ctx: ProposalContext, paymentId: string, by: AgentI
       amount: proposal.amount,
       currency: "USD",
       reason: proposal.reason,
-      source: wallet.data.source,
-      payerAccountId: wallet.data.accountId,
+      source: wallet.source,
+      payerAccountId: wallet.accountId,
       withdrawalId: withdrawal.data.id,
       breakdown: proposal.breakdown,
     },
     at: at(ctx),
   });
-  const delivered = await sendPaymentMessage({ store, deliver: ctx.deliver }, message, proposal.proof);
+  const delivered = await sendPaymentMessage({ store, deliver: ctx.deliver }, message, withSandboxCall(proposal.proof, sandboxCall("transfer", wallet, proposal.amount, withdrawal.data.id, transferMs)));
   if (!delivered.ok) {
     // The money left the account but the message did not arrive: put it back, and say so.
-    const refund = await client.deposit(wallet.data.accountId, { amount: proposal.amount, description: `Refund of Muse ${proposal.paymentId}: not delivered` });
+    const refund = await client.deposit(wallet.accountId, { amount: proposal.amount, description: `Refund of Muse ${proposal.paymentId}: not delivered` });
     return failed(ctx, proposal, `Payment failed, ${delivered.error}. ${refund.error === null ? `Your $${proposal.amount} is back.` : `The refund also failed: ${refund.error}`}`);
   }
   await refreshWallet(store, proposal.payer, () => nowMs(ctx));

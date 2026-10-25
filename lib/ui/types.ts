@@ -218,6 +218,14 @@ export type InFlight = {
   agent: MemberId;
   /** Everyone whose model call is running: in a plan for three, both friends answer at the same time. */
   agents: MemberId[];
+  /**
+   * When each running agent's turn began, ISO on the wall clock (Date.now() minus Date.parse(...) is how long it has
+   * been working), for every id in `agents` (always set by the server; optional only so a hand-built snapshot need not carry it). The latest agent's is `since[agent]`. A recording's frames carry the times
+   * they were recorded at, so count up only in live mode.
+   */
+  since?: Partial<Record<MemberId, string>>;
+  /** True while the payer's Muse is settling up: preparing a payment, or moving the money after the person confirmed. Then `agents` is just the payer. */
+  payment?: true;
 };
 
 export type SharingSettings = {

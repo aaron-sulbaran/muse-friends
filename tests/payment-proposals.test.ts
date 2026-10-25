@@ -177,7 +177,7 @@ describe("the seeded receipt", () => {
       { label: "Half of tip ($4)", amount: 2, source: "call_1_1", sourceKind: "tool", tool: "read_receipt" },
     ]);
     expect(payment.toolCalls?.map((call) => call.name)).toEqual(["get_wallet", "read_receipt", "send_money"]);
-    expect(payment.toolCalls?.at(-1)).toEqual({ name: "send_money", args: "$16 to lisa, 3 lines", result: "prepared $16, waiting for your person" });
+    expect(payment.toolCalls?.at(-1)).toMatchObject({ name: "send_money", args: "$16 to lisa, 3 lines", result: "prepared $16, waiting for your person", ms: expect.any(Number) });
   });
 });
 
@@ -204,12 +204,13 @@ describe("the person confirms", () => {
     const id = (result as { paymentId: string }).paymentId;
     await confirm(id);
     const [record] = await store.listMessages();
-    expect(record.proof?.toolCalls).toEqual([
+    expect(record.proof?.toolCalls).toMatchObject([
       { name: "get_wallet", args: "", result: "balance read" },
       { name: "send_money", args: "$16 to lisa, 1 line", result: "prepared $16, waiting for your person" },
+      { name: "ledger_transfer", args: "$16 from the local ledger", result: expect.stringMatching(/^withdrawal wd_local_.+ recorded$/), ms: expect.any(Number) },
     ]);
     const [payment] = toUiSnapshot(await store.snapshot(), { mode: "live" }).payments;
-    expect(payment).toMatchObject({ status: "sent", withdrawalId: expect.stringMatching(/^wd_local_/), toolCalls: [{ name: "get_wallet" }, { name: "send_money" }] });
+    expect(payment).toMatchObject({ status: "sent", withdrawalId: expect.stringMatching(/^wd_local_/), toolCalls: [{ name: "get_wallet" }, { name: "send_money" }, { name: "ledger_transfer", ms: expect.any(Number) }] });
     expect(payment.confirmUrl).toBeUndefined();
     expect(payment.breakdown).toHaveLength(1);
   });
@@ -222,7 +223,7 @@ describe("the person confirms", () => {
     await acceptPayment({ store, agent: "lisa", contextId, wallNow, deliver: deliverAs("lisa") }, { paymentId: id }, meta([], [{ name: "get_wallet", args: "", result: "balance read" }]));
     const [payment] = toUiSnapshot(await store.snapshot(), { mode: "live" }).payments;
     expect(payment.status).toBe("received");
-    expect(payment.toolCalls?.map((call) => call.name)).toEqual(["get_wallet", "send_money", "get_wallet", "accept_payment"]);
+    expect(payment.toolCalls?.map((call) => call.name)).toEqual(["get_wallet", "send_money", "ledger_transfer", "get_wallet", "accept_payment", "ledger_deposit"]);
   });
 
   it("is one withdrawal when two taps land at once", async () => {

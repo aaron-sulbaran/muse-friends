@@ -47,7 +47,7 @@ describe("toUiSnapshot on Lane A's fixtures", () => {
     state.threads[0].messageCount = 5;
     state.messages = state.messages.slice(0, 5);
     // Message 5 is Aaron's accept, so Lisa's agent has the next turn.
-    expect(toUiSnapshot(state, live).inFlight).toEqual({ agent: "lisa", agents: ["lisa"] });
+    expect(toUiSnapshot(state, live).inFlight).toEqual({ agent: "lisa", agents: ["lisa"], since: { lisa: state.messages.at(-1)!.message.at } });
   });
 
   it("counts only followed_through events: the reel arriving and taps are not the outcome", () => {

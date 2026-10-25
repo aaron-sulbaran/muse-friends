@@ -65,13 +65,14 @@ function recording(handlers: Record<string, ToolHandler>, summaries: ReturnType<
     Object.entries(handlers).map(([name, handler]) => [
       name,
       (async (args, meta) => {
+        const started = Date.now();
         try {
           const output = await handler(args, meta);
           const failed = typeof output === "object" && output !== null && typeof (output as { error?: unknown }).error === "string";
-          summaries.push(summarizeToolCall({ name, args, output, ok: !failed }));
+          summaries.push({ ...summarizeToolCall({ name, args, output, ok: !failed }), ms: Date.now() - started });
           return output;
         } catch (error) {
-          summaries.push(summarizeToolCall({ name, args, output: { error: error instanceof Error ? error.message : "failed" }, ok: false }));
+          summaries.push({ ...summarizeToolCall({ name, args, output: { error: error instanceof Error ? error.message : "failed" }, ok: false }), ms: Date.now() - started });
           throw error;
         }
       }) satisfies ToolHandler,

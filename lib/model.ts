@@ -135,6 +135,8 @@ export type ToolCallTrace = {
   name: string;
   callId: string;
   ok: boolean;
+  // Milliseconds the handler took.
+  ms: number;
   // First 200 characters of the error a failed call returned to the model.
   error?: string;
 };
@@ -500,6 +502,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
       const args = parseArguments(call.arguments);
       let output: unknown;
       let ok = true;
+      const handlerStarted = Date.now();
       if (!handler) {
         output = { error: `unknown tool ${call.name}` };
         ok = false;
@@ -512,13 +515,15 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
           ok = false;
         }
       }
+      const handlerMs = Date.now() - handlerStarted;
       toolCalls.push({
         name: call.name,
         callId: call.call_id,
         ok,
+        ms: handlerMs,
         error: ok ? undefined : JSON.stringify(output).slice(0, 200),
       });
-      performed.push((options.summarizeCall ?? summarizeToolCall)({ name: call.name, args, output, ok }));
+      performed.push({ ...(options.summarizeCall ?? summarizeToolCall)({ name: call.name, args, output, ok }), ms: handlerMs });
       finished.push({ callId: call.call_id, name: call.name });
       if (ok && required.has(call.name)) {
         successes += 1;

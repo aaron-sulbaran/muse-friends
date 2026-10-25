@@ -167,10 +167,10 @@ describe("runSignalTurn with a scripted model", () => {
     const [record] = await store.listMessages();
     const calls = record.proof!.toolCalls!;
     expect(calls.map((call) => call.name)).toEqual(["read_signal", "record_reel_details", "get_my_calendar", "send_to_friend_agent"]);
-    expect(calls[0]).toEqual({ name: "read_signal", args: "", result: "reel from Mochi" });
-    expect(calls[1]).toEqual({ name: "record_reel_details", args: "place Shawarma Point, E 6th St", result: "saved" });
+    expect(calls[0]).toMatchObject({ name: "read_signal", args: "", result: "reel from Mochi" });
+    expect(calls[1]).toMatchObject({ name: "record_reel_details", args: "place Shawarma Point, E 6th St", result: "saved" });
     expect(calls[2]).toMatchObject({ args: "2026-10-26 to 2026-11-01", result: expect.stringMatching(/^\d+ free blocks?, \d+ busy$/) });
-    expect(calls[3]).toEqual({ name: "send_to_friend_agent", args: "intent, 1 window", result: "message #1 working" });
+    expect(calls[3]).toMatchObject({ name: "send_to_friend_agent", args: "intent, 1 window", result: "message #1 working" });
     expect(JSON.stringify(record.proof)).not.toMatch(/Northwind|Interview|garlic/);
     for (const call of calls) expect(`${call.args}${call.result}`).not.toMatch(/\n/);
   });

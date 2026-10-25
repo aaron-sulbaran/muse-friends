@@ -428,6 +428,8 @@ export const ToolCallProof = z.strictObject({
   name: z.string().min(1).max(40),
   args: z.string().max(100),
   result: z.string().max(100),
+  // How long the tool took, in milliseconds. Absent on a hosted web search and on anything stored before it was measured.
+  ms: z.number().int().min(0).max(3_600_000).optional(),
 });
 export type ToolCallProof = z.infer<typeof ToolCallProof>;
 
@@ -897,6 +899,9 @@ export const Room = z.strictObject({
   chat: z.array(ChatEntry).max(CHAT_KEPT).optional(),
   // What each seat typed about their own week, by seat; a seat with nothing here keeps its seeded calendar. Cleared by Reset.
   availability: z.partialRecord(AgentId, TypedAvailability).optional(),
+  // The payer's Muse while it settles up (a settle turn, or a confirm that is moving the money), so a phone can say so
+  // live. Set when that work starts and cleared when it ends; a reader ignores one older than two minutes.
+  paying: z.strictObject({ agent: AgentId, since: IsoDateTime }).optional(),
   updatedAt: IsoDateTime,
 });
 export type Room = z.infer<typeof Room>;

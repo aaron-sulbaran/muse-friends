@@ -160,7 +160,7 @@ describe("what the chat says it cannot do", () => {
     const plansBefore = (await store.listPlans()).length;
     installFakeModel([{ calls: [{ name: "where_to_do_that", args: { action: "start_plan" } }] }, { text: WHERE_TO_DO.start_plan }]);
     const first = await ask("Plan another hangout with Michelle next week too");
-    expect(first.ok && first.answer.proof?.toolCalls).toEqual([{ name: "where_to_do_that", args: "start_plan", result: "pointed to the card" }]);
+    expect(first.ok && first.answer.proof?.toolCalls).toMatchObject([{ name: "where_to_do_that", args: "start_plan", result: "pointed to the card" }]);
 
     removeFakeModel();
     installFakeModel([{ calls: [{ name: "where_to_do_that", args: { action: "change_place" } }] }, { text: WHERE_TO_DO.change_place }]);

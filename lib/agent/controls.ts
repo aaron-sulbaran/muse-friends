@@ -209,7 +209,7 @@ export async function recordCurrentRun(store: Store, input: { id: string; label:
   // A recording is shown to everyone, so the private chat with a Muse (D31) and what a person typed about their own
   // week (the times they are free, how they feel) are not baked into it.
   const state = await store.snapshot();
-  const snapshot = { ...state, room: { ...state.room, chat: undefined, availability: undefined }, events: state.events.filter((event) => event.kind !== "chat_asked") };
+  const snapshot = { ...state, room: { ...state.room, chat: undefined, availability: undefined, paying: undefined }, events: state.events.filter((event) => event.kind !== "chat_asked") };
   const run: RecordedRun = { id: input.id, label: input.label, scenario: "shawarma", source: "live", recordedAt: nowIso(options), snapshot };
   await store.saveRecordedRun(run);
   return run;

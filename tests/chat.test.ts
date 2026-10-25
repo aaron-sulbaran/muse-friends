@@ -147,7 +147,7 @@ describe("'why $16?'", () => {
         { label: "My rounding", amount: 2, cameFrom: "my own estimate" },
       ],
     });
-    expect(outcome.answer.proof?.toolCalls).toEqual([
+    expect(outcome.answer.proof?.toolCalls).toMatchObject([
       { name: "get_wallet_and_history", args: "", result: "wallet read, 1 payment" },
       { name: "explain_payment", args: "pay_chat1", result: "3 lines explained" },
     ]);
@@ -171,7 +171,7 @@ describe("a request to act", () => {
     expect(toolOutputs(fake.calls)[0]).toEqual({ done: false, say: WHERE_TO_DO.pay });
     expect(WHERE_TO_DO.pay).toContain("Settle up");
     expect(outcome.answer.text).toBe(WHERE_TO_DO.pay);
-    expect(outcome.answer.proof?.toolCalls).toEqual([{ name: "where_to_do_that", args: "pay", result: "pointed to the card" }]);
+    expect(outcome.answer.proof?.toolCalls).toMatchObject([{ name: "where_to_do_that", args: "pay", result: "pointed to the card" }]);
     expect(await walletOf(store, "aaron")).toEqual(before);
     expect((await store.getRoom()).proposals).toBeUndefined();
     expect((await store.listMessages()).filter((record) => record.message.type === "payment")).toEqual([]);

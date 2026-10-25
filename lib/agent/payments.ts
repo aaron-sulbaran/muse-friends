@@ -11,6 +11,8 @@ import {
   type ActivityEvent,
   type MessageRecord,
   type PaymentProposal,
+  type ToolCallProof,
+  type Wallet,
 } from "@/lib/protocol";
 import { enforceSharePolicy, paymentsCheck } from "@/lib/policy";
 import type { ToolMeta } from "@/lib/model";
@@ -66,7 +68,7 @@ const nowMs = (ctx: PaymentContext) => ctx.wallNow?.() ?? Date.now();
 
 // The proof on a payment message, with the tools the agent called on the way here and the call that wrote it
 // (one line each, no balances: see lib/tool-summary.ts).
-function proofFrom(meta: ToolMeta | undefined, current: { name: string; args: unknown; output: unknown }): MessageRecord["proof"] {
+function proofFrom(meta: ToolMeta | undefined, current: { name: string; args: unknown; output: unknown; ms?: number }, after: ToolCallProof[] = []): MessageRecord["proof"] {
   return meta
     ? {
         model: meta.model,
@@ -76,9 +78,32 @@ function proofFrom(meta: ToolMeta | undefined, current: { name: string; args: un
         inputTokens: meta.call.inputTokens,
         outputTokens: meta.call.outputTokens,
         reasoningTokens: meta.call.reasoningTokens,
-        toolCalls: [...meta.toolCalls, summarizeToolCall({ ...current, ok: true })].slice(-10),
+        toolCalls: [...meta.toolCalls, { ...summarizeToolCall({ ...current, ok: true }), ...(current.ms !== undefined ? { ms: current.ms } : {}) }, ...after].slice(-10),
       }
     : undefined;
+}
+
+const clip = (text: string) => (text.length > 100 ? `${text.slice(0, 99)}…` : text);
+
+/**
+ * The call to the ledger as one more tool call on the payment's proof, so the timeline shows the sandbox like any other
+ * tool: `nessie_transfer` / `nessie_deposit` on the Nessie sandbox, `ledger_transfer` / `ledger_deposit` on the local
+ * ledger. Counts and ids only; `ms` is the round trip.
+ */
+export function sandboxCall(direction: "transfer" | "deposit", wallet: Pick<Wallet, "source" | "accountId">, amount: number, recordId: string, ms: number): ToolCallProof {
+  const real = wallet.source === "nessie";
+  const where = real ? wallet.accountId : "the local ledger";
+  return {
+    name: `${real ? "nessie" : "ledger"}_${direction}`,
+    args: clip(direction === "transfer" ? `$${amount} from ${where}` : `$${amount} to ${where}`),
+    result: clip(`${direction === "transfer" ? "withdrawal" : "deposit"} ${recordId} recorded`),
+    ms,
+  };
+}
+
+/** The proof of a proposal, carrying the ledger call after the model's own calls. Nothing when there was no model proof. */
+export function withSandboxCall(proof: MessageRecord["proof"], call: ToolCallProof): MessageRecord["proof"] {
+  return proof ? { ...proof, toolCalls: [...(proof.toolCalls ?? []), call].slice(-10) } : undefined;
 }
 
 async function failureRow(ctx: PaymentContext, text: string, extra: Partial<ActivityEvent> = {}): Promise<void> {
@@ -166,6 +191,7 @@ export async function sendMoney(ctx: PaymentContext, rawArgs: unknown, meta?: To
   if (!parsed.success) return fail(`Invalid arguments. ${z.prettifyError(parsed.error)}`);
   const args = parsed.data;
   const { store, agent } = ctx;
+  const started = Date.now();
 
   const friend = friendOf(ctx, args.to);
   if (!friend) return fail(`You can only pay ${getPersona(otherAgent(agent)).displayName} (to: "${otherAgent(agent)}").`);
@@ -218,7 +244,7 @@ export async function sendMoney(ctx: PaymentContext, rawArgs: unknown, meta?: To
     ...(receipt ? { receipt: { id: receipt.id, place: receipt.place, seeded: true as const, total: receipt.total } } : {}),
     source: wallet.data.source,
     status: "proposed",
-    proof: proofFrom(meta, { name: "send_money", args, output: { amount: args.amount, proposed: true } }),
+    proof: proofFrom(meta, { name: "send_money", args, output: { amount: args.amount, proposed: true }, ms: Date.now() - started }),
     proposedAt: at,
   };
   await putProposal(store, proposal);
@@ -229,6 +255,7 @@ export async function sendMoney(ctx: PaymentContext, rawArgs: unknown, meta?: To
     actor: "agent",
     agent,
     planId: plan.id,
+    contextId: `pay_${paymentId}`,
     text: `${displayName(agent)}'s Muse prepared $${args.amount} for ${displayName(friend)}: ${args.reason}. Waiting for ${displayName(agent)} to confirm; nothing has moved.`.slice(0, 240),
   });
   return { ok: true, proposed: true, status: "proposed", paymentId, amount: args.amount, message: "Prepared for your person to confirm. No money has moved, and only they can send it." };
@@ -296,7 +323,9 @@ export async function acceptPayment(ctx: PaymentContext, rawArgs: unknown, meta?
   }
   const client = clientFor(store, wallet.data.source);
   if (!client) return fail("Payment failed, sandbox error: sandbox not connected.");
+  const depositStarted = Date.now();
   const deposit = await client.deposit(wallet.data.accountId, { amount: view.amount, description: `Muse ${view.paymentId} received: ${view.reason}` });
+  const depositMs = Date.now() - depositStarted;
   if (deposit.error !== null) {
     await failureRow(ctx, `Payment failed, sandbox error: ${deposit.error}`, { planId: view.planId, contextId: view.contextId });
     return fail(`Payment failed, sandbox error: ${deposit.error}. You can try again or decline it.`);
@@ -329,7 +358,7 @@ export async function acceptPayment(ctx: PaymentContext, rawArgs: unknown, meta?
     },
     at: toCentralIso(nowMs(ctx)),
   };
-  const delivered = await sendPaymentMessage(ctx, message, proofFrom(meta, { name: "accept_payment", args: parsed.data, output: { amount: view.amount } }));
+  const delivered = await sendPaymentMessage(ctx, message, proofFrom(meta, { name: "accept_payment", args: parsed.data, output: { amount: view.amount } }, [sandboxCall("deposit", wallet.data, view.amount, deposit.data.id, depositMs)]));
   if (!delivered.ok) {
     await failureRow(ctx, `Payment received but the receipt could not be delivered: ${delivered.error}`, { planId: view.planId, contextId: view.contextId });
     return fail(`The money arrived in your wallet, but telling your friend failed: ${delivered.error}.`);

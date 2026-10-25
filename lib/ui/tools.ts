@@ -9,7 +9,7 @@ import { categoryLabel } from "./tokens";
 import { formatWindowList, listOf } from "./format";
 import type { Category, UiMessage, UiSource } from "./types";
 
-export type UiToolCall = { name: string; args: string; result: string; /** Pages a search found, https only; absent when there are none. */ sources?: UiSource[] };
+export type UiToolCall = { name: string; args: string; result: string; /** Milliseconds the tool took, when it was measured. */ ms?: number; /** Pages a search found, https only; absent when there are none. */ sources?: UiSource[] };
 
 const MAX_LINE = 140;
 
@@ -54,10 +54,11 @@ export function toolCallsOf(proof: unknown): UiToolCall[] | undefined {
   const raw = (proof as { toolCalls?: unknown } | null | undefined)?.toolCalls;
   if (!Array.isArray(raw)) return undefined;
   const calls = raw.flatMap((entry): UiToolCall[] => {
-    const call = entry as { name?: unknown; args?: unknown; result?: unknown; sources?: unknown; links?: unknown } | null;
+    const call = entry as { name?: unknown; args?: unknown; result?: unknown; ms?: unknown; sources?: unknown; links?: unknown } | null;
     if (typeof call?.name !== "string" || call.name.trim() === "") return [];
     const sources = sourcesOf(call.sources ?? call.links);
-    return [{ name: call.name.trim(), args: oneLine(call.args), result: oneLine(call.result), ...(sources.length > 0 ? { sources } : {}) }];
+    const ms = typeof call.ms === "number" && Number.isFinite(call.ms) && call.ms >= 0 ? Math.round(call.ms) : undefined;
+    return [{ name: call.name.trim(), args: oneLine(call.args), result: oneLine(call.result), ...(ms !== undefined ? { ms } : {}), ...(sources.length > 0 ? { sources } : {}) }];
   });
   return calls.length > 0 ? calls : undefined;
 }

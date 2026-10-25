@@ -5,6 +5,7 @@ import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
 import { newId, otherAgent } from "./ids";
 import { acceptPayment, type PaymentContext } from "./payments";
+import { whilePaying } from "./paying";
 import { buildPaymentTools } from "./payment-tools";
 import { paymentInstructions, paymentTurnInput, settleTurnInput } from "./payment-prompts";
 import { paymentsFrom, sentOnPlan, SETTLEABLE_STATES } from "./payment-rules";
@@ -42,12 +43,9 @@ export async function runSettleTurn(options: Options & { agent: AgentId; planId:
   const { tools, handlers } = buildPaymentTools(ctx, ["get_wallet", "read_receipt", "send_money"]);
   const signal = (await store.listSignals()).at(-1) ?? null;
   const nowMs = options.wallNow?.() ?? Date.now();
-  const result = await runAgentTurn({
-    instructions: paymentInstructions(agent),
-    input: settleTurnInput({ agent, plan, signal, nowMs, capPerPlan: scope.capPerPlan, sentOnPlan: await sentOnPlan(store, plan.id, agent), note: options.note }),
-    tools,
-    handlers,
-  });
+  const input = settleTurnInput({ agent, plan, signal, nowMs, capPerPlan: scope.capPerPlan, sentOnPlan: await sentOnPlan(store, plan.id, agent), note: options.note });
+  // The room says the payer's Muse is settling up for as long as the model works.
+  const result = await whilePaying(store, agent, () => runAgentTurn({ instructions: paymentInstructions(agent), input, tools, handlers }), options.wallNow);
   if (result.status === "failed") {
     // No fallback here: sending money is the model's decision, and a model that is down decides nothing.
     await store.appendEvent({

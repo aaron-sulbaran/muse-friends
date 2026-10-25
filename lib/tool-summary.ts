@@ -3,7 +3,7 @@
 // the wallet's balance, a caption's text, or a friend's note stay out. Counts, dates, and the shape of the call are
 // enough to show an agent actually used its tools. The model never sees any of this.
 
-export type ToolCallSummary = { name: string; args: string; result: string };
+export type ToolCallSummary = { name: string; args: string; result: string; /** Milliseconds the tool took, set by the loop that ran it. */ ms?: number };
 
 const NAME_MAX = 40;
 const LINE_MAX = 100;
