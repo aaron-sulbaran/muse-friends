@@ -157,12 +157,6 @@ export type UiPlan = {
   outcome: UiOutcome | null;
 };
 
-/** What one person said about their week. */
-export type TypedSide = { windows: Array<{ start: string; end: string }>; feels: string | null };
-
-/** Per seat what was typed, and whether the two sides' typed times overlap (null until both have typed or a plan has run). */
-export type TypedAvailability = Partial<Record<AgentId, TypedSide>> & { overlap?: boolean | null };
-
 export type UiOutcome = { result: "went" | "didnt"; at: string; nextIdeaId: string | null; chosenBy: "model" | "rule" | null };
 
 export type FollowThroughEvent = {
@@ -343,8 +337,6 @@ export type UiSnapshot = {
   sides: Record<MemberId, string>;
   /** What each side's person is called, when someone said (onboarding, or a second phone). Unset, the other side says "your friend". */
   humans?: Partial<Record<AgentId, string>>;
-  /** What each side's person typed about their week in onboarding (windows free, a line on what they feel like doing); unset until someone does. */
-  typedAvailability?: TypedAvailability;
   messages: UiMessage[];
   /** Non-message timeline rows, merged with the messages by time. */
   notes: UiNote[];

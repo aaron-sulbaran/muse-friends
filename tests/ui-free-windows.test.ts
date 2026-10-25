@@ -14,26 +14,35 @@ describe("the chips and the windows they stand for", () => {
     expect(chips[2].window).toEqual(win("2026-10-31T13:00:00-05:00", "2026-10-31T17:00:00-05:00"));
   });
 
-  it("offers Sunday only when that Sunday ends inside the week: not on a Sunday afternoon, yes from Monday", () => {
+  it("offers Sunday only while this Sunday's window is still ahead: the week the Muses see ends Saturday night", () => {
     expect(freeChips(NOW).some((chip) => chip.id === "sunday")).toBe(false);
-    const monday = freeChips("2026-10-26T10:00:00-05:00");
-    expect(monday.find((chip) => chip.id === "sunday")?.window).toEqual(win("2026-11-01T12:00:00-05:00", "2026-11-01T16:00:00-05:00"));
+    expect(freeChips("2026-10-26T10:00:00-05:00").some((chip) => chip.id === "sunday")).toBe(false);
+    const morning = freeChips("2026-10-25T10:00:00-05:00");
+    expect(morning.find((chip) => chip.id === "sunday")?.window).toEqual(win("2026-10-25T12:00:00-05:00", "2026-10-25T16:00:00-05:00"));
   });
 
   it("drops a chip whose window has started, so nothing in the past is ever sent", () => {
     expect(freeChips("2026-10-25T20:00:00-05:00").some((chip) => chip.id === "tonight")).toBe(false);
   });
 
-  it("keeps every chip inside the week and at least an hour", () => {
-    for (const now of ["2026-10-25T14:00:00-05:00", "2026-10-27T09:00:00-05:00", "2026-10-30T22:00:00-05:00"]) {
+  it("keeps every chip where the availability route accepts it: ahead, an hour or more, in one day from 9 AM to 10 PM, by Saturday night", () => {
+    for (const now of ["2026-10-25T08:00:00-05:00", "2026-10-25T14:00:00-05:00", "2026-10-27T09:00:00-05:00", "2026-10-30T22:00:00-05:00", "2026-10-31T10:00:00-05:00"]) {
       for (const chip of freeChips(now)) {
         const start = Date.parse(chip.window.start);
         const end = Date.parse(chip.window.end);
         expect(start).toBeGreaterThan(Date.parse(now));
-        expect(end).toBeLessThanOrEqual(Date.parse(now) + 7 * 24 * 3600_000);
+        expect(end).toBeLessThanOrEqual(Date.parse("2026-11-01T00:00:00-05:00"));
         expect(end - start).toBeGreaterThanOrEqual(3600_000);
+        const startHour = (start - Date.parse(`${chip.window.start.slice(0, 10)}T00:00:00-05:00`)) / 3600_000;
+        const endHour = (end - Date.parse(`${chip.window.start.slice(0, 10)}T00:00:00-05:00`)) / 3600_000;
+        expect(startHour).toBeGreaterThanOrEqual(9);
+        expect(endHour).toBeLessThanOrEqual(22);
       }
     }
+  });
+
+  it("drops tomorrow evening on a Saturday, when tomorrow is past the week", () => {
+    expect(freeChips("2026-10-31T10:00:00-05:00").map((chip) => chip.id)).toEqual(["tonight", "saturday_afternoon"]);
   });
 });
 
@@ -61,8 +70,11 @@ describe("the free-text line", () => {
   it("refuses under an hour, a time that is not one, and a day past the week", () => {
     expect(one("Tue 6 to 6:30 PM").errors[0]).toContain("at least an hour");
     expect(one("Tue 13 to 15").errors[0]).toContain("not a time");
-    // Today's name, but the window has gone: the next one is a week on, and that is outside the week.
-    expect(one("Sun 1 to 3 PM").errors[0]).toContain("not inside the next 7 days");
+    // Today's name, but the window has gone: the next one is a week on, and that is past Saturday night.
+    expect(one("Sun 1 to 3 PM").errors[0]).toContain("already over, or past Saturday night");
+    // Outside waking hours, or across a day: the route only takes one day between 9 AM and 10 PM.
+    expect(one("Tue 8 to 11 PM").errors[0]).toContain("between 9 AM and 10 PM");
+    expect(one("Fri 7 to 9 AM").errors[0]).toContain("between 9 AM and 10 PM");
   });
 });
 
@@ -82,9 +94,10 @@ describe("what gets posted", () => {
   });
 
   it("stops at eight windows and at 120 characters of feeling", () => {
-    const many = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Mon"].map((day, index) => `${day} ${index + 1} to ${index + 3} PM`).join(", ");
-    const result = freeWindowsFor({ chips: [], text: many, feels: "" }, "2026-10-25T08:00:00-05:00");
-    if (result.ok) expect(result.windows.length).toBeLessThanOrEqual(MAX_FREE_WINDOWS);
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const nine = days.flatMap((day) => [`${day} 10 to 11 AM`, `${day} 1 to 2 PM`]).join(", ");
+    const result = freeWindowsFor({ chips: [], text: nine, feels: "" }, "2026-10-25T08:00:00-05:00");
+    expect(result).toEqual({ ok: false, message: `That is more than ${MAX_FREE_WINDOWS} windows. Keep the ones that matter.` });
     const long = freeWindowsFor({ chips: ["tonight"], text: "", feels: "x".repeat(300) }, NOW);
     expect(long.ok && long.feels?.length).toBe(FEELS_MAX);
     expect(long.ok && long.feels).toBe("x".repeat(FEELS_MAX));

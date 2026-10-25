@@ -144,9 +144,15 @@ export function postAvailability(input: { side: Role; windows: Array<{ start: st
     side: input.side,
     windows: input.windows,
     ...(input.feels === null ? {} : { feels: input.feels }),
-    ...(input.name === null || input.name === "" ? {} : { name: input.name }),
+    ...(AVAILABILITY_TAKES_NAME && input.name !== null && input.name !== "" ? { name: input.name } : {}),
   });
 }
+
+/**
+ * Whether the availability route takes the person's first name (it lands in the snapshot's `humans`, so the other phone
+ * and the thread say it). Lane A's route rejects an unknown key until its name commit is on main: flip this then.
+ */
+export const AVAILABILITY_TAKES_NAME = false;
 
 export type LeakAttempt = { id: string; label: string; status: number; error: string; rejected: boolean };
 

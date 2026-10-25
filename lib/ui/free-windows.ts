@@ -1,10 +1,12 @@
 import { toCentralIso, toMs } from "@/lib/agent/windows";
+import { CALENDAR_RANGE } from "@/lib/seed/personas";
 
 /*
  * "When are you free this week?" as concrete windows on the room's clock. The chips and a free-text line become ISO
  * windows in US Central (the demo week sits before the Nov 1 DST change, so the offset is fixed, as in
- * lib/agent/windows.ts). The rules mirror what POST /api/availability accepts: each window at least an hour, inside the
- * next 7 days, at most 8 in all. Pure, so the mapping is tested without a clock or a screen.
+ * lib/agent/windows.ts). The rules mirror what POST /api/availability accepts (lib/agent/availability.ts): each window
+ * at least an hour, inside one day between 9am and 10pm, from the room's now to the end of the calendar the Muses can
+ * see (Saturday night), at most 8 in all. Pure, so the mapping is tested without a clock or a screen.
  */
 
 export type FreeWindow = { start: string; end: string };
@@ -15,8 +17,10 @@ const CENTRAL_OFFSET_MS = -5 * HOUR_MS;
 
 export const MAX_FREE_WINDOWS = 8;
 export const MIN_FREE_MS = HOUR_MS;
-export const FREE_HORIZON_MS = 7 * DAY_MS;
 export const FEELS_MAX = 120;
+/** A free window sits inside one waking day, 9am to 10pm Central. */
+const WAKING = { start: 9, end: 22 } as const;
+const HORIZON_END_MS = toMs(CALENDAR_RANGE.end);
 
 export type FreeChipId = "tonight" | "tomorrow_evening" | "saturday_afternoon" | "sunday";
 
@@ -32,7 +36,8 @@ const CHIPS: readonly ChipRule[] = [
   { id: "tonight", label: "Tonight", from: 19, to: 22, day: () => 0 },
   { id: "tomorrow_evening", label: "Tomorrow evening", from: 18, to: 21, day: () => 1 },
   { id: "saturday_afternoon", label: "Saturday afternoon", from: 13, to: 17, day: (today) => daysUntil(today, 6, true) },
-  { id: "sunday", label: "Sunday", from: 12, to: 16, day: (today) => daysUntil(today, 0, false) },
+  // This Sunday only: the week the Muses can see ends Saturday night, so once Sunday has started the chip has nothing to offer.
+  { id: "sunday", label: "Sunday", from: 12, to: 16, day: (today) => daysUntil(today, 0, true) },
 ];
 
 /** The Central calendar day an instant falls on: its midnight (as an instant) and its weekday, 0 for Sunday. */
@@ -48,9 +53,15 @@ function windowAt(startMs: number, endMs: number): FreeWindow {
   return { start: toCentralIso(startMs), end: toCentralIso(endMs) };
 }
 
-/** Whether a span can be sent: starts after now, ends within 7 days, and is at least an hour. */
+/** Whether a span sits inside one waking day (9am to 10pm), which is all a free block can ever be. */
+function insideAWakingDay(startMs: number, endMs: number): boolean {
+  const { midnight } = centralDay(startMs);
+  return startMs >= midnight + WAKING.start * HOUR_MS && endMs <= midnight + WAKING.end * HOUR_MS;
+}
+
+/** Whether a span can be sent: still ahead, before the week's end, at least an hour, inside one waking day. */
 function fitsTheWeek(startMs: number, endMs: number, nowMs: number): boolean {
-  return startMs > nowMs && endMs <= nowMs + FREE_HORIZON_MS && endMs - startMs >= MIN_FREE_MS;
+  return startMs > nowMs && endMs <= HORIZON_END_MS && endMs - startMs >= MIN_FREE_MS && insideAWakingDay(startMs, endMs);
 }
 
 export type FreeChip = { id: FreeChipId; label: string; window: FreeWindow };
@@ -121,8 +132,10 @@ export function parseFreeText(text: string, nowIso: string): ParsedFreeText {
     const shifted = startMs <= nowMs && dayOffset === 0 ? [startMs + 7 * DAY_MS, endMs + 7 * DAY_MS] : [startMs, endMs];
     if (shifted[1] - shifted[0] < MIN_FREE_MS) {
       errors.push(`"${piece}" is shorter than an hour. Give it at least an hour.`);
+    } else if (!insideAWakingDay(shifted[0], shifted[1])) {
+      errors.push(`"${piece}" has to sit inside one day between 9 AM and 10 PM.`);
     } else if (!fitsTheWeek(shifted[0], shifted[1], nowMs)) {
-      errors.push(`"${piece}" is not inside the next 7 days.`);
+      errors.push(`"${piece}" is already over, or past Saturday night.`);
     } else {
       windows.push(windowAt(shifted[0], shifted[1]));
     }

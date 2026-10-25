@@ -5,7 +5,7 @@ import { FreeTimeCard } from "@/components/FreeTimeCard";
 import { FriendNameCard } from "@/components/FriendNameCard";
 import { MuseScreen } from "@/components/MuseScreen";
 import { snapshotAtPlanState } from "@/lib/seed/states";
-import { postAvailability } from "@/lib/ui/actions";
+import { AVAILABILITY_TAKES_NAME, postAvailability } from "@/lib/ui/actions";
 import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy, onboardingCopy } from "@/lib/ui/copy";
 import { availabilityOutcome, freeChips } from "@/lib/ui/free-windows";
@@ -114,17 +114,21 @@ describe("the notes about what you said", () => {
   it("never shows it to the other side, and each side sees its own", () => {
     const snapshot = { ...base(), typedAvailability: { aaron: week } };
     expect(threadLines(snapshot, "b").some((line) => line.id === "thread-typed-free")).toBe(false);
-    const both = threadLines({ ...base(), typedAvailability: { aaron: week, lisa: { windows: [week.windows[0]], feels: null } } }, "b");
+    const both = threadLines({ ...base(), typedAvailability: { aaron: week, lisa: { windows: [week.windows[0]] } } }, "b");
     expect(both[0]).toMatchObject({ id: "thread-typed-free", text: "You said you're free: Tue evening", sender: { kind: "your-muse", name: "Mochi" } });
   });
 
-  it("says when the two weeks do not meet, and says nothing when they do or it is not known", () => {
-    const none = threadLines({ ...base(), typedAvailability: { aaron: week, overlap: false } }, "a").map((line) => line.text);
+  it("says when the two weeks did not meet: the exchange ended on a no-overlap decline and this person had typed times", () => {
+    const dropped = (): UiSnapshot => {
+      const snapshot = toUiSnapshot(snapshotAtPlanState("awaiting_humans"), live);
+      return { ...snapshot, messages: snapshot.messages.map((message, index) => (index === snapshot.messages.length - 1 ? { ...message, type: "decline" as const, reason: "no_overlap" as const } : message)) };
+    };
+    const none = threadLines({ ...dropped(), typedAvailability: { aaron: week } }, "a").map((line) => line.text);
     expect(none).toContain(copy.threadNoSharedFree);
     expect(copy.threadNoSharedFree).toBe("No shared free time this week; try more windows");
-    for (const overlap of [true, null, undefined]) {
-      expect(threadLines({ ...base(), typedAvailability: { aaron: week, overlap } }, "a").some((line) => line.text === copy.threadNoSharedFree)).toBe(false);
-    }
+    // Nothing typed, or the exchange agreed: nothing to say.
+    expect(threadLines(dropped(), "a").some((line) => line.text === copy.threadNoSharedFree)).toBe(false);
+    expect(threadLines({ ...base(), typedAvailability: { aaron: week } }, "a").some((line) => line.text === copy.threadNoSharedFree)).toBe(false);
   });
 
   it("is nothing at all when nobody typed anything", () => {
@@ -149,12 +153,12 @@ describe("what is posted", () => {
   };
   const windows = [{ start: "2026-10-27T18:00:00-05:00", end: "2026-10-27T20:00:00-05:00" }];
 
-  it("sends the side, the windows, the feeling and the name to the availability route, and nothing it has not got", async () => {
+  it("sends the side, the windows and the feeling to the availability route, the name only once the route takes it, and nothing it has not got", async () => {
     const mock = stub(200, { data: {}, error: null });
     expect(await postAvailability({ side: "b", windows, feels: "ramen", name: "Jordan" })).toEqual({ ok: true });
     const [url, init] = mock.mock.calls[0] as unknown as [string, { body: string }];
     expect(url).toContain("/api/availability");
-    expect(JSON.parse(init.body)).toEqual({ side: "b", windows, feels: "ramen", name: "Jordan" });
+    expect(JSON.parse(init.body)).toEqual({ side: "b", windows, feels: "ramen", ...(AVAILABILITY_TAKES_NAME ? { name: "Jordan" } : {}) });
     await postAvailability({ side: "a", windows, feels: null, name: "" });
     expect(JSON.parse((mock.mock.calls[1] as unknown as [string, { body: string }])[1].body)).toEqual({ side: "a", windows });
   });
