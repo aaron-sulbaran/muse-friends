@@ -13,6 +13,8 @@ type Props = {
   offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>;
   friendName: string;
   friendMuse: string;
+  /** This person's own Muse, named where the card says who works the amount out. */
+  museName: string;
   /** How many payments the room has now: a new one ends the wait. */
   paymentCount: number;
   /** A recording is on screen: show the card, but asking for money would touch live state. */
@@ -27,10 +29,10 @@ type Props = {
 /**
  * After a confirmed plan: ask your Muse to settle up. The Muse decides whether money moves and how much, within
  * the cap you set; the friend's Muse accepts it or sends it back. Off until the person turns payments on. The card
- * says what is being settled (the plan's event and day) and the cap. The Muse prepares an amount and the person
- * confirms it on the payment card (D28); nothing moves before that.
+ * is the friend's Muse asking for her half after the event, in the receipt's own words. The Muse prepares an amount and
+ * the person confirms it on the payment card (D28); nothing moves before that.
  */
-export function SettleCard({ planId, role, offer, friendName, friendMuse, paymentCount, readOnly, onChanged, onPaused, onOpenSettings }: Props) {
+export function SettleCard({ planId, role, offer, friendName, friendMuse, museName, paymentCount, readOnly, onChanged, onPaused, onOpenSettings }: Props) {
   const [note, setNote] = useState("");
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,10 +68,8 @@ export function SettleCard({ planId, role, offer, friendName, friendMuse, paymen
           <HandCoins className="size-5" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <div className="min-w-0">
-          <h3 className="text-[17px] font-semibold leading-[22px]">{off ? copy.settleOffTitle : copy.settleTitle(friendName)}</h3>
-          <p className="mt-0.5 text-[13px] leading-[18px] text-muted">
-            {off ? copy.settleOffDetail : settleDetailFor({ cap: offer.cap, event: offer.event, friendMuse })}
-          </p>
+          <h3 className="text-[17px] font-semibold leading-[22px]">{copy.settleTitle(friendName)}</h3>
+          <p className="mt-0.5 text-[13px] leading-[18px] text-muted">{settleDetailFor({ kind: offer.kind, place: offer.place, friendMuse, museName })}</p>
         </div>
       </div>
       {off ? (

@@ -322,18 +322,68 @@ describe("the thread in the chat", () => {
     expect(kindsAfter).toContain("agreed-line");
   });
 
-  it("puts Michelle's scripted yes after the person's own decision, and only for a simulated friend", () => {
+  it("never gives Michelle a scripted yes before the person has sent anything, nor for a friend who is not played", () => {
     const base = at("awaiting_humans");
     const accepted = { ...base, simulatedFriend: true, plan: { ...base.plan!, decisions: { a: "accepted" as const, b: "accepted" as const } } };
-    const items = viewForRole(accepted, "a").items;
-    expect(items.at(-1)).toMatchObject({ kind: "thread-line", line: { sender: { kind: "friend", simulated: true }, text: "Yes, I'm in." } });
-    expect(lines(viewForRole({ ...accepted, simulatedFriend: false }, "a").items).some((line) => line.sender.kind === "friend")).toBe(false);
+    expect(lines(viewForRole(accepted, "a").items).some((line) => line.sender.kind === "friend")).toBe(false);
+    const sent = { ...at("scheduled"), simulatedFriend: false, plan: { ...at("scheduled").plan!, decisions: { a: "accepted" as const, b: "accepted" as const } } };
+    expect(lines(viewForRole(sent, "a").items).some((line) => line.sender.kind === "friend")).toBe(false);
   });
 
   it("gives every item a distinct id", () => {
     for (const role of ["a", "b"] as Role[]) {
       const ids = viewForRole(at("awaiting_humans"), role).items.map((item) => item.id);
       expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
+});
+
+describe("the order the person is asked in (what comes after what)", () => {
+  const lines = (items: ChatItem[]) => items.flatMap((item) => (item.kind === "thread-line" ? [item.line] : []));
+  const ids = (items: ChatItem[]) => items.map((item) => item.id);
+  const withMichelle = (state: PlanState, decision: "accepted" | "declined" = "accepted") => {
+    const base = at(state);
+    return { ...base, simulatedFriend: true, plan: { ...base.plan!, decisions: { a: "accepted" as const, b: decision } } };
+  };
+
+  it("holds her yes until the message is handed off: a confirmed plan has no reply yet", () => {
+    expect(ids(viewForRole(withMichelle("confirmed"), "a").items)).not.toContain("thread-friend-accepted");
+  });
+
+  it("draws her yes right after the draft, as the reply to what the person just sent, and the hold after it", () => {
+    const order = ids(viewForRole(withMichelle("scheduled"), "a", { friendReplied: true }).items);
+    expect(order.indexOf("draft-intro")).toBeGreaterThan(-1);
+    expect(order.indexOf("thread-friend-accepted")).toBeGreaterThan(order.indexOf("draft-intro"));
+    expect(order.indexOf("hold-bubble")).toBeGreaterThan(order.indexOf("thread-friend-accepted"));
+    expect(order.indexOf("hold-row")).toBeGreaterThan(order.indexOf("hold-bubble"));
+  });
+
+  it("leaves the hold and the calendar row undrawn while her reply is on its way, though the server has the hold", () => {
+    const view = viewForRole(withMichelle("scheduled"), "a", { friendReplied: false });
+    for (const id of ["thread-friend-accepted", "hold-bubble", "hold-row"]) expect(ids(view.items)).not.toContain(id);
+    expect(withMichelle("scheduled").plan.history.some((entry) => entry.state === "scheduled")).toBe(true);
+  });
+
+  it("does not hold the calendar back for a friend nobody plays", () => {
+    const real = { ...withMichelle("scheduled"), simulatedFriend: false };
+    expect(ids(viewForRole(real, "a", { friendReplied: false }).items)).toEqual(expect.arrayContaining(["hold-bubble", "hold-row"]));
+  });
+
+  it("keeps her yes out of the block at the end, and her no where the plan dropped", () => {
+    for (const state of ["scheduled", "reminded", "followed_up"] as const) {
+      const order = ids(viewForRole(withMichelle(state), "a", { friendReplied: true }).items);
+      expect(order.indexOf("thread-friend-accepted")).toBeLessThan(order.indexOf(state === "scheduled" ? "hold-row" : "sep-reminded"));
+    }
+    const dropped = lines(viewForRole(withMichelle("dropped", "declined"), "a").items).find((line) => line.sender.kind === "friend");
+    expect(dropped).toMatchObject({ text: "Not this time, sorry.", phase: "after" });
+  });
+
+  it("never leaves two cards with buttons open at once once the plan has run its course", () => {
+    const open = ["plan-card", "draft-card", "settle-card", "outcome-replies"];
+    for (const state of ["awaiting_humans", "confirmed", "scheduled", "reminded", "followed_up"] as const) {
+      const cards = viewForRole(withMichelle(state), "a", { friendReplied: true }).items.filter((item) => open.includes(item.kind));
+      const decisions = cards.filter((item) => item.kind === "plan-card" || item.kind === "settle-card");
+      expect(decisions.length).toBeLessThanOrEqual(1);
     }
   });
 });

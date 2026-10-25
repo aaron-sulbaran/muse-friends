@@ -31,25 +31,27 @@ export type SettleOffer =
   /** Payments are switched off for the whole room: say nothing. */
   | { kind: "hidden" }
   /** This seat has not let its Muse send money: offer to turn it on. `event` is what is being settled, when the plan names it. */
-  | { kind: "turn_on"; event?: string | null }
+  | { kind: "turn_on"; event?: string | null; place?: string | null }
   /** Ready: the person can ask their Muse to settle up. */
-  | { kind: "ready"; cap: number; event?: string | null }
+  | { kind: "ready"; cap: number; event?: string | null; place?: string | null }
   /** A payment for this plan is still waiting on the friend's Muse, or on the person to confirm it. */
   | { kind: "waiting" }
   /** The friend kept money for this plan: it is settled, and the ready card does not come back. Not drawn. */
   | { kind: "settled"; amount: number };
 
 /**
- * Whether a phone offers "Settle up" after a plan is confirmed. A payment already sent and unanswered blocks a
- * second one; a kept or refunded payment does not (the cap counts only what the friend still holds).
+ * Whether a phone offers "Settle up". It is the friend's Muse asking for a share after the event, so it comes only once
+ * the person has said they went: a plan that is followed up with the outcome "went". Before that nothing is owed and
+ * nothing is asked. A payment already sent and unanswered blocks a second one; a kept or refunded payment does not
+ * (the cap counts only what the friend still holds).
  */
 export function settleOffer(
   snapshot: Pick<UiSnapshot, "paymentsScope" | "payments" | "sandbox">,
-  plan: (Pick<UiPlan, "id" | "state"> & Partial<Pick<UiPlan, "activityTitle" | "window">>) | null,
+  plan: (Pick<UiPlan, "id" | "state"> & Partial<Pick<UiPlan, "activityTitle" | "window" | "outcome">>) | null,
   agent: AgentId,
 ): SettleOffer {
   if (!plan || !snapshot.sandbox.enabled) return { kind: "hidden" };
-  if (plan.state === "detected" || plan.state === "negotiating" || plan.state === "awaiting_humans" || plan.state === "dropped") return { kind: "hidden" };
+  if (plan.state !== "followed_up" || plan.outcome?.result !== "went") return { kind: "hidden" };
   // A payment waiting on the friend, or a proposal still waiting on the person (or failed and retryable), is the one open payment.
   if (snapshot.payments.some((payment) => payment.planId === plan.id && (payment.status === "sent" || payment.status === "proposed" || payment.status === "failed"))) return { kind: "waiting" };
   // Money the friend kept settles the plan for both phones; a refund puts the money back, so then it is on offer again.
@@ -57,7 +59,8 @@ export function settleOffer(
   if (kept.length > 0) return { kind: "settled", amount: kept.reduce((total, payment) => total + payment.amount, 0) };
   const scope = snapshot.paymentsScope[agent];
   const event = plan.activityTitle ? eventLabel({ activityTitle: plan.activityTitle, window: plan.window ?? null }) : null;
-  return scope.enabled && scope.cap > 0 ? { kind: "ready", cap: scope.cap, event } : { kind: "turn_on", event };
+  const place = plan.activityTitle ?? null;
+  return scope.enabled && scope.cap > 0 ? { kind: "ready", cap: scope.cap, event, place } : { kind: "turn_on", event, place };
 }
 
 const dayFormat = new Intl.DateTimeFormat("en-US", { timeZone: displayTimeZone, weekday: "short", month: "short", day: "numeric" });
@@ -108,10 +111,14 @@ function splitText(split: SplitFacts | undefined): string {
   return `receipt ${formatDollars(split.receiptTotal)}, split ${WAYS[split.ways] || split.ways} ways`;
 }
 
-/** The settle card's sentence before any payment has an amount: what is being settled, that the person is asked first, and the cap. */
-export function settleDetailFor(input: { cap: number; event: string | null | undefined; friendMuse: string }): string {
-  const share = input.event ? `your share of ${input.event}` : "your share";
-  return `Your Muse works out ${share} and asks you before anything is sent, up to ${formatDollars(input.cap)}. ${input.friendMuse} accepts it or sends it back.`;
+/**
+ * The settle card's sentence, read as the friend's Muse asking for her half after the event: the receipt it sent, and what
+ * the person's own Muse does next (works it out when payments are off to turn on, prepares it for a confirm when they are on).
+ */
+export function settleDetailFor(input: { kind: "turn_on" | "ready"; place: string | null | undefined; friendMuse: string; museName: string }): string {
+  const receipt = input.place ? `the receipt from ${input.place}` : "the receipt";
+  const ask = `${input.friendMuse} sent ${receipt} and is asking for your half.`;
+  return input.kind === "turn_on" ? `${ask} Turn on payments and ${input.museName} works it out.` : `${ask} ${input.museName} can prepare it for you to confirm.`;
 }
 
 /** The line that sits above the ledger's JSON in the payment drawer: who paid whom, how much, what for, where it stands. */

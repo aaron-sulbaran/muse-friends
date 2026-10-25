@@ -12,16 +12,19 @@ const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, 
 
 describe("the settle card's sentence", () => {
   it("says what is being settled and that the person is asked first, never that the Muse decides", () => {
-    const line = settleDetailFor({ cap: 20, event: "Shawarma Point, Tue Oct 27", friendMuse: "Mochi" });
-    expect(line).toBe("Your Muse works out your share of Shawarma Point, Tue Oct 27 and asks you before anything is sent, up to $20. Mochi accepts it or sends it back.");
-    expect(line).not.toContain("decides");
-    expect(settleDetailFor({ cap: 20, event: null, friendMuse: "Mochi" })).toBe("Your Muse works out your share and asks you before anything is sent, up to $20. Mochi accepts it or sends it back.");
+    const ready = settleDetailFor({ kind: "ready", place: "Shawarma Point", friendMuse: "Michelle's Muse", museName: "Sprout" });
+    expect(ready).toBe("Michelle's Muse sent the receipt from Shawarma Point and is asking for your half. Sprout can prepare it for you to confirm.");
+    expect(ready).not.toContain("decides");
+    const turnOn = settleDetailFor({ kind: "turn_on", place: "Shawarma Point", friendMuse: "Michelle's Muse", museName: "Sprout" });
+    expect(turnOn).toBe("Michelle's Muse sent the receipt from Shawarma Point and is asking for your half. Turn on payments and Sprout works it out.");
+    expect(settleDetailFor({ kind: "ready", place: null, friendMuse: "Mochi", museName: "Sprout" })).toBe("Mochi sent the receipt and is asking for your half. Sprout can prepare it for you to confirm.");
   });
 
-  it("is on the card: the offer carries the event, and the card shows the sentence", () => {
-    const snapshot = toUiSnapshot(snapshotAtPlanState("scheduled"), { mode: "live" });
+  it("is on the card: the offer carries the event and the place, and the card shows the sentence", () => {
+    const snapshot = toUiSnapshot(snapshotAtPlanState("followed_up"), { mode: "live" });
     const withMoney = {
       ...snapshot,
+      plan: { ...snapshot.plan!, outcome: { result: "went" as const, at: "2026-10-28T09:00:00-05:00", nextIdeaId: null, chosenBy: null } },
       payments: [],
       paymentsScope: { aaron: { enabled: true, cap: 20 }, lisa: { enabled: false, cap: 0 } },
       sandbox: { enabled: true, connected: true, text: "Capital One Nessie sandbox" },
@@ -31,9 +34,11 @@ describe("the settle card's sentence", () => {
     if (offer.kind !== "ready") return;
     expect(offer.event).toMatch(/, (Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} \d{1,2}$/);
     const html = renderToStaticMarkup(
-      createElement(SettleCard, { planId: "p", role: "a", offer, friendName: "Michelle", friendMuse: "Mochi", paymentCount: 0, readOnly: false, onChanged: () => {}, onOpenSettings: () => {} }),
+      createElement(SettleCard, { planId: "p", role: "a", offer, friendName: "Michelle", friendMuse: "Mochi", museName: "Sprout", paymentCount: 0, readOnly: false, onChanged: () => {}, onOpenSettings: () => {} }),
     );
-    expect(text(html)).toContain(`Your Muse works out your share of ${offer.event}`);
+    expect(offer.place).toBe(withMoney.plan.activityTitle);
+    expect(text(html)).toContain(`Mochi sent the receipt from ${offer.place} and is asking for your half. Sprout can prepare it for you to confirm.`);
+    expect(text(html)).not.toContain("Settle up is off");
     expect(text(html)).not.toContain("decides what is fair");
   });
 });

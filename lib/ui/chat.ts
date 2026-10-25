@@ -6,7 +6,7 @@ import type { OnboardingState } from "./onboarding";
 import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
 import { tripThread, type GroupLine } from "./group";
 import { capital, unnamedFriend } from "./tokens";
-import { threadLines, type ThreadLine } from "./thread";
+import { threadLines, type ThreadLine, type ThreadOptions } from "./thread";
 import type { AgentId, AvatarMood, Decision, MemberId, PlanState, Role, UiPayment, UiPlan, UiSnapshot, UiTrip } from "./types";
 
 /*
@@ -31,7 +31,7 @@ export type ChatItem =
   | { kind: "trip-open"; id: string; trip: UiTrip }
   | { kind: "trip-pot"; id: string; planId: string; trip: UiTrip; answerable: MemberId[]; viewer: MemberId; state: PlanState }
   | { kind: "payment-card"; id: string; payment: UiPayment; side: "payer" | "payee"; friendName: string; friendMuse: string }
-  | { kind: "settle-card"; id: string; planId: string; offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>; friendName: string; friendMuse: string }
+  | { kind: "settle-card"; id: string; planId: string; offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>; friendName: string; friendMuse: string; museName: string }
   | { kind: "outcome-replies"; id: string; planId: string }
   | { kind: "collapsed"; id: string; text: string }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
@@ -78,7 +78,7 @@ export type PhoneView = {
 const roleAgent: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
 const agentRole: Record<AgentId, Role> = { aaron: "a", lisa: "b" };
 
-export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
+export function viewForRole(snapshot: UiSnapshot, role: Role, options: ThreadOptions = {}): PhoneView {
   const names = namesFor(snapshot);
   const agent = roleAgent[role];
   const friend = roleAgent[role === "a" ? "b" : "a"];
@@ -90,7 +90,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   // A refused follow-up is a dropped plan on the record, but on the phone nothing started: the person can try again.
   const plan = snapshot.plan && !snapshot.plan.refused ? snapshot.plan : null;
   // A plan for three has its own group thread (the trip's lines); only your private chat with your Muse joins it here.
-  const thread = threadLines(snapshot, role).filter((line) => !snapshot.plan?.group || line.id.startsWith("thread-chat-"));
+  const thread = threadLines(snapshot, role, options).filter((line) => !snapshot.plan?.group || line.id.startsWith("thread-chat-"));
   const planGroup = plan?.group ?? null;
   const groupView: GroupView | null = planGroup
     ? {
@@ -152,7 +152,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     }
   }
   // The Muses' turns that moved the plan, and each one's private word to its own person, land in the thread as they happen.
-  for (const line of thread) if (line.phase !== "after") items.push({ kind: "thread-line", id: line.id, line });
+  for (const line of thread) if (line.phase !== "after" && line.phase !== "reply") items.push({ kind: "thread-line", id: line.id, line });
   const planContextIds = new Set(plan.group?.contextIds ?? [plan.contextId]);
   const agreedCount = snapshot.messages.filter((message) => planContextIds.has(message.contextId)).length;
   const agreedLine: ChatItem = {
@@ -223,7 +223,12 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
       } else {
         items.push({ kind: "bubble", id: "draft-intro", from: "muse", text: copy.draftIntroB(theirs.human) });
       }
-      if (plan.state !== "confirmed" && plan.window) {
+      // The friend's answer to the message the person just sent, then the hold: the server issues the hold at the handoff,
+      // but it is drawn only once she has replied, so nothing asks the person for a calendar row before she has said yes.
+      const reply = thread.find((line) => line.phase === "reply");
+      if (reply) items.push({ kind: "thread-line", id: reply.id, line: reply });
+      const replyPending = !groupView && snapshot.simulatedFriend && plan.decisions.b === "accepted" && !reply;
+      if (plan.state !== "confirmed" && plan.window && !replyPending) {
         items.push({ kind: "bubble", id: "hold-bubble", from: "muse", text: copy.holdBubble(formatWindowSpoken(plan.window)) });
         items.push({
           kind: "hold-row",
@@ -283,7 +288,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   }
   const offer = settleOffer(snapshot, plan, agent);
   if (offer.kind === "turn_on" || offer.kind === "ready") {
-    items.push({ kind: "settle-card", id: "settle-card", planId: plan.id, offer, friendName: theirs.human, friendMuse: theirs.muse });
+    items.push({ kind: "settle-card", id: "settle-card", planId: plan.id, offer, friendName: theirs.human, friendMuse: theirs.muse, museName: mine.muse });
   }
 
   // What comes after the person decides: the friend's scripted answer, and the person's own private questions to their Muse.

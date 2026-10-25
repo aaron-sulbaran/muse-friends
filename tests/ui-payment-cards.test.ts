@@ -68,7 +68,7 @@ describe("which card for which state", () => {
 
   it("lets the plan's Settle up card wait while a proposal is open, as the server does", () => {
     const base = { paymentsScope: { aaron: { enabled: true, cap: 30 }, lisa: { enabled: false, cap: 0 } }, sandbox: { enabled: true, connected: true, text: "x" } };
-    const plan = { id: "plan_1", state: "scheduled" as const };
+    const plan = { id: "plan_1", state: "followed_up" as const, outcome: { result: "went" as const, at: "2026-10-28T09:00:00-05:00", nextIdeaId: null, chosenBy: null } };
     for (const status of ["proposed", "failed", "sent"] as const) {
       expect(settleOffer({ ...base, payments: [payment({ status })] }, plan, "aaron")).toEqual({ kind: "waiting" });
     }
@@ -79,7 +79,7 @@ describe("which card for which state", () => {
 
   it("calls the plan settled once the friend kept the money, on both phones, so the ready card does not come back", () => {
     const base = { paymentsScope: { aaron: { enabled: true, cap: 30 }, lisa: { enabled: true, cap: 30 } }, sandbox: { enabled: true, connected: true, text: "x" } };
-    const plan = { id: "plan_1", state: "scheduled" as const };
+    const plan = { id: "plan_1", state: "followed_up" as const, outcome: { result: "went" as const, at: "2026-10-28T09:00:00-05:00", nextIdeaId: null, chosenBy: null } };
     const kept = { ...base, payments: [payment({ status: "received", amount: 16 })] };
     expect(settleOffer(kept, plan, "aaron")).toEqual({ kind: "settled", amount: 16 });
     expect(settleOffer(kept, plan, "lisa")).toEqual({ kind: "settled", amount: 16 });
@@ -169,10 +169,10 @@ describe("the confirm step", () => {
 
 describe("the settle card now that nothing moves without the person", () => {
   it("promises to ask first, never that the Muse sends on its own", () => {
-    const line = settleDetailFor({ cap: 20, event: "Shawarma Point, Tue Oct 27", friendMuse: "Mochi" });
-    expect(line).toBe("Your Muse works out your share of Shawarma Point, Tue Oct 27 and asks you before anything is sent, up to $20. Mochi accepts it or sends it back.");
+    const line = settleDetailFor({ kind: "ready", place: "Shawarma Point", friendMuse: "Michelle's Muse", museName: "Sprout" });
+    expect(line).toBe("Michelle's Muse sent the receipt from Shawarma Point and is asking for your half. Sprout can prepare it for you to confirm.");
     expect(line).not.toContain("without asking");
-    expect(settleDetailFor({ cap: 20, event: null, friendMuse: "Mochi" })).toContain("works out your share and asks you");
+    expect(settleDetailFor({ kind: "ready", place: null, friendMuse: "Mochi", museName: "Sprout" })).toContain("sent the receipt and is asking for your half");
   });
 });
 
