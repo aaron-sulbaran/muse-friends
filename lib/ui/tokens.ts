@@ -1,4 +1,4 @@
-import type { AgentId, Category, PlanState } from "./types";
+import type { Category, PlanState } from "./types";
 
 /*
  * Names for the values defined in app/globals.css. Hex and font values live
@@ -37,19 +37,7 @@ export const phone = {
   fullBleedBelow: 600,
 } as const;
 
-export type Persona = {
-  agent: AgentId;
-  human: string;
-  muse: string;
-  tint: string;
-};
-
-export const personas: Record<AgentId, Persona> = {
-  aaron: { agent: "aaron", human: "Aaron", muse: "Sprout", tint: color.sprout },
-  lisa: { agent: "lisa", human: "Lisa", muse: "Mochi", tint: color.mochi },
-};
-
-/** The simulated friend who stands in for Lisa when one judge plays alone. */
+/** The simulated friend who stands in for side b when one judge plays alone. */
 export const simulatedFriend = { human: "Michelle", muse: "Michelle's Muse" } as const;
 
 export const categoryLabel: Record<Category, string> = {

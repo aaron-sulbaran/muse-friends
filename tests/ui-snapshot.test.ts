@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { StateSnapshot } from "@/lib/protocol";
 import { privacyToggleDemo, recordedSnapshot, seedSnapshot } from "@/lib/seed/fixtures";
+import { snapshotAtPlanState } from "@/lib/seed/states";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 
-const live = { mode: "live", simulatedFriend: false } as const;
+const live = { mode: "live" } as const;
 
 describe("toUiSnapshot on Lane A's fixtures", () => {
   it("renders the seed as an empty stage with a quiet clock", () => {
@@ -49,19 +50,38 @@ describe("toUiSnapshot on Lane A's fixtures", () => {
     expect(toUiSnapshot(state, live).inFlight).toEqual({ agent: "lisa" });
   });
 
-  it("does not count the reel arriving as follow-through", () => {
+  it("counts only followed_through events: the reel arriving and taps are not the outcome", () => {
     const state = recordedSnapshot();
     expect(state.events.some((event) => event.kind === "signal_received" && event.actor === "human")).toBe(true);
     expect(toUiSnapshot(state, live).followThrough.events).toEqual([]);
+    const happened = snapshotAtPlanState("happened");
+    const counted = toUiSnapshot(happened, live).followThrough;
+    expect(counted.events.map((event) => event.id)).toEqual(["evt_followed_through"]);
+    expect(counted.humanTapCount).toBe(3);
+  });
+
+  it("names each side from the persona display names and reads the room's simulated flag", () => {
+    const state = recordedSnapshot();
+    expect(toUiSnapshot(state, live).sides).toEqual({ aaron: "Sprout", lisa: "Mochi" });
+    expect(toUiSnapshot(state, live).simulatedFriend).toBe(false);
+    state.room = { ...state.room, simulatedFriend: true };
+    expect(toUiSnapshot(state, live).simulatedFriend).toBe(true);
+  });
+
+  it("marks a message id that repeats as replayed", () => {
+    const state = recordedSnapshot();
+    state.messages.push(privacyToggleDemo().messageAfter);
+    const messages = toUiSnapshot(state, live).messages;
+    expect(messages.map((message) => message.replayed)).toEqual([false, false, false, false, false, false, true]);
   });
 
   it("reads Lisa's sharing policy toward Aaron through the policy helper", () => {
     const state = recordedSnapshot();
-    expect(toUiSnapshot(state, live).lisaSharesWithAaron.categories.location).toBe(true);
+    expect(toUiSnapshot(state, live).sharing.lisa.categories.location).toBe(true);
     state.policies = state.policies.map((policy) =>
       policy.owner === "lisa" ? { ...policy, categories: { ...policy.categories, location: false } } : policy,
     );
-    expect(toUiSnapshot(state, live).lisaSharesWithAaron.categories.location).toBe(false);
+    expect(toUiSnapshot(state, live).sharing.lisa.categories.location).toBe(false);
   });
 
   it("marks a rejected delivery as blocked, with the reason", () => {

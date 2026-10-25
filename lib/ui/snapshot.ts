@@ -1,20 +1,20 @@
-import { CATEGORIES, isCategoryAllowed, type ActivityEvent, type Plan, type StateSnapshot } from "@/lib/protocol";
-import type { Decision, FollowThroughEvent, UiMessage, UiPlan, UiSnapshot } from "./types";
+import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { displayName } from "@/lib/seed/personas";
+import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiPlan, UiSnapshot } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
- * contract changes (roles instead of agent ids, proof fields on messages), this
- * is the file that changes.
+ * contract changes, this is the file that changes. Server-only: it reads the
+ * persona display names from the seed, and the seed's calendars (with private
+ * event titles) must never reach a browser bundle.
  */
 
 export type UiOverlay = {
   mode: "live" | "replay";
-  /** True when phone B is played by the model instead of a second human. */
-  simulatedFriend: boolean;
 };
 
-/** Human events that are not follow-through: reading a reel and changing a setting are not showing up. */
-const notFollowThrough = new Set<ActivityEvent["kind"]>(["signal_received", "policy_changed", "clock_advanced"]);
+/** Taps and sends that move a plan along. Not the outcome, so never counted. */
+const humanTapKinds = new Set(["human_decision", "handoff_opened"]);
 
 function latestPlan(plans: Plan[]): Plan | null {
   return plans.at(-1) ?? null;
@@ -57,9 +57,12 @@ function dropReasonText(reason: Plan["dropReason"]): string {
 }
 
 function toUiMessages(state: StateSnapshot): UiMessage[] {
+  const seen = new Set<string>();
   return state.messages.map((record) => {
     const { message } = record;
     const rejected = record.delivery !== "delivered";
+    const replayed = seen.has(message.id);
+    seen.add(message.id);
     return {
       id: message.id,
       contextId: message.contextId,
@@ -75,6 +78,7 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
       shared: record.stamp.passed,
       removed: record.stamp.removed,
       at: message.at,
+      replayed,
       blockedRule: rejected ? (record.error ?? "Rejected by the receiving inbox") : undefined,
       raw: message,
     };
@@ -91,29 +95,37 @@ function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["in
   return { agent: last ? last.message.to : thread.initiator };
 }
 
-function toFollowThrough(events: ActivityEvent[]): FollowThroughEvent[] {
-  return events
-    .filter((event) => event.actor === "human" && !notFollowThrough.has(event.kind))
-    .map((event) => ({ id: event.id, label: event.text, at: event.at }));
+function sharingFor(owner: AgentId, state: StateSnapshot): SharingSettings {
+  const policy: SharePolicy | undefined = state.policies.find((candidate) => candidate.owner === owner);
+  const categories = Object.fromEntries(CATEGORIES.map((category) => [category, isCategoryAllowed(policy, category)])) as Record<
+    (typeof CATEGORIES)[number],
+    boolean
+  >;
+  return { tier: policy?.tier ?? "off", categories };
+}
+
+/** The counter counts one thing: plans that happened. Lane A marks that moment with a followed_through event. */
+function toFollowThrough(events: StateSnapshot["events"]): FollowThroughEvent[] {
+  return events.filter((event) => event.kind === "followed_through").map((event) => ({ id: event.id, label: event.text, at: event.at }));
 }
 
 export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapshot {
   const plan = latestPlan(state.plans);
-  const lisaPolicy = state.policies.find((policy) => policy.owner === "lisa" && policy.friend === "aaron");
-  const categories = Object.fromEntries(CATEGORIES.map((category) => [category, isCategoryAllowed(lisaPolicy, category)])) as Record<
-    (typeof CATEGORIES)[number],
-    boolean
-  >;
   const messages = toUiMessages(state);
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
     mode: overlay.mode,
-    simulatedFriend: overlay.simulatedFriend,
+    simulatedFriend: state.room.simulatedFriend,
+    sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
     plan: plan ? toUiPlan(plan) : null,
-    followThrough: { events: toFollowThrough(state.events), agentMessageCount: messages.length },
+    followThrough: {
+      events: toFollowThrough(state.events),
+      agentMessageCount: messages.length,
+      humanTapCount: state.events.filter((event) => event.actor === "human" && humanTapKinds.has(event.kind)).length,
+    },
     inFlight: deriveInFlight(state, plan),
-    lisaSharesWithAaron: { tier: lisaPolicy?.tier ?? "off", categories },
+    sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
   };
 }

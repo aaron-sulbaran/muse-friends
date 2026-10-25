@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { humanName } from "@/lib/ui/format";
+import { namesFor } from "@/lib/ui/format";
 import { buildHoldIcs } from "@/lib/ui/ics";
 import { readSnapshot } from "@/lib/ui/source";
 
@@ -19,7 +19,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/plans/[id]/h
   const stampedAt = plan.history.find((entry) => entry.state === "scheduled")?.at ?? snapshot.now;
   const body = buildHoldIcs({
     uid: `${plan.id}@muse-friends`,
-    summary: `${plan.activityTitle} with ${humanName(role === "a" ? "lisa" : "aaron", snapshot.simulatedFriend)}`,
+    summary: `${plan.activityTitle} with ${namesFor(snapshot).human[role === "a" ? "lisa" : "aaron"]}`,
     window: plan.window,
     stampedAt,
   });
