@@ -50,6 +50,20 @@ describe("the page", () => {
     for (const source of sources) expect(source).toMatch(/^\/(avatars|wordmark|how)\//);
   });
 
+  it("opens on the header's text lockup, not the retired script wordmark", () => {
+    expect(html).not.toContain("muse-friends-wordmark.svg");
+    expect(html).toContain('aria-label="Muse Friends"');
+  });
+
+  it("shows the Muses bare, never in a circle or a tile, and speaks plainly about the second phone", () => {
+    const portraits = [...html.matchAll(/<img[^>]*src="\/avatars\/[a-z]+-portrait\.png"[^>]*>/g)].map((match) => match[0]);
+    expect(portraits.length).toBeGreaterThanOrEqual(4);
+    for (const tag of portraits) expect(tag).not.toMatch(/rounded/);
+    expect(html).not.toMatch(/size-\[72px\]/);
+    expect(text).not.toContain("role=b");
+    expect(text).toContain("Your friend's phone never receives your private chat with your Muse.");
+  });
+
   it("ships every crop it points at", () => {
     for (const pattern of museCopy.patterns) if (pattern.image) expect(existsSync(`public${pattern.image}`)).toBe(true);
   });
