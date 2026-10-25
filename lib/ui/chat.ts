@@ -14,7 +14,7 @@ export type ChatItem =
   | { kind: "separator"; id: string; day: string; time: string }
   | { kind: "bubble"; id: string; from: "muse" | "user"; text: string }
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
-  | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; align: "left" | "right" }
+  | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; first: string; second: string; count: number }
   | { kind: "outcome-replies"; id: string; planId: string }
   | { kind: "collapsed"; id: string; text: string }
@@ -226,6 +226,7 @@ function pushPastSignal(items: ChatItem[], signal: PastSignal, role: Role, frien
       caption: signal.caption,
       place: signal.title,
       image: signal.image,
+      permalink: signal.permalink,
       align: role === "a" ? "left" : "right",
     });
   }
