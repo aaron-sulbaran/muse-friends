@@ -31,16 +31,18 @@ function jsonSchema(schema: z.ZodType): Record<string, unknown> {
 const NoArgs = z.strictObject({});
 export const ExplainPaymentArgs = z.strictObject({ paymentId: z.string().min(1).max(64).describe("A payment id from get_wallet_and_history") });
 export const WhereToDoArgs = z.strictObject({
-  action: z.enum(["pay", "message_friend", "decide_plan", "change_settings", "other"]).describe("What the person asked you to do from chat"),
+  action: z.enum(["pay", "message_friend", "decide_plan", "change_settings", "start_plan", "change_place", "other"]).describe("What the person asked you to do from chat"),
 });
 
-// What a person asked for that chat cannot do, and the card where it happens. The wording is the product's, not the model's.
+// What a person asked for that chat cannot do, and the card where it happens, in words. The wording is the product's, not the model's.
 export const WHERE_TO_DO: Record<z.infer<typeof WhereToDoArgs>["action"], string> = {
-  pay: "I can't send money from chat. Tap Settle up on the plan: I'll prepare the payment with its breakdown, and you confirm it there.",
-  message_friend: "I can't message your friend from chat. The plan is where we talk to their Muse, and you can message your friend yourself from the plan card.",
-  decide_plan: "Accepting or declining a plan is a tap on the plan card, so it is always yours to do.",
-  change_settings: "I can't change sharing or payment settings from chat. They are switches on your side, so only you flip them.",
-  other: "I can look things up for you from chat, but I can't act from here. What I can do is on the plan card.",
+  pay: "I can't send money from chat. Tap Settle up on the plan card: I'll prepare the payment with its breakdown, and you confirm it there.",
+  message_friend: "I can't message your friend from chat. When the plan is ready, tap Open WhatsApp on the plan card and the message to your friend is waiting there for you to send.",
+  decide_plan: "Accepting or passing on a plan is a tap on the plan card: Reach out to go ahead, Not now to pass. It is always yours to do.",
+  change_settings: "I can't change sharing or payment settings from chat. They are switches in your settings, so only you flip them.",
+  start_plan: "I can't start another plan from chat yet. A new plan starts when a reel comes in from your friend, and I take it from there.",
+  change_place: "I can't swap the place from chat. If the plan isn't set yet, tap Not now on its card and the next reel starts a fresh one. I can look up places nearby here, and the choice stays yours.",
+  other: "I can look things up for you from chat, including a web search for places nearby, but I can't act from here. What I can do is on the plan card.",
 };
 
 const badArgs = (error: z.ZodError) => ({ error: `Invalid arguments. ${z.prettifyError(error)}` });
@@ -234,7 +236,7 @@ export function buildChatTools(ctx: ChatToolContext, names: readonly ChatToolNam
     where_to_do_that: {
       definition: {
         name: "where_to_do_that",
-        description: "Call this when your person asks you to do something chat cannot do: pay someone, message the friend, accept or decline the plan, or change a setting. Returns the line to say, pointing at the card where it happens.",
+        description: "Call this when your person asks you to do something chat cannot do: pay someone, message the friend, accept or decline the plan, change a setting, start another plan, or change the place. Returns the line to say, naming the card to tap.",
         parameters: jsonSchema(WhereToDoArgs),
       },
       handler: async (raw) => {

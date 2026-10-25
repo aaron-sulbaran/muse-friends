@@ -195,9 +195,12 @@ export type UiNote = {
     | "payment_proposed"
     | "payment_cancelled"
     | "receipt_read"
-    | "chat_asked";
+    | "chat_asked"
+    | "web_searched";
   at: string;
   text: string;
+  /** On a "Searched the web" row (web_searched): the pages the search found, as links that open in a new tab. */
+  links?: UiSource[];
   /** On a "You asked" row (chat_asked): the read tools the Muse used to answer, from the proof on its answer. */
   toolCalls?: UiToolCall[];
   /** On a "You asked" row: the id of the answer in `chat`, so a screen can pair the row with the answer and its proof. */
@@ -226,6 +229,9 @@ export type UiWallet = {
   accountId: string;
 };
 
+/** A page a web search found: shown as a small "Source" chip with the site's host that opens the real page in a new tab. Third-party data. */
+export type UiSource = { title: string; url: string; host: string };
+
 /** One line of the chat with a person's own Muse. A Muse line carries the proof of the model call that wrote it and the tools it used. */
 export type UiChatMessage = {
   id: string;
@@ -235,6 +241,8 @@ export type UiChatMessage = {
   /** On a Muse line: the id of the question it answers. */
   replyTo?: string;
   proof?: ModelProof;
+  /** On a Muse line that used a web search: the pages it found, up to 3, one chip each. */
+  sources?: UiSource[];
 };
 
 /** One line of a payment's breakdown. The lines add up to the payment's amount; a deduction is negative. */
