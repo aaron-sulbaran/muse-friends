@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolHandler } from "@/lib/model";
-import { DeclineArgs, PaymentIdArgs, SendMoneyArgs, acceptPayment, declinePayment, getWallet, sendMoney, type PaymentContext } from "./payments";
+import { DeclineArgs, PaymentIdArgs, ReadReceiptArgs, SendMoneyArgs, acceptPayment, declinePayment, getWallet, readReceipt, sendMoney, type PaymentContext } from "./payments";
 
 // The four money tools. They are offered only in payment turns (a settle turn, or a friend's payment arriving),
 // never in the negotiation turns, so the plan-making flow is exactly what it was.
@@ -11,7 +11,7 @@ function jsonSchema(schema: z.ZodType): Record<string, unknown> {
   return converted;
 }
 
-export type PaymentToolName = "get_wallet" | "send_money" | "accept_payment" | "decline_payment";
+export type PaymentToolName = "get_wallet" | "read_receipt" | "send_money" | "accept_payment" | "decline_payment";
 
 const ALL: Record<PaymentToolName, ToolDefinition> = {
   get_wallet: {
@@ -19,9 +19,15 @@ const ALL: Record<PaymentToolName, ToolDefinition> = {
     description: "Your person's wallet: the balance, which sandbox it lives in, the most your person lets you send for this plan, and how much of that is already sent.",
     parameters: jsonSchema(z.strictObject({})),
   },
+  read_receipt: {
+    name: "read_receipt",
+    description: "Read the receipt for this plan's place: its lines, who ordered each, tax, tip, total, and who paid the bill. It is a seeded, fictional receipt and says so. Its result includes a callId you can cite as the source of a breakdown line.",
+    parameters: jsonSchema(ReadReceiptArgs),
+  },
   send_money: {
     name: "send_money",
-    description: "Send whole dollars from your person's wallet to your friend's wallet. Checked against your person's cap and your balance; the money moves at once. Your friend's agent then accepts it or sends it back.",
+    description:
+      "Prepare a payment of whole dollars from your person's wallet to your friend's wallet, with a breakdown whose lines add up to the amount and each name their source. It is checked against your person's cap and your balance, then shown to your person with the breakdown. NO money moves until they confirm; you cannot send it yourself. Your friend's agent hears about it only after they confirm.",
     parameters: jsonSchema(SendMoneyArgs),
   },
   accept_payment: {
@@ -39,6 +45,7 @@ const ALL: Record<PaymentToolName, ToolDefinition> = {
 export function buildPaymentTools(ctx: PaymentContext, names: PaymentToolName[]): { tools: ToolDefinition[]; handlers: Record<string, ToolHandler> } {
   const handlers: Record<string, ToolHandler> = {
     get_wallet: async () => getWallet(ctx),
+    read_receipt: (args, meta) => readReceipt(ctx, args, meta),
     send_money: (args, meta) => sendMoney(ctx, args, meta),
     accept_payment: (args, meta) => acceptPayment(ctx, args, meta),
     decline_payment: (args, meta) => declinePayment(ctx, args, meta),

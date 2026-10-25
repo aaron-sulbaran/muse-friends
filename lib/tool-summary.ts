@@ -42,8 +42,10 @@ function argsLine(name: string, args: unknown): string {
     }
     case "get_wallet":
       return "";
+    case "read_receipt":
+      return text(a.receipt) || "this plan's place";
     case "send_money":
-      return `$${typeof a.amount === "number" ? a.amount : "?"} to ${text(a.to) || "friend"}`;
+      return `$${typeof a.amount === "number" ? a.amount : "?"} to ${text(a.to) || "friend"}${count(a.breakdown) > 0 ? `, ${plural(count(a.breakdown), "line")}` : ""}`;
     case "accept_payment":
     case "decline_payment":
       return text(a.paymentId);
@@ -71,7 +73,10 @@ function resultLine(name: string, output: unknown, ok: boolean): string {
     case "get_wallet":
       return "balance read";
     case "send_money":
+      if (o.proposed === true) return typeof o.amount === "number" ? `prepared $${o.amount}, waiting for your person` : "payment prepared";
       return typeof o.amount === "number" ? `withdrew $${o.amount}, payment sent` : "payment sent";
+    case "read_receipt":
+      return "seeded receipt read";
     case "accept_payment":
       return typeof o.amount === "number" ? `deposited $${o.amount}` : "accepted";
     case "decline_payment":

@@ -10,6 +10,7 @@ export function nextThreadState(candidate: Pick<AgentMessage, "from" | "type" | 
   // A trip thread is four messages: ask, answer, plan, reply. The person's reply ends it, joined or not.
   if (candidate.type === "trip_reply") return candidate.trip?.choice === "out" ? "rejected" : "completed";
   if (candidate.type === "trip_ask" || candidate.type === "trip_answer" || candidate.type === "trip_plan") return "working";
+  if (candidate.type === "payment_cancelled") return "rejected";
   if (candidate.type === "decline") return "rejected";
   if (candidate.type === "accept") {
     const agreed = candidate.windows?.[0];

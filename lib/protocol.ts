@@ -44,7 +44,8 @@ export const TITLE_MAX = 60;
 // checked, never a model through the negotiation tool.
 export const NEGOTIATION_TYPES = ["intent", "propose", "counter", "accept", "decline"] as const;
 export const NegotiationType = z.enum(NEGOTIATION_TYPES);
-export const PAYMENT_TYPES = ["payment", "payment_received"] as const;
+// payment_cancelled: the payer's person declined a proposal, so the friend's Muse is told nothing moved.
+export const PAYMENT_TYPES = ["payment", "payment_received", "payment_cancelled"] as const;
 // The trip channel (a long-horizon group plan): the coordinator asks each member's Muse a bounded question, the member
 // answers from its person, the coordinator proposes a budget cap and an itinerary, the member's person joins or not.
 // Like payments, it has threads of its own and the runtime writes it, never a model through the negotiation tool.
@@ -134,6 +135,23 @@ export const PaymentOutcome = z.enum(["accepted", "declined"]);
 export type PaymentOutcome = z.infer<typeof PaymentOutcome>;
 
 const DollarAmount = z.number().int().min(1).max(PAYMENT_MAX_DOLLARS);
+
+// One line of the sourced breakdown behind a proposed payment: what it is, how many dollars (a deduction is
+// negative), and where the number came from. `source` is the id of a tool call from the turn that wrote the
+// proposal (for example the read_receipt call), the literal "note" (the person's note), or the literal "estimate".
+export const BREAKDOWN_NOTE = "note";
+export const BREAKDOWN_ESTIMATE = "estimate";
+export const BreakdownLine = z.strictObject({
+  label: z.string().min(1).max(60),
+  amount: z.number().int().min(-PAYMENT_MAX_DOLLARS).max(PAYMENT_MAX_DOLLARS),
+  source: z.string().min(1).max(64),
+});
+export type BreakdownLine = z.infer<typeof BreakdownLine>;
+export const Breakdown = z.array(BreakdownLine).min(1).max(8);
+export type Breakdown = z.infer<typeof Breakdown>;
+export function breakdownSum(lines: Breakdown): number {
+  return lines.reduce((total, line) => total + line.amount, 0);
+}
 const Balance = z.number().int().min(-10_000).max(1_000_000);
 
 // What a payment message carries. The first message (payment) says what left the payer's account; the answer
@@ -155,6 +173,8 @@ export const Payment = z.strictObject({
   depositId: Id.optional(),
   balanceBefore: Balance.optional(),
   balanceAfter: Balance.optional(),
+  // How the payer's Muse worked the amount out; on payment (and payment_cancelled), and the lines add up to the amount.
+  breakdown: Breakdown.optional(),
 });
 export type Payment = z.infer<typeof Payment>;
 
@@ -187,6 +207,7 @@ function checkWindowRules(value: WindowRuleInput, ctx: z.RefinementCtx) {
       return;
     case "payment":
     case "payment_received":
+    case "payment_cancelled":
       if (count > 0) issue("a payment carries no windows");
       return;
     case "trip_ask":
@@ -252,9 +273,14 @@ function checkPaymentShape(value: { type: MessageType; payment?: Payment }, ctx:
     return;
   }
   if (!payment) return issue(`${value.type} needs a payment`);
+  if (payment.breakdown && breakdownSum(payment.breakdown) !== payment.amount) issue("the breakdown lines must add up to the amount");
   if (value.type === "payment") {
     if (!payment.withdrawalId) issue("payment needs the withdrawalId");
     if (payment.outcome || payment.depositId) issue("payment cannot carry an outcome");
+    return;
+  }
+  if (value.type === "payment_cancelled") {
+    if (payment.withdrawalId || payment.outcome || payment.depositId) issue("a cancelled payment moved no money, so it carries no ids or outcome");
     return;
   }
   if (!payment.outcome) return issue("payment_received needs an outcome");
@@ -684,6 +710,9 @@ export const ACTIVITY_KINDS = [
   "payment_received",
   "payment_declined",
   "payment_failed",
+  "payment_proposed",
+  "payment_cancelled",
+  "receipt_read",
 ] as const;
 export const ActivityKind = z.enum(ACTIVITY_KINDS);
 export type ActivityKind = z.infer<typeof ActivityKind>;
@@ -709,6 +738,38 @@ export type ActivityEvent = z.infer<typeof ActivityEvent>;
 export const DemoClock = z.strictObject({ now: IsoDateTime });
 export type DemoClock = z.infer<typeof DemoClock>;
 
+// A payment the Muse has prepared and explained and the person has not yet confirmed. Nothing has moved: no
+// withdrawal, no message to the friend. The person confirms (money moves) or declines (nothing does). It lives on
+// the room until then; once confirmed, the payment message and the ledger take over as the record.
+export const PROPOSAL_STATUSES = ["proposed", "confirming", "confirmed", "declined", "failed"] as const;
+export const PaymentProposal = z
+  .strictObject({
+    paymentId: Id,
+    planId: Id,
+    payer: AgentId,
+    payee: AgentId,
+    amount: DollarAmount,
+    reason: z.string().min(1).max(100),
+    note: z.string().max(NOTE_MAX).optional(),
+    breakdown: Breakdown,
+    // The tool calls the turn had finished when it wrote the proposal: what each source id in the breakdown points at.
+    calls: z.array(z.strictObject({ callId: z.string().min(1).max(64), name: z.string().min(1).max(40) })).max(10).optional(),
+    // The seeded receipt the breakdown was read from, when the Muse read one this turn.
+    receipt: z.strictObject({ id: Id, place: z.string().max(80), seeded: z.literal(true), total: DollarAmount }).optional(),
+    source: z.enum(["nessie", "local"]),
+    status: z.enum(PROPOSAL_STATUSES),
+    // Why a confirm did not go through ("Payment failed, sandbox error: ...").
+    error: z.string().max(200).optional(),
+    // The model call that wrote the proposal, with the tools it called; it rides on the payment message when sent.
+    proof: ModelProof.optional(),
+    proposedAt: IsoDateTime,
+    decidedAt: IsoDateTime.optional(),
+  })
+  .superRefine((proposal, ctx) => {
+    if (breakdownSum(proposal.breakdown) !== proposal.amount) ctx.addIssue({ code: "custom", message: "the breakdown lines must add up to the amount", path: ["breakdown"] });
+  });
+export type PaymentProposal = z.infer<typeof PaymentProposal>;
+
 // A seat's wallet. The balance is the last one read back from the ledger, never computed here.
 export const Wallet = z.strictObject({
   owner: AgentId,
@@ -732,6 +793,8 @@ export const Room = z.strictObject({
   wallets: z.partialRecord(AgentId, Wallet).optional(),
   // The local ledger (account id to balance), used only while wallets are local. Never shown to the UI.
   localLedger: z.record(z.string(), z.number().int()).optional(),
+  // Payments prepared and waiting for the person to confirm (or decided), by payment id.
+  proposals: z.record(z.string(), PaymentProposal).optional(),
   updatedAt: IsoDateTime,
 });
 export type Room = z.infer<typeof Room>;
