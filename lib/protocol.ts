@@ -254,6 +254,15 @@ export type Redaction = z.infer<typeof Redaction>;
 
 // Evidence that a model call produced the message: shown on the Activity row so a judge can see the
 // agent link is live. Absent on scripted fixtures, which no model wrote.
+// One tool the agent called on the way to this message, as one line of arguments and one line of result. Counts and
+// the shape of the call only: never calendar titles, caption text, balances, or notes.
+export const ToolCallProof = z.strictObject({
+  name: z.string().min(1).max(40),
+  args: z.string().max(100),
+  result: z.string().max(100),
+});
+export type ToolCallProof = z.infer<typeof ToolCallProof>;
+
 export const ModelProof = z.strictObject({
   model: z.string().max(40),
   responseId: z.string().max(80),
@@ -261,6 +270,8 @@ export const ModelProof = z.strictObject({
   inputTokens: z.number().int().min(0),
   outputTokens: z.number().int().min(0),
   reasoningTokens: z.number().int().min(0),
+  // The tools the agent called this turn, in order, ending with the call that wrote this message.
+  toolCalls: z.array(ToolCallProof).max(10).optional(),
 });
 export type ModelProof = z.infer<typeof ModelProof>;
 

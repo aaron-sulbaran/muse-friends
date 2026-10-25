@@ -1,3 +1,4 @@
+import { getRoom, withRoom } from "./room";
 import type { Category, Role, ShareTier } from "./types";
 
 export type Result = { ok: true } | { ok: false; message: string; paused?: boolean; refused?: boolean };
@@ -6,7 +7,7 @@ type ErrorBody = { error?: string | { message?: string } | null; paused?: boolea
 
 async function post(url: string, body: unknown): Promise<Result> {
   try {
-    const response = await fetch(url, {
+    const response = await fetch(withRoom(url, getRoom()), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -53,9 +54,17 @@ export function postFollowUp(target: string) {
  * the stage), then the simulated friend sends the shawarma reel, which starts a real run.
  */
 export async function postSimulatedFriend(): Promise<Result> {
-  const switched = await post("/api/controls", { type: "simulated_friend", on: true });
+  const switched = await postSimulatedFriendSwitch(true);
   if (!switched.ok) return switched;
   return postSignal();
+}
+
+/**
+ * Michelle on or off for the room, and nothing else. It is a room-level switch and flipping it clears the room, so
+ * it is done before a plan starts, or on purpose behind a "start over" the person confirmed.
+ */
+export function postSimulatedFriendSwitch(on: boolean): Promise<Result> {
+  return post("/api/controls", { type: "simulated_friend", on });
 }
 
 /** Asks the simulated friend to answer her card. Safe to repeat: the server answers once. */
@@ -72,6 +81,20 @@ export async function postReplan(planId: string, role: Role, followUpTarget?: st
   if (!marked.ok) return marked;
   // A follow-up has no reel to send again: it starts again with the same person.
   return followUpTarget ? postFollowUp(followUpTarget) : postSignal();
+}
+
+export type LeakAttempt = { id: string; label: string; status: number; error: string; rejected: boolean };
+
+/** "Try to leak": asks the server to forge two sends to Mochi's inbox and report what the inbox answered, verbatim. */
+export async function postLeakAttempt(): Promise<{ ok: true; attempts: LeakAttempt[] } | { ok: false; message: string }> {
+  try {
+    const response = await fetch("/api/proof/leak", { method: "POST" });
+    const body = (await response.json().catch(() => null)) as { data?: { attempts?: LeakAttempt[] } | null; error?: { message?: string } | null } | null;
+    if (response.ok && body?.data?.attempts) return { ok: true, attempts: body.data.attempts };
+    return { ok: false, message: body?.error?.message ?? `Request failed with ${response.status}` };
+  } catch {
+    return { ok: false, message: "Could not reach the server" };
+  }
 }
 
 export function postClockAdvance() {

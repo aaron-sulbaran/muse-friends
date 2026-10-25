@@ -25,6 +25,9 @@ export type { AgentId, Category, Decision, MessageReason, MessageType, PlanState
 /** What a Muse is doing, for the header avatar's loop: nothing, reading or waiting on a model, or talking to the other Muse. */
 export type AvatarMood = "idle" | "thinking" | "talking";
 
+/** One tool a model call used: its name and a one-line summary of the arguments and of what came back. */
+export type UiToolCall = { name: string; args: string; result: string };
+
 export type ModelProof = {
   model: string;
   responseId: string;
@@ -32,6 +35,8 @@ export type ModelProof = {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
+  /** The tools this call used, when the store recorded them; absent otherwise. */
+  toolCalls?: UiToolCall[];
 };
 
 export type UiMessage = {
@@ -111,7 +116,7 @@ export type UiRefusal = { id: string; at: string; contactName: string; text: str
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "contact_chosen" | "contact_refused" | "reel_source";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source" | "contact_chosen" | "contact_refused";
   at: string;
   text: string;
 };

@@ -39,8 +39,38 @@ describe("runAgentTurn (stateless, the default)", () => {
     const metas: unknown[] = [];
     await runAgentTurn({ ...base, handlers: { get_my_calendar: async (_args, meta) => (metas.push(meta), {}) } });
     expect(metas).toEqual([
-      { responseId: "resp_1", model: "muse-spark-1.3", call: expect.objectContaining({ responseId: "resp_1", inputTokens: 10, outputTokens: 5, reasoningTokens: 2, toolNames: ["get_my_calendar"] }) },
+      { responseId: "resp_1", model: "muse-spark-1.3", call: expect.objectContaining({ responseId: "resp_1", inputTokens: 10, outputTokens: 5, reasoningTokens: 2, toolNames: ["get_my_calendar"] }), toolCalls: [] },
     ]);
+  });
+
+  it("tells each handler the tool calls the turn has already finished, summarized, and leaves what the model sees alone", async () => {
+    const fake = installFakeModel([
+      { calls: [{ name: "get_my_calendar", args: { start: "2026-10-26T00:00:00-05:00", end: "2026-10-27" } }, { name: "get_interests", args: { category: "food" } }] },
+      { calls: [{ name: "send_to_friend_agent", args: { type: "intent", windows: [{}, {}], share: ["food", "location"] } }] },
+      { text: "done" },
+    ]);
+    const seen: Array<[string, unknown]> = [];
+    await runAgentTurn({
+      ...base,
+      handlers: {
+        get_my_calendar: async (_args, meta) => (seen.push(["get_my_calendar", meta?.toolCalls]), { free: [{}, {}, {}], busy: [{ title: "Interview, Northwind Labs", private: true }] }),
+        get_interests: async (_args, meta) => (seen.push(["get_interests", meta?.toolCalls]), { food: ["shawarma", "ramen"] }),
+        send_to_friend_agent: async (_args, meta) => (seen.push(["send", meta?.toolCalls]), { ok: true, seq: 1, state: "working" }),
+      },
+    });
+    expect(seen[0][1]).toEqual([]);
+    expect(seen[1][1]).toEqual([{ name: "get_my_calendar", args: "2026-10-26 to 2026-10-27", result: "3 free blocks, 1 busy" }]);
+    expect(seen[2][1]).toEqual([
+      { name: "get_my_calendar", args: "2026-10-26 to 2026-10-27", result: "3 free blocks, 1 busy" },
+      { name: "get_interests", args: "food", result: "2 interests" },
+    ]);
+    // Private titles never reach the summaries.
+    expect(JSON.stringify(seen)).not.toMatch(/Northwind|Interview/);
+    // The model is told exactly what it was told before: the raw tool outputs, nothing about the summaries.
+    const second = fake.calls[1].input as Array<Record<string, unknown>>;
+    const outputs = second.filter((item) => item.type === "function_call_output").map((item) => String(item.output));
+    expect(outputs[0]).toBe(JSON.stringify({ free: [{}, {}, {}], busy: [{ title: "Interview, Northwind Labs", private: true }] }));
+    expect(JSON.stringify(fake.calls)).not.toContain("3 free blocks");
   });
 
   it("sends function tools with strict false and no tool_choice", async () => {

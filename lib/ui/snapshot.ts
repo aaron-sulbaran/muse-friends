@@ -3,6 +3,7 @@ import { AGENT_IDS, CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type
 import { displayName } from "@/lib/seed/personas";
 import { CONTACTS, getContact, isMutual } from "@/lib/seed/contacts";
 import { simulatedFriend } from "./tokens";
+import { toolCallsOf } from "./tools";
 import type { UiReel, Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiRefusal, UiSnapshot } from "./types";
 
 /*
@@ -182,7 +183,17 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<string>(["caption_extracted", "thread_opened", "policy_changed", "busy_added"]);
+const noteKinds = new Set<string>(["caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected"]);
+
+/**
+ * An inbox that refuses a message for what it carries (422) or who sent it (403) is the code saying no, which is
+ * worth a row. A 409 is a sequencing hiccup (a retry, a message out of turn), which is not.
+ */
+function isWorthARow(event: StateSnapshot["events"][number]): boolean {
+  if (event.kind !== "message_rejected") return true;
+  const status = /\((\d{3})\)/.exec(event.text)?.[1];
+  return status === "422" || status === "403";
+}
 
 /** One row per reel a run started from, saying honestly whether it came live from Instagram or from the seed. */
 function reelSourceNotes(state: StateSnapshot): UiNote[] {
@@ -204,7 +215,7 @@ function toNotes(state: StateSnapshot, rename: (text: string) => string): UiNote
     const followUp = event.planId ? followUps.get(event.planId) : undefined;
     if (followUp && event.kind === "signal_received") return [{ id: event.id, kind: "contact_chosen", at: event.at, text }];
     if (followUp && isRefused(followUp) && event.kind === "plan_state") return [{ id: event.id, kind: "contact_refused", at: event.at, text }];
-    if (noteKinds.has(event.kind)) return [{ id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text }];
+    if (noteKinds.has(event.kind) && isWorthARow(event)) return [{ id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text }];
     return [];
   });
 }
@@ -219,6 +230,13 @@ function refusalOf(state: StateSnapshot, plan: Plan | null, rename: (text: strin
     contactName: getContact(plan.target)?.displayName ?? plan.target,
     text: shown ? rename(shown.text) : "Nothing was started",
   };
+}
+
+/** The message's proof, with its recorded tool calls tidied for display when there are any. */
+function withToolCalls(proof: StateSnapshot["messages"][number]["proof"]): UiMessage["proof"] {
+  if (!proof) return undefined;
+  const toolCalls = toolCallsOf(proof);
+  return toolCalls ? { ...proof, toolCalls } : proof;
 }
 
 function toUiMessages(state: StateSnapshot, rename: (text: string) => string): UiMessage[] {
@@ -240,7 +258,7 @@ function toUiMessages(state: StateSnapshot, rename: (text: string) => string): U
       shared: record.stamp.passed,
       removed: record.stamp.removed,
       at: message.at,
-      proof: record.proof,
+      proof: withToolCalls(record.proof),
       blockedRule: rejected ? (record.error ?? "Rejected by the receiving inbox") : undefined,
       raw: message,
     };

@@ -1,4 +1,4 @@
-import { CalendarX, Film, MessageCircle, Shield, UserMinus, Users, type LucideIcon } from "lucide-react";
+import { CalendarX, Film, MessageCircle, Shield, ShieldAlert, UserMinus, Users, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
 
@@ -9,6 +9,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
   contact_chosen: { icon: Users, title: "Asked to follow up" },
   contact_refused: { icon: UserMinus, title: "Did not reach out", plain: true },
   busy_added: { icon: CalendarX, title: "Marked a time busy" },
+  message_rejected: { icon: ShieldAlert, title: "Inbox rejected a message" },
   reel_source: { icon: Film, title: "Where the reel came from" },
 };
 

@@ -105,7 +105,7 @@ describe("a mutual acquaintance: the run starts, with a smaller footprint", () =
     const snapshot = await ui(store);
     expect(snapshot.plan?.target?.name).toBe("Jules");
     const a = viewForRole(snapshot, "a");
-    expect(a.status).toBe("💬 reaching out to Jules");
+    expect(a.status).toEqual({ glyph: "talking", text: "reaching out to Jules" });
     expect(a.items.find((item) => item.kind === "bubble" && item.id === "contact-chosen")).toMatchObject({ from: "user", text: "Follow up with Jules" });
     const b = viewForRole(snapshot, "b");
     expect(b.items.some((item) => item.kind === "bubble" && item.id === "reel-sent")).toBe(false);
