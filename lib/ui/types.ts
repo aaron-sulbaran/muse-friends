@@ -29,7 +29,10 @@ export type AvatarMood = "idle" | "thinking" | "talking";
 export type UiToolCall = { name: string; args: string; result: string };
 
 export type ModelProof = {
+  /** The model that answered. */
   model: string;
+  /** Present when a fallback answered: the configured model that did not (it answered 404 model not found). */
+  fallbackFrom?: string;
   responseId: string;
   latencyMs: number;
   inputTokens: number;
@@ -96,9 +99,13 @@ export type FollowThroughEvent = {
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source" | "payment_sent" | "payment_received" | "payment_declined" | "payment_failed" | "payment_proposed" | "payment_cancelled" | "receipt_read";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source" | "payment_sent" | "payment_received" | "payment_declined" | "payment_failed" | "payment_proposed" | "payment_cancelled" | "receipt_read" | "chat_asked";
   at: string;
   text: string;
+  /** On a "You asked" row (chat_asked): the read tools the Muse used to answer, from the proof on its answer. */
+  toolCalls?: UiToolCall[];
+  /** On a "You asked" row: the id of the answer in `chat`, so a screen can pair the row with the answer and its proof. */
+  answerId?: string;
 };
 
 export type InFlight = {
@@ -117,6 +124,17 @@ export type UiWallet = {
   nickname: string;
   source: "nessie" | "local";
   accountId: string;
+};
+
+/** One line of the chat with a person's own Muse. A Muse line carries the proof of the model call that wrote it and the tools it used. */
+export type UiChatMessage = {
+  id: string;
+  from: "user" | "muse";
+  text: string;
+  at: string;
+  /** On a Muse line: the id of the question it answers. */
+  replyTo?: string;
+  proof?: ModelProof;
 };
 
 /** One line of a payment's breakdown. The lines add up to the payment's amount; a deduction is negative. */
@@ -179,6 +197,9 @@ export type PaymentsSettings = { enabled: boolean; cap: number };
 /** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
 export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
 
+/** What Muse Spark read from the reel's caption, field by field; any of them can be missing. */
+export type UiReelRead = { place: string | null; area: string | null; hours: string | null };
+
 /** Which recording a replay frame was built from, so the badge can say what is playing and from when. */
 export type UiRecording = { source: "live" | "scripted"; recordedAt: string };
 
@@ -193,12 +214,16 @@ export type UiSnapshot = {
   simulatedFriend: boolean;
   /** What people see for each side: the Muse characters' names, never the internal ids. */
   sides: Record<AgentId, string>;
+  /** What each side's person is called, when someone said (onboarding, or a second phone). Unset, the other side says "your friend". */
+  humans?: Partial<Record<AgentId, string>>;
   messages: UiMessage[];
   /** Non-message timeline rows, merged with the messages by time. */
   notes: UiNote[];
   plan: UiPlan | null;
   /** The demo reel read live from Instagram, or null for the seeded one. */
   reel: UiReel | null;
+  /** What the caption read found, from the latest reel that has been read; null until Muse Spark has read one. */
+  reelRead: UiReelRead | null;
   followThrough: {
     /** Plans that happened: the only thing the counter counts. */
     events: FollowThroughEvent[];
@@ -217,6 +242,8 @@ export type UiSnapshot = {
   wallets: Record<AgentId, UiWallet | null>;
   /** Payments between the Muses, oldest first. They are not in `messages`. */
   payments: UiPayment[];
+  /** The chat between side a's person and their own Muse (D31), oldest first, in order. Empty until the first question; never has a line for side b. */
+  chat: UiChatMessage[];
   /** What each side lets its Muse send. */
   paymentsScope: Record<AgentId, PaymentsSettings>;
   /** `connected` is true only when the wallets live on the real Nessie sandbox; otherwise a local ledger stands in. */

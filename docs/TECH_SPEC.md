@@ -196,6 +196,28 @@ type Payment = {
 
 **Timeline and snapshot.** Activity rows `payment_proposed`, `payment_sent`, `payment_received`, `payment_declined`, `payment_cancelled`, `payment_failed` and `receipt_read` carry the ledger and the Nessie ids; a ledger error reads "Payment failed, sandbox error: ..." and never drops a plan or fails a Reset. The UI snapshot adds `wallets`, `payments`, `paymentsScope` and `sandbox` (payments are not in `messages`). Each `payments` entry has `status` (`proposed`, `declined`, `failed`, `sent`, `received`, `refunded`), `breakdown` (label, amount, `source`, `sourceKind` of `tool`, `note` or `estimate`, and the `tool` name a tool source points at), `explanation` (the lines as a sentence, for "Why $16?"), `receipt` (`{ seeded: true, place, total }`), `confirmUrl` and `declineUrl` while it waits on the person, `error` after a failed confirm, the Nessie ids (`withdrawalId`, `depositId`) after sending, and `toolCalls` (the payer's tools from the proof on the `payment` message, then the friend's from the `payment_received` proof once it answers, so the drawer can show `get_wallet`, `send_money` and `accept_payment`). `sandbox.balanceNote` is present on the real sandbox only: it records each payment but never moves an account's own balance field (checked live), so Muse keeps the balances and the line says so. A wallet's `nickname` and the settle refusal name the friend the way the Activity feed does ("Michelle's wallet", "Michelle's Muse" when the simulated friend plays side b).
 
+## Chat with your Muse (D31)
+
+The person on side a can talk to their own Muse. `POST /api/chat { text, role? }` (role `a`, the default; side b gets a 403, because Michelle is scripted and the friend's side has no chat) runs **one model turn** with the existing loop (`runAgentTurn`, same retry rules, prose is the answer, at most 5 lookups) over **read-only tools only**, so the answers come from the same data the cards show:
+
+| Tool | Reads |
+|---|---|
+| `get_plan` | state, what and where, the agreed window, who has said yes, recent history (or "no plan yet") |
+| `get_reel` | the reel the friend sent: their message, the caption (labeled as someone else's words), what the Muse read from it, and whether it is the seeded one |
+| `get_wallet_and_history` | the balance and ledger, the per-plan allowance, and every payment this person is in with reason, amount, status and date |
+| `get_sharing` | what each side shares by category, what was removed from a message and why |
+| `explain_payment({ paymentId })` | the breakdown lines of one payment and where each number came from (the sample receipt, "what you told me", "my own estimate") |
+| `get_my_calendar`, `get_interests` | the product's own read tools; a private event's title is replaced by "a private event" before the model sees it, since an answer is kept on the room |
+| `where_to_do_that({ action })` | no data: the line that points a request the chat cannot do (pay, message the friend, decide the plan, change a setting) at the card where it happens |
+
+There is **no tool that sends a protocol message, moves money, decides a plan or changes a setting**; a model that asks for one gets an error, and those stay with the plan flow and the D28 confirm. The last six lines of the chat go into the next turn's input, so a follow-up ("and the tax?") has something to follow.
+
+**What it leaves.** The question and the answer on the room (`Room.chat`, `ChatEntry { id, from: user | muse, text, at, replyTo?, proof? }`, the last 40 lines, cleared by Reset), and one Activity row `chat_asked`, "You asked: ...", whose `messageId` is the answer's id. The answer's `proof` is the model call plus `toolCalls` (one line each, counts and states only, never the caption, the balance or a payment's reason). When the model is down nothing is stored: the route answers 503 with the honest reason, a `turn_failed` row is written, and the chat slot is given back; a chat answer is never faked.
+
+**Caps.** 20 chat turns per room per hour (`MAX_CHAT_TURNS_PER_ROOM_PER_HOUR`), counted in memory like the run caps, and each turn also spends from the app-wide hourly total. Past either: 429 `{ paused, reason, text, budget }` with `Retry-After`. A bad body (empty, over 500 characters) is a 400 and spends nothing.
+
+**Snapshot.** `UiSnapshot.chat: UiChatMessage[]` (`{ id, from: "user" | "muse", text, at, replyTo?, proof? }`, in order; text is renamed like the rest of the screen, so the Muse shows as "Michelle's Muse" when the simulated friend plays side b) and `UiNote` kind `chat_asked` with `answerId` and `toolCalls`. `GET /api/state?role=b` returns the snapshot **without** the chat lines and the `chat_asked` rows (and `role` of anything but `a` fails closed the same way), so a real second phone never receives side a's questions; no `role`, or `a`, is the full view the stage and the gate use. The restricted view has its own ETag. A recorded run for Replay does not keep the chat either.
+
 ## Demo controls
 
 - **Inject signal:** loads the seeded "Lisa sent Aaron a reel" event.

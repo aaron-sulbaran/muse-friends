@@ -118,6 +118,8 @@ async function run(label) {
   check(messages.length > 0 && messages.length <= 4, `agreed within 4 messages (${messages.length})`);
   const fallbacks = messages.filter((m) => !m.proof).length;
   check(fallbacks === 0, `every message carries model proof${fallbacks > 0 ? ` (${fallbacks} sent by the scripted fallback: the model could not reply)` : ""}`);
+  const answeredBy = [...new Set(messages.filter((m) => m.proof).map((m) => (m.proof.fallbackFrom ? `${m.proof.model} (fallback, ${m.proof.fallbackFrom} was not found)` : m.proof.model)))];
+  if (answeredBy.length > 0) console.log(`  answered by ${answeredBy.join(", ")}`);
   if (target) {
     const location = messages.filter((m) => (m.shared ?? []).includes("location") || m.activity?.place);
     check(location.length === 0, `no message carries a place or location (${location.length} did)`);

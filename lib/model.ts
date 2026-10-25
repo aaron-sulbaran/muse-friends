@@ -21,6 +21,9 @@ const CHAIN_RETRY_DELAYS_MS = [400, 800, 1600];
 // side; the next call goes through, but a single call can see several in a row. Eight short retries cost
 // nothing normally and at most 6 s when the flap is at its worst.
 const MODEL_NOT_FOUND_RETRY_DELAYS_MS = [200, 300, 400, 600, 800, 1000, 1200, 1500];
+// When a fallback model exists, the configured one gets only the first of those retries (a flap clears in one or two
+// tries when it is a flap); then the next model takes over the rest of the same ladder, so the total pause is the same.
+const PRIMARY_NOT_FOUND_RETRIES = 3;
 
 let cachedClient: OpenAI | undefined;
 
@@ -45,6 +48,21 @@ export function setModelClient(client: OpenAI | undefined): void {
 
 export function modelId(): string {
   return process.env.MODEL_ID ?? DEFAULT_MODEL;
+}
+
+// The model ids to fall back on, in order, when the configured one answers 404 "model not found" through its share of
+// the retry ladder (MODEL_FALLBACK_IDS, comma separated; set it to an empty string for no fallback).
+export const DEFAULT_FALLBACK_IDS = "muse-spark-1.2";
+
+export function fallbackModelIds(): string[] {
+  const raw = process.env.MODEL_FALLBACK_IDS ?? DEFAULT_FALLBACK_IDS;
+  const primary = modelId();
+  return [...new Set(raw.split(",").map((id) => id.trim()).filter((id) => id !== "" && id !== primary))];
+}
+
+// What a turn may call, in order: the configured model, then the fallbacks.
+export function modelCandidates(): string[] {
+  return [modelId(), ...fallbackModelIds()];
 }
 
 export type ToolDefinition = {
@@ -72,15 +90,19 @@ export type ToolMeta = {
 export type ToolHandler = (args: unknown, meta?: ToolMeta) => Promise<unknown>;
 
 export type TurnFailure = {
-  reason: "cap_reached";
-  // Why: too many tool calls, no tool call after the nudge, or the model API failed.
+  // model_error: the model API failed or answered incomplete (a 404 or a 5xx is not a cap). no_tool_call: it answered in
+  // prose after the nudge. cap_reached: it used up the turn's tool calls, the only real cap here.
+  reason: "model_error" | "no_tool_call" | "cap_reached";
+  // The same thing at finer grain: too many tool calls, no tool call after the nudge, or the model API failed.
   detail: "tool_cap" | "no_tool_call" | "api_error";
   message?: string;
 };
 
 export type ModelCallTrace = {
   responseId: string;
+  // The model that answered. When it is a fallback, `fallbackFrom` is the configured model that did not (404).
   model: string;
+  fallbackFrom?: string;
   ms: number;
   chained: boolean;
   chainRetries: number;
@@ -170,22 +192,42 @@ function isModelNotFound(error: unknown): boolean {
   return error instanceof OpenAI.APIError && error.status === 404 && (error.code === "model_not_found" || /requested model was not found/i.test(error.message));
 }
 
+// Which model a turn is calling. Starts on the configured one; once a fallback has answered the rest of the turn stays
+// on it, so the reasoning items it replays come from one model and a down model is not retried on every call.
+type ModelRoute = { models: string[]; index: number };
+
+type Created = { response: Response; chainRetries: number; model: string; fallbackFrom?: string };
+
 // A just-finished response can briefly answer a chain call with 400 or 404; retry after a pause. A 404
-// model_not_found is retried on any call, chained or not, because the model is there on the next try.
-async function createResponse(
-  params: ResponseCreateParamsNonStreaming,
-): Promise<{ response: Response; chainRetries: number }> {
+// model_not_found is retried on any call, chained or not, because the model is there on the next try. If it keeps
+// answering 404, the call moves to the next model in the route (immediately, and only for this error: a 429 or a 5xx
+// never switches models) and that model uses the rest of the ladder.
+async function createResponse(params: Omit<ResponseCreateParamsNonStreaming, "model">, route: ModelRoute): Promise<Created> {
   const client = getClient();
   let chainRetries = 0;
   let notFoundRetries = 0;
+  let retriesOnThisModel = 0;
   for (;;) {
+    const model = route.models[route.index];
     try {
-      return { response: await client.responses.create(params), chainRetries };
+      const response = await client.responses.create({ ...params, model });
+      return { response, chainRetries, model, fallbackFrom: route.index > 0 ? route.models[0] : undefined };
     } catch (error) {
-      if (isModelNotFound(error) && notFoundRetries < MODEL_NOT_FOUND_RETRY_DELAYS_MS.length) {
-        await sleep(MODEL_NOT_FOUND_RETRY_DELAYS_MS[notFoundRetries]);
-        notFoundRetries += 1;
-        continue;
+      if (isModelNotFound(error)) {
+        const hasNext = route.index < route.models.length - 1;
+        if (hasNext && retriesOnThisModel >= PRIMARY_NOT_FOUND_RETRIES) {
+          if (process.env.NODE_ENV !== "test") console.warn(`model ${model} answered 404 model_not_found; trying ${route.models[route.index + 1]}`);
+          route.index += 1;
+          retriesOnThisModel = 0;
+          continue;
+        }
+        if (notFoundRetries < MODEL_NOT_FOUND_RETRY_DELAYS_MS.length) {
+          await sleep(MODEL_NOT_FOUND_RETRY_DELAYS_MS[notFoundRetries]);
+          notFoundRetries += 1;
+          retriesOnThisModel += 1;
+          continue;
+        }
+        throw error;
       }
       const status = statusOf(error);
       const retriable = params.previous_response_id && (status === 400 || status === 404);
@@ -235,6 +277,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
   const performed: ToolCallSummary[] = [];
   const finished: Array<{ callId: string; name: string }> = [];
 
+  const route: ModelRoute = { models: modelCandidates(), index: 0 };
   const mode = options.mode ?? contextMode();
   const initial: ResponseInput =
     typeof options.input === "string" ? [{ role: "user", content: options.input }] : [...options.input];
@@ -260,8 +303,8 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
     const callStarted = Date.now();
     let response: Response;
     let chainRetries: number;
+    let answeredBy: Pick<Created, "model" | "fallbackFrom">;
     const shared = {
-      model: modelId(),
       instructions: options.instructions,
       tools,
       reasoning: { effort: options.effort ?? defaultEffort() },
@@ -269,24 +312,25 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
     } satisfies Partial<ResponseCreateParamsNonStreaming>;
     try {
       if (mode === "chain") {
-        ({ response, chainRetries } = await createResponse({ ...shared, input: pending, previous_response_id: previousResponseId }));
+        ({ response, chainRetries, ...answeredBy } = await createResponse({ ...shared, input: pending, previous_response_id: previousResponseId }, route));
       } else {
         const stateless = { ...shared, store: false, include: ["reasoning.encrypted_content" as const] };
         try {
-          ({ response, chainRetries } = await createResponse({ ...stateless, input: history }));
+          ({ response, chainRetries, ...answeredBy } = await createResponse({ ...stateless, input: history }, route));
         } catch (error) {
           if (statusOf(error) !== 400 || !history.some((item) => "type" in item && item.type === "reasoning")) throw error;
-          ({ response, chainRetries } = await createResponse({ ...stateless, input: withoutReasoning(history) }));
+          ({ response, chainRetries, ...answeredBy } = await createResponse({ ...stateless, input: withoutReasoning(history) }, route));
         }
       }
     } catch (error) {
-      return finish("failed", { reason: "cap_reached", detail: "api_error", message: describeError(error) });
+      return finish("failed", { reason: "model_error", detail: "api_error", message: describeError(error) });
     }
 
     const functionCalls = response.output.filter((item) => item.type === "function_call");
     const trace: ModelCallTrace = {
       responseId: response.id,
-      model: response.model ?? modelId(),
+      model: response.model ?? answeredBy.model,
+      ...(answeredBy.fallbackFrom ? { fallbackFrom: answeredBy.fallbackFrom } : {}),
       ms: Date.now() - callStarted,
       chained: mode === "chain" && previousResponseId !== undefined,
       chainRetries,
@@ -301,7 +345,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
 
     if (response.status !== "completed") {
       return finish("failed", {
-        reason: "cap_reached",
+        reason: "model_error",
         detail: "api_error",
         message: response.incomplete_details?.reason ?? response.status ?? "incomplete",
       });
@@ -309,7 +353,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
 
     if (functionCalls.length === 0) {
       if (requiredSatisfied) return finish("completed");
-      if (nudged) return finish("failed", { reason: "cap_reached", detail: "no_tool_call" });
+      if (nudged) return finish("failed", { reason: "no_tool_call", detail: "no_tool_call" });
       nudged = true;
       history.push(...response.output.map(replayable));
       pending = [{ role: "user", content: options.nudge ?? DEFAULT_NUDGE }];

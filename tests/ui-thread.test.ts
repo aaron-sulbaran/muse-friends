@@ -39,7 +39,8 @@ describe("a Muse's line for each turn that changed the plan", () => {
     const lines = threadLines(run, "a");
     expect(kinds(lines)).toEqual(["friend-muse", "your-muse", "friend-muse"]);
     expect(lines.map((line) => line.sender.name)).toEqual(["Mochi", "Sprout", "Mochi"]);
-    expect(lines.map((line) => line.sender.owner)).toEqual(["Mochi", "Sprout", "Mochi"]);
+    // The friend's Muse is "your friend's Muse" until someone says who the friend is; never "Mochi's Muse".
+    expect(lines.filter((line) => line.sender.kind === "friend-muse").map((line) => line.sender.owner)).toEqual(["your friend", "your friend"]);
     expect(lines.map((line) => line.sender.agent)).toEqual(["lisa", "aaron", "lisa"]);
   });
 
@@ -50,7 +51,7 @@ describe("a Muse's line for each turn that changed the plan", () => {
   it("names the people who own the Muses when the friend is Michelle", () => {
     const lines = threadLines({ ...run, simulatedFriend: true }, "a");
     expect(lines.map((line) => line.sender.name)).toEqual(["Mochi", "Sprout", "Mochi"]);
-    expect(lines.map((line) => line.sender.owner)).toEqual(["Michelle", "Sprout", "Michelle"]);
+    expect(lines.filter((line) => line.sender.kind === "friend-muse").map((line) => line.sender.owner)).toEqual(["Michelle", "Michelle"]);
   });
 
   it("leaves the opening intent out, because it opens the thread rather than moving the plan", () => {
@@ -136,6 +137,37 @@ describe("a Muse's private word to its own person", () => {
 
   it("is absent when nothing was removed", () => {
     expect(asides(threadLines(agreed(), "a"))).toEqual([]);
+  });
+});
+
+describe("your private conversation with your Muse", () => {
+  const chat = [
+    { id: "chat_1", from: "user" as const, text: "Why Tuesday and not Thursday?", at: "2026-10-25T14:01:00-05:00" },
+    { id: "chat_2", from: "muse" as const, text: "Class runs until 9 on Thursday.", at: "2026-10-25T14:01:01-05:00", replyTo: "chat_1" },
+  ];
+  const asked = { ...agreed(), chat };
+
+  it("shows your question on your side, and its answer as an aside from your Muse, both only for you", () => {
+    const lines = threadLines(asked, "a").filter((line) => line.id.startsWith("thread-chat-"));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ sender: { kind: "you" }, onlyYou: true, to: "Sprout", text: "Why Tuesday and not Thursday?" });
+    expect(lines[1]).toMatchObject({ sender: { kind: "your-muse", name: "Sprout" }, onlyYou: true, text: "Class runs until 9 on Thursday." });
+    expect(lines[1].to).toBeUndefined();
+  });
+
+  it("puts them where they happened among the Muses' turns", () => {
+    const early = { ...asked, chat: chat.map((entry) => ({ ...entry, at: entry.at.replace("14:01", "14:00").replace(":00-05", ":15-05") })) };
+    const ids = threadLines(early, "a").map((line) => line.id);
+    expect(ids.indexOf("thread-msg_shawarma_002")).toBeLessThan(ids.indexOf("thread-chat-chat_1"));
+    expect(ids.indexOf("thread-chat-chat_1")).toBeLessThan(ids.indexOf("thread-msg_shawarma_005"));
+  });
+
+  it("never shows a chat on the other phone", () => {
+    expect(threadLines(asked, "b").some((line) => line.id.startsWith("thread-chat-"))).toBe(false);
+  });
+
+  it("is empty until the first question", () => {
+    expect(threadLines({ ...agreed(), chat: [] }, "a").some((line) => line.id.startsWith("thread-chat-"))).toBe(false);
   });
 });
 
