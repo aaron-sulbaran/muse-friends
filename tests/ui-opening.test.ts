@@ -35,7 +35,10 @@ describe("what Sprout read from the caption", () => {
       snapshot.signals = snapshot.signals.map((signal) => ({ ...signal, extracted: { source: "caption_model" as const, model: "m", ...{ place: read.place, area: read.area, hours: read.hours }, at: signal.receivedAt } }));
     });
     expect(withRead.reelRead).toEqual(read);
-    expect(at("negotiating", (snapshot) => (snapshot.signals = snapshot.signals.map(({ extracted: _unused, ...signal }) => signal))).reelRead).toBeNull();
+    const unread = at("negotiating", (snapshot) => {
+      for (const signal of snapshot.signals) delete signal.extracted;
+    });
+    expect(unread.reelRead).toBeNull();
   });
 });
 
