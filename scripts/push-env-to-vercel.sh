@@ -109,6 +109,7 @@ push MCP_TOKEN_A secret
 push MCP_TOKEN_B secret
 push SUPABASE_SERVICE_ROLE_KEY secret
 push SUPABASE_URL config
+push INSTAGRAM_ACCESS_TOKEN secret
 
 # Production reads the Supabase store; local development leaves STORE unset and uses the JSON file.
 # So STORE is set here, in Vercel only, and never read from .env.

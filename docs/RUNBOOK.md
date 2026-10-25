@@ -133,6 +133,15 @@ The secret has to be added from a machine with your Vercel login; the platform l
 4. Check, with no secret needed: `curl -i https://www.musefriends.tech/api/cron/sweep`. Expect `HTTP/2 401` (the secret exists and you did not send it). A `503` means the secret did not reach this deployment; redeploy.
 5. Check the schedule is registered: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/cron-jobs lists `/api/cron/sweep` at `0 14 * * *`. Its **Run** button calls the route with the right header; with no plan due it reads the store and writes nothing.
 
+## Installing the app on a phone
+
+The site is installable: `app/manifest.ts` (name Muse Friends, standalone, start page `/`, the phone screen color for window and splash), 192 and 512 pixel icons in `public/icons/` rendered from `app/icon.svg`, and `appleWebApp` metadata so iOS titles the Home Screen icon "Muse Friends". There is no service worker, no offline mode, and no push; installing only adds an icon and a window without browser chrome.
+
+- **iPhone:** Safari, Share, **Add to Home Screen**. (`beforeinstallprompt` does not exist on iOS, so there is no in-page install button.)
+- **Android:** Chrome menu, **Install app**.
+
+Verified on the local server (Sat Oct 24, about 12:40am): the manifest is served as `application/manifest+json`; Chrome fetches it, raises no manifest issues, and decodes both icons at their declared sizes; no service worker is registered; `/` passes the smoke script. **Not verified: a real iPhone.** Before saying "installable" anywhere (README, Devpost, the pitch), do the 5 minute check: add it from Safari, open the Home Screen icon, run one negotiation, tap **Open WhatsApp** and come back with the app switcher. If the standalone window traps navigation or WhatsApp does not open from it, say nothing about installing and keep the Copy button prominent.
+
 ## If production shows old styles after a deploy
 
 Symptom: the stage renders black and unstyled (system font, dark mode), yet `/api/health` shows the new commit.
