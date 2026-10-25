@@ -72,8 +72,10 @@ export type ToolMeta = {
 export type ToolHandler = (args: unknown, meta?: ToolMeta) => Promise<unknown>;
 
 export type TurnFailure = {
-  reason: "cap_reached";
-  // Why: too many tool calls, no tool call after the nudge, or the model API failed.
+  // model_error: the model API failed or answered incomplete (a 404 or a 5xx is not a cap). no_tool_call: it answered in
+  // prose after the nudge. cap_reached: it used up the turn's tool calls, the only real cap here.
+  reason: "model_error" | "no_tool_call" | "cap_reached";
+  // The same thing at finer grain: too many tool calls, no tool call after the nudge, or the model API failed.
   detail: "tool_cap" | "no_tool_call" | "api_error";
   message?: string;
 };
@@ -280,7 +282,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
         }
       }
     } catch (error) {
-      return finish("failed", { reason: "cap_reached", detail: "api_error", message: describeError(error) });
+      return finish("failed", { reason: "model_error", detail: "api_error", message: describeError(error) });
     }
 
     const functionCalls = response.output.filter((item) => item.type === "function_call");
@@ -301,7 +303,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
 
     if (response.status !== "completed") {
       return finish("failed", {
-        reason: "cap_reached",
+        reason: "model_error",
         detail: "api_error",
         message: response.incomplete_details?.reason ?? response.status ?? "incomplete",
       });
@@ -309,7 +311,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
 
     if (functionCalls.length === 0) {
       if (requiredSatisfied) return finish("completed");
-      if (nudged) return finish("failed", { reason: "cap_reached", detail: "no_tool_call" });
+      if (nudged) return finish("failed", { reason: "no_tool_call", detail: "no_tool_call" });
       nudged = true;
       history.push(...response.output.map(replayable));
       pending = [{ role: "user", content: options.nudge ?? DEFAULT_NUDGE }];
