@@ -3,4 +3,4 @@
 export { GET, POST } from "./[transport]/route";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
