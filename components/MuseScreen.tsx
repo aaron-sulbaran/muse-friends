@@ -103,6 +103,8 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const [tab, setTab] = useState<Tab>("chat");
   const [goalOpen, setGoalOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
+  const chatContent = useRef<HTMLDivElement>(null);
+  const nearBottom = useRef(true);
   const thinking = snapshot.inFlight?.agent === view.agent;
   const simulated = snapshot.simulatedFriend;
   const names = namesFor(snapshot);
@@ -122,6 +124,18 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: scrolledOnce.current ? "smooth" : "auto" });
     scrolledOnce.current = true;
   }, [view.items.length, thinking, tab]);
+
+  // Something in the chat grew after it was laid out (a reel's embed arriving): a reader who was at the end stays there.
+  useEffect(() => {
+    const content = chatContent.current;
+    if (tab !== "chat" || !content) return;
+    const observer = new ResizeObserver(() => {
+      const element = scroller.current;
+      if (element && nearBottom.current) element.scrollTo({ top: element.scrollHeight, behavior: "auto" });
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [tab]);
 
   async function decide(planId: string, choice: "accept" | "decline") {
     if (readOnly) return;
@@ -178,7 +192,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} onPaused={onPaused} />;
       case "reel-card":
-        return <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} align={item.align} label={copy.reelLabel} />;
+        return <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={copy.reelLabel} />;
       case "agreed-line":
         // On the stage, Activity already sits between the phones; a phone on its own opens it as a sheet.
         return standalone ? <AgreedLine first={item.first} second={item.second} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
@@ -223,8 +237,14 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
               </button>
             ) : null}
           </header>
-          <div ref={scroller} className="quiet-scroll flex-1 overflow-y-auto px-4 pb-28 [mask-image:linear-gradient(to_bottom,transparent,black_14px)]">
-            <div className="flex flex-col">
+          <div
+            ref={scroller}
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+            }}
+            className="quiet-scroll flex-1 overflow-y-auto px-4 pb-28 [mask-image:linear-gradient(to_bottom,transparent,black_14px)]">
+            <div ref={chatContent} className="flex flex-col">
               {view.items.map((item, index) => (
                 <div key={item.id} className={spacingBefore(view.items[index - 1], item)}>
                   {renderItem(item)}
