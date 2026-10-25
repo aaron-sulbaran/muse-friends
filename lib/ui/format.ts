@@ -147,6 +147,15 @@ export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "simulatedFriend">
   };
 }
 
+const GENERIC_PLACE = /^(the plan|a plan|the spot|this spot|that spot|a spot|the place|this place|that place|a place)$/i;
+
+/** The first row of the plan card: the place from the reel, or "A spot" when the model named none, capitalized. */
+export function reelRowTitle(activityTitle: string, reelOwner: string): string {
+  const title = activityTitle.trim();
+  const named = title === "" || GENERIC_PLACE.test(title) ? "A spot" : `${title.charAt(0).toUpperCase()}${title.slice(1)}`;
+  return `${named} from ${reelOwner} reel`;
+}
+
 /** "A", "A and B", "A, B, and C": names in a sentence. */
 export function listOf(items: string[]): string {
   if (items.length <= 1) return items.join("");

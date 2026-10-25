@@ -1,33 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { otherRole, runInProgress, sideHref, simulatedFriendHref, wantsSimulatedFriend } from "@/lib/ui/entry";
+import { friendLink, phoneRootHref, runInProgress, wantsSimulatedFriend } from "@/lib/ui/entry";
 import type { PlanState, UiPlan } from "@/lib/ui/types";
 
-describe("how a phone gets to a side", () => {
-  it("links each side to its own phone route", () => {
-    expect(sideHref("a")).toBe("/a");
-    expect(sideHref("b")).toBe("/b");
+describe("how a phone gets in", () => {
+  it("goes straight to Sprout's side of its own room, with the simulated friend on", () => {
+    const href = phoneRootHref("k3x9qa");
+    expect(href).toBe("/a?room=k3x9qa&friend=1");
+    expect(wantsSimulatedFriend(new URL(href, "https://example.test").search)).toBe(true);
   });
 
-  it("switches to the other side", () => {
-    expect(otherRole("a")).toBe("b");
-    expect(otherRole("b")).toBe("a");
+  it("gives the friend a link to Mochi's side of the same room, and does not ask for Michelle", () => {
+    const link = friendLink("https://musefriends.tech", "k3x9qa");
+    expect(link).toBe("https://musefriends.tech/b?room=k3x9qa");
+    expect(wantsSimulatedFriend(new URL(link).search)).toBe(false);
   });
 
-  it("starts the simulated friend only when the address asks for it", () => {
-    expect(wantsSimulatedFriend(new URL(simulatedFriendHref, "https://example.test").search)).toBe(true);
+  it("acts on the simulated-friend flag only when the address asks for it", () => {
     expect(wantsSimulatedFriend("")).toBe(false);
     expect(wantsSimulatedFriend("?friend=0")).toBe(false);
-    expect(wantsSimulatedFriend("?other=1")).toBe(false);
-  });
-
-  it("sends the simulated friend to side a, the side a lone judge plays", () => {
-    expect(simulatedFriendHref.startsWith("/a?")).toBe(true);
+    expect(wantsSimulatedFriend("?room=k3x9qa")).toBe(false);
   });
 });
 
 const planIn = (state: PlanState) => ({ state }) as UiPlan;
 
-describe("when a judge arriving may start a game", () => {
+describe("when a judge arriving may reset the room", () => {
   it("leaves a run that is still going alone", () => {
     for (const state of ["detected", "negotiating", "awaiting_humans", "confirmed", "scheduled", "reminded", "happened"] as const) {
       expect(runInProgress(planIn(state))).toBe(true);

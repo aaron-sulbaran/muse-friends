@@ -34,6 +34,11 @@ export type GroupView = {
   others: Array<{ id: MemberId; name: string; muse: string; decision: Decision }>;
 };
 
+/** Which animated glyph a status line shows (public/status/status-<glyph>.svg). */
+export type StatusGlyph = "reading" | "thinking" | "talking" | "waiting-you" | "waiting-friend" | "retrying" | "done";
+
+export type PhoneStatus = { glyph: StatusGlyph; text: string };
+
 export type PhoneView = {
   role: Role;
   agent: AgentId;
@@ -42,8 +47,8 @@ export type PhoneView = {
   humanName: string;
   friendMuseName: string;
   friendHumanName: string;
-  /** The status line under the avatar name, with its leading emoji; null when idle. */
-  status: string | null;
+  /** The status line under the avatar name: an animated glyph and lowercase words; null when the Muse is idle. */
+  status: PhoneStatus | null;
   /** Set when the plan is for three: who is in, and what each has said. */
   group: GroupView | null;
   /** Which loop the header avatar plays: thinking while reading or while this Muse's own model call runs, talking while negotiating. */
@@ -84,6 +89,9 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     // (and tap again if the first start did not take).
     if (role === "b" && !snapshot.simulatedFriend) {
       items.push({ kind: "start-card", id: "start-reel", variant: "send-reel", friendName: theirs.muse });
+    } else if (role === "a" && snapshot.simulatedFriend) {
+      // Michelle is already the friend (the default on a phone): one tap has Sprout check with her.
+      items.push({ kind: "start-card", id: "start-reel", variant: "send-reel", friendName: theirs.human });
     } else if (role === "a") {
       items.push({ kind: "start-card", id: "start-simulated", variant: "simulated-friend", friendName: theirs.muse });
     }
@@ -119,18 +127,18 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   const pendingOthers = groupView ? groupView.others.filter((other) => other.decision === "pending") : [];
 
   const initiatorRole = agentRole[plan.initiator];
-  let status: string | null = null;
+  let status: PhoneStatus | null = null;
   let mood: AvatarMood = "idle";
   const myDecision = plan.decisions[role];
   const theirDecision = plan.decisions[role === "a" ? "b" : "a"];
 
   switch (plan.state) {
     case "detected":
-      status = role === "a" ? copy.statusReading(theirs.human) : null;
+      status = role === "a" ? { glyph: "reading", text: copy.statusReading(theirs.human) } : null;
       if (role === "a") mood = "thinking";
       break;
     case "negotiating":
-      status = copy.statusTalking(groupView?.coordinator ? listOf(groupView.others.map((other) => other.muse)) : theirs.muse);
+      status = { glyph: "talking", text: copy.statusTalking(groupView?.coordinator ? listOf(groupView.others.map((other) => other.muse)) : theirs.muse) };
       mood = "talking";
       break;
     case "awaiting_humans":
@@ -139,10 +147,13 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
       }
       if (myDecision === "accepted") {
         items.push({ kind: "collapsed", id: "decision-collapsed", text: copy.youSaidYes });
-        status = copy.statusWaitingFriend(groupView ? listOf((pendingOthers.length > 0 ? pendingOthers : groupView.others).map((other) => other.name)) : theirs.human);
+        status = {
+          glyph: "waiting-friend",
+          text: copy.statusWaitingFriend(groupView ? listOf((pendingOthers.length > 0 ? pendingOthers : groupView.others).map((other) => other.name)) : theirs.human),
+        };
       } else {
         items.push({ kind: "plan-card", id: "plan-card", plan, role, state: "live" });
-        status = copy.statusWaitingYou;
+        status = { glyph: "waiting-you", text: copy.statusWaitingYou };
       }
       // Pebble has no phone: the coordinator's phone carries Pebble's card until they answer.
       const phoneless = groupView?.coordinator ? pendingOthers.find((other) => other.id === "kai") : undefined;
@@ -219,8 +230,12 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   }
 
   if (snapshot.inFlight?.agents.includes(agent)) mood = "thinking";
+  // While negotiating, the glyph follows the header loop: thinking while this Muse's own call runs, talking while it waits.
+  if (plan.state === "negotiating" && mood === "thinking") status = { glyph: "thinking", text: copy.statusThinking };
+  // A confirmed plan says "sent" for a moment (StatusPill clears it after two seconds), then the name alone.
+  if (plan.state === "confirmed" && status === null) status = { glyph: "done", text: copy.statusDone };
   if (snapshot.failure) {
-    status = copy.statusTrouble(names.muse[snapshot.failure.agent]);
+    status = { glyph: "retrying", text: copy.statusTrouble(names.muse[snapshot.failure.agent]) };
     mood = "idle";
   }
   return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status, mood, group: groupView, items };

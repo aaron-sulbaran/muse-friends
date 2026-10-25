@@ -143,13 +143,13 @@ describe("a plan for three on the two phones", () => {
   it("waits for whoever is still deciding, and drops Pebble's card once they answer", () => {
     const afterSprout = ui("awaiting_humans", { aaron: "accepted" });
     const a = viewForRole(afterSprout, "a");
-    expect(a.status).toBe("⏳ waiting for Mochi and Pebble");
+    expect(a.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi and Pebble" });
     expect(kinds(a.items)).toContain("member-card");
     expect(kinds(a.items)).not.toContain("plan-card");
 
     const afterPebble = ui("awaiting_humans", { aaron: "accepted", kai: "accepted" });
     const later = viewForRole(afterPebble, "a");
-    expect(later.status).toBe("⏳ waiting for Mochi");
+    expect(later.status).toEqual({ glyph: "waiting-friend", text: "waiting for Mochi" });
     expect(kinds(later.items)).not.toContain("member-card");
   });
 
@@ -162,9 +162,15 @@ describe("a plan for three on the two phones", () => {
 
   it("talks to both friends while negotiating, and to Sprout alone from Mochi's side", () => {
     const snapshot = ui("negotiating");
-    expect(viewForRole(snapshot, "a").status).toBe("💬 talking to Mochi and Pebble");
-    expect(viewForRole(snapshot, "b").status).toBe("💬 talking to Sprout");
-    expect(viewForRole(snapshot, "a").mood).toBe("talking");
+    // With no call running, each phone says who its Muse is talking to.
+    const idle = { ...snapshot, inFlight: null };
+    expect(viewForRole(idle, "a").status).toEqual({ glyph: "talking", text: "talking to Mochi and Pebble" });
+    expect(viewForRole(idle, "b").status).toEqual({ glyph: "talking", text: "talking to Sprout" });
+    expect(viewForRole(idle, "a").mood).toBe("talking");
+    // While a Muse's own call runs its glyph thinks; the other phones keep talking.
+    const mochiThinking = { ...snapshot, inFlight: { agent: "lisa" as const, agents: ["lisa" as const] } };
+    expect(viewForRole(mochiThinking, "b").status).toEqual({ glyph: "thinking", text: "thinking it over" });
+    expect(viewForRole(mochiThinking, "a").status).toEqual({ glyph: "talking", text: "talking to Mochi and Pebble" });
   });
 
   it("holds the time with both others once it is confirmed", () => {
