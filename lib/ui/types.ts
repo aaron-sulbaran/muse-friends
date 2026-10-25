@@ -106,6 +106,9 @@ export type SharingSettings = {
   categories: Record<Category, boolean>;
 };
 
+/** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
+export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
+
 export type UiSnapshot = {
   /** The demo clock, ISO. */
   now: string;
@@ -119,6 +122,8 @@ export type UiSnapshot = {
   /** Non-message timeline rows, merged with the messages by time. */
   notes: UiNote[];
   plan: UiPlan | null;
+  /** The demo reel read live from Instagram, or null for the seeded one. */
+  reel: UiReel | null;
   followThrough: {
     /** Plans that happened: the only thing the counter counts. */
     events: FollowThroughEvent[];
