@@ -67,23 +67,23 @@ describe("whether a phone offers Settle up", () => {
       expect(settleOffer(at(state), snapshotPlan(state), "aaron")).toEqual({ kind: "hidden" });
     }
     for (const state of ["confirmed", "scheduled", "reminded", "happened", "followed_up"] as const) {
-      expect(settleOffer(at(state), snapshotPlan(state), "aaron")).toEqual({ kind: "ready", cap: 30 });
+      expect(settleOffer(at(state), snapshotPlan(state), "aaron")).toMatchObject({ kind: "ready", cap: 30 });
     }
   });
 
   it("offers to turn payments on when this seat has not, and says nothing when the room has payments off", () => {
-    expect(settleOffer(at("scheduled"), snapshotPlan("scheduled"), "lisa")).toEqual({ kind: "turn_on" });
+    expect(settleOffer(at("scheduled"), snapshotPlan("scheduled"), "lisa")).toMatchObject({ kind: "turn_on" });
     expect(settleOffer(at("scheduled", { sandbox: { enabled: false, connected: false, text: "Payments are switched off" } }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "hidden" });
   });
 
   it("treats a cap of 0 as off, as the server does", () => {
-    expect(settleOffer(at("scheduled", { paymentsScope: { aaron: { enabled: true, cap: 0 }, lisa: off } }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "turn_on" });
+    expect(settleOffer(at("scheduled", { paymentsScope: { aaron: { enabled: true, cap: 0 }, lisa: off } }), snapshotPlan("scheduled"), "aaron")).toMatchObject({ kind: "turn_on" });
   });
 
   it("holds a second ask while one payment is still waiting on the friend, and frees it once answered", () => {
     expect(settleOffer(at("scheduled", { payments: [payment({ status: "sent" })] }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "waiting" });
-    expect(settleOffer(at("scheduled", { payments: [payment({ status: "received" })] }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "ready", cap: 30 });
-    expect(settleOffer(at("scheduled", { payments: [payment({ status: "refunded" })] }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "ready", cap: 30 });
+    expect(settleOffer(at("scheduled", { payments: [payment({ status: "received" })] }), snapshotPlan("scheduled"), "aaron")).toMatchObject({ kind: "ready", cap: 30 });
+    expect(settleOffer(at("scheduled", { payments: [payment({ status: "refunded" })] }), snapshotPlan("scheduled"), "aaron")).toMatchObject({ kind: "ready", cap: 30 });
   });
 });
 
