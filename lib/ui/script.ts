@@ -1,18 +1,33 @@
 import { toCentralIso, toMs } from "@/lib/agent/windows";
-import type { ActivityEvent, Plan, PlanHistoryEntry, PlanState, StateSnapshot } from "@/lib/protocol";
-import { DEMO_START, deadReelSignal, privacyToggleDemo, recordedSnapshot, seedSnapshot } from "@/lib/seed/fixtures";
-import type { Decision, Role } from "./types";
+import {
+  categoriesInMessage,
+  isCategoryAllowed,
+  SHARED_CATEGORIES,
+  type ActivityEvent,
+  type Category,
+  type MessageRecord,
+  type PlanState,
+  type Redaction,
+  type SharePolicy,
+  type StateSnapshot,
+} from "@/lib/protocol";
+import { DEFAULT_POLICIES, DEMO_START, SHAWARMA_CONTEXT_ID, SHAWARMA_PLAN_ID, deadReelSignal, recordedSnapshot, seedSnapshot } from "@/lib/seed/fixtures";
+import { displayName } from "@/lib/seed/personas";
+import { snapshotAtPlanState } from "@/lib/seed/states";
+import type { Decision, Role, ShareTier } from "./types";
 
 /*
  * Plays Lane A's recorded shawarma run one stage at a time, so the UI can be
- * clicked through before the live agents drive the store. The thread, plan,
- * policies, and timeline events are Lane A's fixture; this file only decides how
- * much of it is visible and scripts the stages after awaiting_humans (the humans'
- * answers, the handoff, the clock jumps) that the plan lifecycle will own once
- * lib/plans.ts lands. Delete it when the UI reads the real store.
+ * clicked through before the live agents drive the store. The thread and every
+ * plan state are Lane A's fixtures (recordedSnapshot, snapshotAtPlanState); this
+ * file only decides which stage is showing, tracks the humans' answers, and
+ * replays the propose when a sharing switch changes. Delete it when the UI reads
+ * the real store.
  */
 
 export const THREAD_LENGTH = 6;
+
+const defaultPolicy: SharePolicy = DEFAULT_POLICIES.find((policy) => policy.owner === "lisa")!;
 
 export type ScriptState = {
   reelLoaded: boolean;
@@ -21,11 +36,16 @@ export type ScriptState = {
   decisions: Record<Role, Decision>;
   /** True once a human took the draft to WhatsApp (opened it or copied it). */
   handoff: boolean;
-  /** 0 is the start; 1 jumps to the Tuesday reminder; 2 jumps to the next day. */
+  /** 0 is the start; 1 jumps to the reminder; 2 jumps to the next day. */
   clockStage: 0 | 1 | 2;
-  locationShared: boolean;
+  /** What side b currently lets side a see. */
+  policy: SharePolicy;
+  /** The policy in force when the propose first arrived; each later change replays it. */
+  proposeShownUnder: SharePolicy | null;
+  replays: SharePolicy[];
   simulatedFriend: boolean;
   mode: "live" | "replay";
+  resetCount: number;
 };
 
 export type ScriptAction =
@@ -34,21 +54,25 @@ export type ScriptAction =
   | { type: "decide"; role: Role; choice: "accept" | "decline" }
   | { type: "handoff" }
   | { type: "clock_next" }
-  | { type: "set_location"; shared: boolean }
+  | { type: "set_policy"; tier?: ShareTier; category?: Category; on?: boolean }
   | { type: "set_simulated"; value: boolean }
   | { type: "set_mode"; mode: "live" | "replay" }
   | { type: "reset" };
 
-export function initialScriptState(): ScriptState {
+export function initialScriptState(resetCount = 0): ScriptState {
   return {
     reelLoaded: false,
     messagesShown: 0,
     decisions: { a: "pending", b: "pending" },
     handoff: false,
     clockStage: 0,
-    locationShared: true,
+    policy: structuredClone(defaultPolicy),
+    proposeShownUnder: null,
+    replays: [],
     simulatedFriend: false,
-    mode: "live",
+    // This file plays a recording, so the label says so; the live store reports "live".
+    mode: "replay",
+    resetCount,
   };
 }
 
@@ -65,13 +89,24 @@ export function derivePlanState(state: ScriptState): PlanState | null {
   return "followed_up";
 }
 
+function nextPolicy(current: SharePolicy, change: { tier?: ShareTier; category?: Category; on?: boolean }): SharePolicy {
+  if (change.tier) return { ...current, tier: change.tier, categories: {} };
+  if (change.category !== undefined && change.on !== undefined) {
+    return { ...current, categories: { ...current.categories, [change.category]: change.on } };
+  }
+  return current;
+}
+
 export function reduceScript(state: ScriptState, action: ScriptAction): ScriptState {
   switch (action.type) {
     case "load_reel":
       return { ...state, reelLoaded: true };
-    case "next_message":
+    case "next_message": {
       if (!state.reelLoaded) return { ...state, reelLoaded: true };
-      return state.messagesShown >= THREAD_LENGTH ? state : { ...state, messagesShown: state.messagesShown + 1 };
+      if (state.messagesShown >= THREAD_LENGTH) return state;
+      const shown = state.messagesShown + 1;
+      return { ...state, messagesShown: shown, proposeShownUnder: shown === 2 ? state.policy : state.proposeShownUnder };
+    }
     case "decide": {
       if (derivePlanState(state) !== "awaiting_humans") return state;
       const decision: Decision = action.choice === "accept" ? "accepted" : "declined";
@@ -84,115 +119,167 @@ export function reduceScript(state: ScriptState, action: ScriptAction): ScriptSt
       if (state.clockStage === 0 && (plan === "scheduled" || plan === "confirmed")) return { ...state, handoff: true, clockStage: 1 };
       return state.clockStage === 1 ? { ...state, clockStage: 2 } : state;
     }
-    case "set_location":
-      return { ...state, locationShared: action.shared };
+    case "set_policy": {
+      const policy = nextPolicy(state.policy, action);
+      const replays = derivePlanState(state) === "awaiting_humans" ? [...state.replays, policy] : state.replays;
+      return { ...state, policy, replays };
+    }
     case "set_simulated":
       return { ...state, simulatedFriend: action.value };
     case "set_mode":
       return { ...state, mode: action.mode };
     case "reset":
-      return initialScriptState();
+      return initialScriptState(state.resetCount + 1);
   }
 }
 
 const atSeconds = (seconds: number) => toCentralIso(toMs(DEMO_START) + seconds * 1000);
-const REMINDER_AT = "2026-10-27T17:00:00-05:00";
-const HAPPENED_AT = "2026-10-27T20:00:00-05:00";
-const FOLLOW_UP_AT = "2026-10-28T10:00:00-05:00";
 
-function historyFor(state: ScriptState, recorded: PlanHistoryEntry[], planState: PlanState): PlanHistoryEntry[] {
-  const history: PlanHistoryEntry[] = [recorded[0]];
-  if (state.messagesShown >= 1) history.push(recorded[1]);
-  if (state.messagesShown >= THREAD_LENGTH) history.push(recorded[2]);
-  const reached = (...states: PlanState[]) => states.includes(planState);
-  if (reached("confirmed", "scheduled", "reminded", "followed_up")) history.push({ state: "confirmed", at: atSeconds(45) });
-  if (reached("scheduled", "reminded", "followed_up")) history.push({ state: "scheduled", at: atSeconds(50) });
-  if (reached("reminded", "followed_up")) history.push({ state: "reminded", at: REMINDER_AT });
-  if (reached("followed_up")) {
-    history.push({ state: "happened", at: HAPPENED_AT });
-    history.push({ state: "followed_up", at: FOLLOW_UP_AT });
-  }
-  if (reached("dropped")) history.push({ state: "dropped", at: atSeconds(45) });
-  return history;
+function humanEvent(id: string, kind: ActivityEvent["kind"], text: string, agent: "aaron" | "lisa", at: string): ActivityEvent {
+  return { id, at, kind, actor: "human", agent, contextId: SHAWARMA_CONTEXT_ID, planId: SHAWARMA_PLAN_ID, text };
 }
 
-function humanEvents(state: ScriptState): ActivityEvent[] {
-  const planBase = { contextId: recordedSnapshot().threads[0].contextId, planId: recordedSnapshot().plans[0].id };
-  const events: ActivityEvent[] = [];
-  const named: Record<Role, "aaron" | "lisa"> = { a: "aaron", b: "lisa" };
-  const label: Record<Role, string> = { a: "Aaron", b: state.simulatedFriend ? "Michelle" : "Lisa" };
-  for (const role of ["a", "b"] as const) {
-    if (state.decisions[role] === "accepted") {
-      events.push({
-        id: `evt_decision_${role}`,
-        at: atSeconds(role === "a" ? 41 : 43),
-        kind: "human_decision",
-        actor: "human",
-        agent: named[role],
-        text: `${label[role]} said yes`,
-        ...planBase,
-      });
+/** The recorded thread cut off after n messages: the middle of a negotiation. */
+function negotiatingAfter(count: number): StateSnapshot {
+  const full = recordedSnapshot();
+  const messages = full.messages.slice(0, count);
+  const lastAt = messages.at(-1)!.message.at;
+  const clock = toCentralIso(toMs(lastAt) + 1000);
+  return {
+    ...full,
+    clock: { now: clock },
+    threads: [{ ...full.threads[0], state: "working", messageCount: count, updatedAt: lastAt }],
+    messages,
+    plans: [{ ...full.plans[0], state: "negotiating", window: undefined, draft: undefined, history: full.plans[0].history.slice(0, 2), updatedAt: lastAt }],
+    cards: [],
+    events: full.events.filter((event) => toMs(event.at) <= toMs(clock)),
+  };
+}
+
+/** Both agents agreed; one person, both, or neither has answered. */
+function awaitingWith(decisions: Record<Role, Decision>): StateSnapshot {
+  const full = recordedSnapshot();
+  const base = toMs(full.clock.now);
+  const events = [...full.events];
+  if (decisions.a === "accepted") events.push(humanEvent("evt_decision_a", "human_decision", `${snapshotName("aaron")} said yes to Shawarma Point`, "aaron", toCentralIso(base + 20_000)));
+  if (decisions.b === "accepted") events.push(humanEvent("evt_decision_b", "human_decision", `${snapshotName("lisa")} said yes to Shawarma Point`, "lisa", toCentralIso(base + 25_000)));
+  return {
+    ...full,
+    plans: [{ ...full.plans[0], decisions: { aaron: decisions.a, lisa: decisions.b } }],
+    cards: full.cards.map((card) => ({ ...card, status: decisions[card.forAgent === "aaron" ? "a" : "b"] })),
+    events,
+  };
+}
+
+const snapshotName = displayName;
+
+/** Lane A's dropped snapshot has side b passing; mirror it when side a is the one who said no. */
+function droppedBy(decisions: Record<Role, Decision>): StateSnapshot {
+  const dropped = snapshotAtPlanState("dropped");
+  if (decisions.b === "declined") return dropped;
+  return {
+    ...dropped,
+    plans: [{ ...dropped.plans[0], decisions: { aaron: "declined", lisa: "pending" }, history: dropped.plans[0].history.map((entry) => (entry.state === "dropped" ? { ...entry, note: `${snapshotName("aaron")} declined` } : entry)) }],
+    cards: dropped.cards.map((card) => ({ ...card, status: card.forAgent === "aaron" ? "declined" : "pending" })),
+    events: dropped.events.map((event) => (event.kind === "human_decision" ? { ...event, agent: "aaron", text: `${snapshotName("aaron")} passed on this one` } : event)),
+  };
+}
+
+/** The propose as it would be delivered under a policy: disallowed categories removed, the stamp recomputed. */
+export function projectPropose(record: MessageRecord, policy: SharePolicy): MessageRecord {
+  const message = structuredClone(record.message);
+  const removed: Category[] = [];
+  for (const key of SHARED_CATEGORIES) {
+    if (message.shared?.[key] && !isCategoryAllowed(policy, key)) {
+      delete message.shared[key];
+      removed.push(key);
     }
   }
-  if (state.handoff) {
-    events.push({ id: "evt_handoff", at: atSeconds(48), kind: "handoff_opened", actor: "human", agent: "aaron", text: "Aaron took the draft to WhatsApp", ...planBase });
+  if (message.shared && Object.keys(message.shared).length === 0) delete message.shared;
+  if (message.activity?.place && !isCategoryAllowed(policy, "location")) {
+    delete message.activity.place;
+    if (!removed.includes("location")) removed.push("location");
   }
-  if (state.clockStage >= 1) {
-    events.push({ id: "evt_clock_1", at: REMINDER_AT, kind: "clock_advanced", actor: "system", text: "Clock moved to Tuesday 5:00 PM", ...planBase });
+  return { ...record, message, stamp: { passed: categoriesInMessage(message), removed, windowsDropped: 0 } };
+}
+
+function replayOf(original: MessageRecord, policy: SharePolicy, index: number): { record: MessageRecord; redaction: Redaction | null; events: ActivityEvent[] } {
+  const at = atSeconds(70 + index * 10);
+  const projected = projectPropose(original, policy);
+  const record: MessageRecord = { ...projected, message: { ...projected.message, at } };
+  const redaction: Redaction | null =
+    record.stamp.removed.length > 0
+      ? {
+          id: `red_replay_${index}`,
+          contextId: SHAWARMA_CONTEXT_ID,
+          messageId: original.message.id,
+          from: "lisa",
+          to: "aaron",
+          removed: record.stamp.removed,
+          detail: `Sharing is off for ${record.stamp.removed.join(", ")}: removed before sending.`,
+          at,
+        }
+      : null;
+  const events: ActivityEvent[] = [
+    humanEvent(`evt_policy_${index}`, "policy_changed", `${snapshotName("lisa")} changed what ${snapshotName("lisa")} shares with ${snapshotName("aaron")}`, "lisa", atSeconds(68 + index * 10)),
+  ];
+  if (redaction) {
+    events.push({ id: `evt_redaction_${index}`, at, kind: "redaction", actor: "system", agent: "lisa", contextId: SHAWARMA_CONTEXT_ID, messageId: original.message.id, redactionId: redaction.id, text: `Policy removed ${record.stamp.removed.join(", ")} from ${snapshotName("lisa")}'s propose` });
   }
-  if (state.clockStage >= 2) {
-    events.push({ id: "evt_showed_up", at: HAPPENED_AT, kind: "plan_state", actor: "human", text: "Showed up (simulated clock)", ...planBase });
-    events.push({ id: "evt_clock_2", at: FOLLOW_UP_AT, kind: "clock_advanced", actor: "system", text: "Clock moved to Wednesday 10:00 AM", ...planBase });
-  }
-  return events;
+  return { record, redaction, events };
 }
 
 /** The store snapshot for one stage of the script, shaped exactly like what the real store returns. */
 export function buildStateSnapshot(state: ScriptState): StateSnapshot {
   const planState = derivePlanState(state);
+  const room = { id: "demo" as const, simulatedFriend: state.simulatedFriend, resetCount: state.resetCount, updatedAt: DEMO_START };
+  const policies = (base: StateSnapshot) => base.policies.map((policy) => (policy.owner === "lisa" ? state.policy : policy));
+
   if (planState === null) {
     const seed = seedSnapshot();
-    seed.signals = [deadReelSignal()];
-    return seed;
+    return { ...seed, signals: [deadReelSignal()], room, policies: policies(seed) };
   }
 
-  const recorded = recordedSnapshot();
-  const shown = Math.min(state.messagesShown, THREAD_LENGTH);
-  const records = recorded.messages.slice(0, shown);
-  if (!state.locationShared && records[1]) {
-    const withheld = privacyToggleDemo().messageAfter;
-    records[1] = { ...withheld, message: { ...withheld.message, at: records[1].message.at } };
+  let base: StateSnapshot;
+  switch (planState) {
+    case "detected":
+      base = snapshotAtPlanState("detected");
+      break;
+    case "negotiating":
+      base = negotiatingAfter(state.messagesShown);
+      break;
+    case "awaiting_humans":
+      base = awaitingWith(state.decisions);
+      break;
+    case "dropped":
+      base = droppedBy(state.decisions);
+      break;
+    default:
+      base = snapshotAtPlanState(planState);
   }
 
-  const lastAt = records.at(-1)?.message.at ?? atSeconds(4);
-  const recordedPlan = recorded.plans[0];
-  const bothAnswered = planState !== "detected" && planState !== "negotiating";
-  const activity = recordedPlan.activity && !state.locationShared ? { kind: recordedPlan.activity.kind, title: recordedPlan.activity.title } : recordedPlan.activity;
-  const plan: Plan = {
-    ...recordedPlan,
-    state: planState,
-    activity,
-    window: shown >= THREAD_LENGTH ? recordedPlan.window : undefined,
-    decisions: { aaron: state.decisions.a, lisa: state.decisions.b },
-    draft: ["confirmed", "scheduled", "reminded", "followed_up"].includes(planState) ? recordedPlan.draft : undefined,
-    dropReason: planState === "dropped" ? "declined" : undefined,
-    history: historyFor(state, recordedPlan.history, planState),
-    updatedAt: lastAt,
-  };
+  const messages = [...base.messages];
+  const redactions = [...base.redactions];
+  // Lane A's later snapshots include the handoff; until a person actually takes the draft away, it has not happened.
+  const events = base.events.filter((event) => state.handoff || event.kind !== "handoff_opened");
+  const original = messages[1];
+  if (original) {
+    messages[1] = projectPropose(original, state.proposeShownUnder ?? state.policy);
+    state.replays.forEach((policy, index) => {
+      const replay = replayOf(original, policy, index);
+      messages.push(replay.record);
+      if (replay.redaction) redactions.push(replay.redaction);
+      events.push(...replay.events);
+    });
+  }
 
-  const visibleUntil = toMs(bothAnswered ? atSeconds(38) : lastAt);
-  const events = [...recorded.events.filter((event) => toMs(event.at) <= visibleUntil), ...humanEvents(state)];
-  const clockNow = state.clockStage === 2 ? FOLLOW_UP_AT : state.clockStage === 1 ? REMINDER_AT : bothAnswered ? atSeconds(38) : lastAt;
+  const effective = state.replays.at(-1) ?? state.proposeShownUnder ?? state.policy;
+  const plans = base.plans.map((plan) => {
+    if (!plan.activity?.place || isCategoryAllowed(effective, "location")) return plan;
+    const activity = { ...plan.activity };
+    delete activity.place;
+    return { ...plan, activity };
+  });
 
-  const thread = recorded.threads[0];
-  return {
-    ...recorded,
-    clock: { now: clockNow },
-    signals: [recorded.signals[0], deadReelSignal()],
-    threads: shown > 0 ? [{ ...thread, messageCount: shown, state: shown >= THREAD_LENGTH ? "input-required" : "working", updatedAt: lastAt }] : [],
-    messages: records,
-    plans: [plan],
-    cards: bothAnswered ? recorded.cards : [],
-    events,
-  };
+  return { ...base, room, policies: policies(base), messages, redactions, events, plans };
 }

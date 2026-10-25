@@ -9,6 +9,7 @@ import {
   formatWindowSpoken,
   messageAccessibleName,
   messageTitle,
+  namesFor,
   policyStampFor,
 } from "@/lib/ui/format";
 import type { UiMessage } from "@/lib/ui/types";
@@ -29,6 +30,7 @@ function message(overrides: Partial<UiMessage>): UiMessage {
     shared: [],
     removed: [],
     at: "2026-10-25T01:42:10Z",
+    replayed: false,
     raw: {},
     ...overrides,
   };
@@ -66,13 +68,28 @@ describe("clock formatting", () => {
 
 describe("activity titles", () => {
   it("writes past tense from type and fields", () => {
-    expect(messageTitle(message({ type: "intent", activity: { title: "Shawarma Point" } }), false)).toBe("Asked about Shawarma Point");
-    expect(messageTitle(message({ type: "propose", windows: [tuesday, thursday] }), false)).toBe(
+    expect(messageTitle(message({ type: "intent", activity: { title: "Shawarma Point" } }))).toBe("Asked about Shawarma Point");
+    expect(messageTitle(message({ type: "propose", windows: [tuesday, thursday] }))).toBe(
       "Proposed Tue 6 to 8 PM and Thu 7 to 9 PM",
     );
-    expect(messageTitle(message({ type: "counter", windows: [tuesday] }), false)).toBe("Countered with Tue 6 to 8 PM");
-    expect(messageTitle(message({ type: "accept", windows: [tuesday] }), false)).toBe("Accepted Tue 6 to 8 PM");
-    expect(messageTitle(message({ type: "decline", reason: "no_overlap" }), false)).toBe("Declined: no time works");
+    expect(messageTitle(message({ type: "counter", windows: [tuesday] }))).toBe("Countered with Tue 6 to 8 PM");
+    expect(messageTitle(message({ type: "accept", windows: [tuesday] }))).toBe("Accepted Tue 6 to 8 PM");
+    expect(messageTitle(message({ type: "decline", reason: "no_overlap" }))).toBe("Declined: no time works");
+  });
+
+  it("says a replayed propose was proposed again", () => {
+    expect(messageTitle(message({ type: "propose", replayed: true, windows: [tuesday] }))).toBe("Proposed again Tue 6 to 8 PM");
+  });
+});
+
+const sprout = { sides: { aaron: "Sprout", lisa: "Mochi" }, simulatedFriend: false } as const;
+const withMichelle = { ...sprout, simulatedFriend: true } as const;
+
+describe("names", () => {
+  it("come from the persona display names, and swap in the simulated friend", () => {
+    expect(namesFor(sprout)).toEqual({ muse: { aaron: "Sprout", lisa: "Mochi" }, human: { aaron: "Sprout", lisa: "Mochi" } });
+    expect(namesFor(withMichelle).muse.lisa).toBe("Michelle's Muse");
+    expect(namesFor(withMichelle).human.lisa).toBe("Michelle");
   });
 });
 
@@ -89,13 +106,13 @@ describe("policy stamp", () => {
 
   it("reads the whole row to a screen reader", () => {
     const row = message({ type: "propose", windows: [tuesday], shared: ["food"], removed: ["location"] });
-    expect(messageAccessibleName(row, false)).toBe(
+    expect(messageAccessibleName(row, namesFor(sprout))).toBe(
       "Sprout to Mochi, propose, Proposed Tue 6 to 8 PM, shared food and times, withheld location",
     );
   });
 
   it("names the simulated friend instead of Mochi", () => {
-    expect(messageAccessibleName(message({ from: "lisa", to: "aaron", type: "accept", windows: [tuesday] }), true)).toContain(
+    expect(messageAccessibleName(message({ from: "lisa", to: "aaron", type: "accept", windows: [tuesday] }), namesFor(withMichelle))).toContain(
       "Michelle's Muse to Sprout",
     );
   });

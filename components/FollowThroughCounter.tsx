@@ -59,9 +59,10 @@ export function FollowThroughCounter({ followThrough }: { followThrough: UiSnaps
               ))}
             </ul>
           )}
-          <p className="mt-3 border-t border-bezel-line pt-3 text-[12px] leading-4 text-faint">
-            {copy.agentMessagesNotCounted(followThrough.agentMessageCount)}
-          </p>
+          <div className="mt-3 border-t border-bezel-line pt-3 text-[12px] leading-4 text-faint">
+            <p>{copy.humanTapsNotCounted(followThrough.humanTapCount)}</p>
+            <p className="mt-1">{copy.agentMessagesNotCounted(followThrough.agentMessageCount)}</p>
+          </div>
         </div>
       ) : null}
     </div>

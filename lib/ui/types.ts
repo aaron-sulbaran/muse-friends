@@ -11,16 +11,15 @@ import type {
   MessageType,
   PlanState,
   Reason as MessageReason,
+  Role,
+  ShareTier,
   TaskState as ThreadState,
   Window as TimeWindow,
 } from "@/lib/protocol";
 
 // The wire vocabulary comes from the protocol, never a copy, so a new reason or
 // category cannot silently break the adapter's types.
-export type { AgentId, Category, Decision, MessageReason, MessageType, PlanState, ThreadState, TimeWindow };
-
-/** Phone roles: "a" is Aaron's Muse (Sprout), "b" is Lisa's Muse (Mochi) or the simulated friend. */
-export type Role = "a" | "b";
+export type { AgentId, Category, Decision, MessageReason, MessageType, PlanState, Role, ShareTier, ThreadState, TimeWindow };
 
 export type ModelProof = {
   model: string;
@@ -46,6 +45,8 @@ export type UiMessage = {
   /** Categories policy removed from this message. */
   removed: Category[];
   at: string;
+  /** True when this message id was already shown earlier: the same message sent again after a policy change. */
+  replayed: boolean;
   /** Present on messages produced by a model call; absent on scripted or replayed ones. */
   proof?: ModelProof;
   /** Present when the receiving inbox rejected the message. */
@@ -83,21 +84,29 @@ export type InFlight = {
 };
 
 export type SharingSettings = {
-  tier: "close" | "friend" | "off";
+  tier: ShareTier;
   categories: Record<Category, boolean>;
 };
 
 export type UiSnapshot = {
-  /** The demo clock, ISO. Equals wall time until someone fast-forwards. */
+  /** The demo clock, ISO. */
   now: string;
   clockSimulated: boolean;
   mode: "live" | "replay";
-  /** True when phone B is played by the model instead of a second human. */
+  /** True when side b is played by the model instead of a second human. */
   simulatedFriend: boolean;
+  /** What people see for each side: the Muse characters' names, never the internal ids. */
+  sides: Record<AgentId, string>;
   messages: UiMessage[];
   plan: UiPlan | null;
-  followThrough: { events: FollowThroughEvent[]; agentMessageCount: number };
+  followThrough: {
+    /** Plans that happened: the only thing the counter counts. */
+    events: FollowThroughEvent[];
+    agentMessageCount: number;
+    /** Taps and sends by people that move a plan along but are not the outcome. */
+    humanTapCount: number;
+  };
   inFlight: InFlight | null;
-  /** What Lisa's Muse currently lets Aaron's Muse see. */
-  lisaSharesWithAaron: SharingSettings;
+  /** What each side currently lets the other see. */
+  sharing: Record<AgentId, SharingSettings>;
 };

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/lib/ui/copy";
-import { museName } from "@/lib/ui/format";
+import { namesFor } from "@/lib/ui/format";
 import type { UiMessage, UiSnapshot } from "@/lib/ui/types";
 import { ActivityRow } from "./ActivityRow";
 import { MuseAvatar } from "./MuseAvatar";
@@ -27,14 +27,15 @@ function ThinkingRow({ snapshot }: { snapshot: UiSnapshot }) {
 
   if (!snapshot.inFlight) return null;
   const agent = snapshot.inFlight.agent;
+  const names = namesFor(snapshot);
   const simulated = snapshot.simulatedFriend && agent === "lisa";
   return (
     <li className="animate-row-in">
       <div className="flex items-center gap-3 rounded-group bg-group px-3 py-2.5">
         <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-surface">
-          <MuseAvatar agent={agent} simulated={simulated} size={28} />
+          <MuseAvatar agent={agent} simulated={simulated} name={names.muse[agent]} size={28} />
         </span>
-        <span className="text-[15px] leading-5">{museName(agent, snapshot.simulatedFriend)} is thinking</span>
+        <span className="text-[15px] leading-5">{names.muse[agent]} is thinking</span>
         <span className="flex gap-1" aria-hidden="true">
           {[0, 1, 2].map((dot) => (
             <span key={dot} className="size-1.5 animate-typing rounded-full bg-muted" style={{ animationDelay: `${dot * 150}ms` }} />
@@ -76,11 +77,11 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage }: Props) {
       </div>
       <div ref={scroller} onScroll={trackScroll} className="quiet-scroll -mx-2 mt-4 min-h-0 flex-1 overflow-y-auto px-2">
         {snapshot && snapshot.messages.length === 0 && !snapshot.inFlight ? (
-          <p className="px-1 py-6 text-[15px] leading-5 text-muted">{copy.activityEmpty}</p>
+          <p className="px-1 py-6 text-[15px] leading-5 text-muted">{copy.activityEmpty(snapshot.sides.aaron, snapshot.sides.lisa)}</p>
         ) : null}
         <ul aria-live="polite" className="flex flex-col gap-1">
           {snapshot?.messages.map((message) => (
-            <ActivityRow key={message.id} message={message} simulatedFriend={snapshot.simulatedFriend} onOpen={onOpenMessage} />
+            <ActivityRow key={`${message.id}-${message.at}`} message={message} simulatedFriend={snapshot.simulatedFriend} names={namesFor(snapshot)} onOpen={onOpenMessage} />
           ))}
           {snapshot?.inFlight ? <ThinkingRow key={`${snapshot.inFlight.agent}-${snapshot.messages.length}`} snapshot={snapshot} /> : null}
         </ul>
