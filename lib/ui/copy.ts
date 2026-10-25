@@ -81,6 +81,9 @@ export const copy = {
   holdDetails: (first: string, second: string) => `${first} and ${second} planned this in Muse Friends.`,
   reminder: (activity: string, friend: string, time: string) => `${activity} with ${friend} at ${time}.`,
   followUp: "Did you two make it?",
+  /** The time skip card before the reminder and before the next morning: "Skipping ahead to Tuesday, 4:00 PM". */
+  skipAhead: "Skipping ahead to",
+  skipLabel: "Simulated time",
   outcomeWent: "We went!",
   outcomeDidnt: "Didn't happen",
   outcomeWentReply: "Love that. That's one plan that made it out of the chat.",

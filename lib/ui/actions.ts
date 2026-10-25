@@ -155,8 +155,9 @@ export function postPaymentsScope(role: Role, enabled: boolean, cap?: number) {
   return post("/api/controls", { type: "payments", side: role, enabled, ...(cap === undefined ? {} : { cap }) });
 }
 
-export function postClockAdvance() {
-  return post("/api/clock", { action: "advance" });
+/** Demo controls (F) move the clock one step; the automatic time skip names the state it saw, so only one phone moves it. */
+export function postClockAdvance(from?: "scheduled" | "reminded") {
+  return post("/api/clock", from ? { action: "advance", from } : { action: "advance" });
 }
 
 export function postReset() {
