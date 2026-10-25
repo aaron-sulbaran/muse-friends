@@ -3,10 +3,12 @@ import { type ActivityEvent, type AgentId, type Plan, type Signal } from "@/lib/
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
+import { startGate } from "@/lib/policy";
 import { failThread } from "./inbound";
 import { newId } from "./ids";
 import { ownFreeBlocks } from "./calendar";
-import { agentInstructions, inboxTurnInput, signalTurnInput } from "./prompts";
+import { agentInstructions, followUpTurnInput, inboxTurnInput, signalTurnInput } from "./prompts";
+import type { Contact } from "@/lib/seed/contacts";
 import { buildTools } from "./tools";
 import { describeWindow, intersectWindows, toCentralIso, windowHash } from "./windows";
 
@@ -110,4 +112,26 @@ export async function runInboxTurn(options: RuntimeOptions & { agent: AgentId; c
 
 function describeWindowForLedger(window: { start: string; end: string }): string {
   return `${describeWindow(window)} [${window.start} to ${window.end}]`;
+}
+
+// The opening turn of a follow-up: the person's Muse reads who they asked about, checks the calendar,
+// and opens the conversation with the contact's Muse. Same send checks, same share policy (acquaintance).
+export async function runFollowUpTurn(options: RuntimeOptions & { agent: AgentId; contact: Contact; contextId: string }): Promise<TurnResult> {
+  const { store, agent, contact, contextId } = options;
+  // The same gate as the start path, so a direct call cannot get around it.
+  if (!startGate(contact).ok) return { status: "completed", finalText: "", nudged: false, toolCalls: [], calls: [], totalMs: 0 };
+  const ctx: AgentRuntimeContext = { agent, store, wallNow: options.wallNow, target: contact.id, contextId, deliver: options.deliver, windowRepairs: { used: 0 } };
+  const { tools, handlers } = buildTools(ctx);
+  const nowMs = options.wallNow?.() ?? Date.now();
+  const result = await runAgentTurn({
+    instructions: agentInstructions(agent),
+    input: followUpTurnInput(agent, contact, nowMs),
+    tools: tools.filter((tool) => ["get_my_calendar", "get_interests", "send_to_friend_agent"].includes(tool.name)),
+    handlers,
+    requiredTools: ["send_to_friend_agent"],
+  });
+  if (result.status === "failed") {
+    await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+  }
+  return result;
 }

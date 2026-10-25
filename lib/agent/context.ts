@@ -15,6 +15,8 @@ export type AgentRuntimeContext = {
   wallNow?: () => number;
   // The signal this turn is about (the agent that received the reel).
   signalId?: string;
+  // The contact a follow-up is for, chosen by the person. Like a signal, it is what lets a turn open a thread.
+  target?: string;
   // The thread this turn belongs to. For a signal turn it is assigned up front; the thread record
   // is created when the first message commits.
   contextId: string;
