@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { postReplan, postSignal, postSimulatedAnswer } from "@/lib/ui/actions";
+import { postChat, postReplan, postSignal, postSimulatedAnswer } from "@/lib/ui/actions";
 
 function stubFetch(responses: Array<{ status: number; body: unknown }>) {
   const queue = [...responses];
@@ -43,5 +43,25 @@ describe("a start the caps refuse is a fallback, not an error", () => {
   it("a 429 that is not a pause (no paused flag) is still an error", async () => {
     stubFetch([{ status: 429, body: { error: "Too many requests" } }]);
     expect(await postSignal()).toEqual({ ok: false, message: "Too many requests" });
+  });
+});
+
+describe("asking your own Muse", () => {
+  it("posts the question as side a, and counts the answer as arriving in the next snapshot", async () => {
+    const fetchMock = stubFetch([{ status: 200, body: { data: { question: { id: "chat_1" }, answer: { id: "chat_2" } }, error: null } }]);
+    expect(await postChat("Why Tuesday?")).toEqual({ ok: true });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("/api/chat");
+    expect(JSON.parse(String(init.body))).toEqual({ role: "a", text: "Why Tuesday?" });
+  });
+
+  it("reads the chat cap's 429 as paused, so the page falls back to a recording", async () => {
+    stubFetch([{ status: 429, body: { paused: true, reason: "room", text: "Live runs paused, playing a recording", budget: { paused: true } } }]);
+    expect(await postChat("Why Tuesday?")).toEqual({ ok: false, paused: true, message: "Live runs paused, playing a recording" });
+  });
+
+  it("keeps the model's honest reason when the Muse cannot answer", async () => {
+    stubFetch([{ status: 503, body: { data: null, error: { message: "Sprout could not answer just now." } } }]);
+    expect(await postChat("Why Tuesday?")).toEqual({ ok: false, message: "Sprout could not answer just now." });
   });
 });
