@@ -15,7 +15,8 @@ export type ChatItem =
   | { kind: "collapsed"; id: string; text: string }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
   | { kind: "hold-row"; id: string; title: string; detail: string; planId: string }
-  | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend"; friendName: string };
+  | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend"; friendName: string }
+  | { kind: "contact-entry"; id: string };
 
 export type PhoneView = {
   role: Role;
@@ -60,6 +61,12 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     } else if (role === "a") {
       items.push({ kind: "start-card", id: "start-simulated", variant: "simulated-friend", friendName: theirs.muse });
     }
+    if (role === "a" && snapshot.refusal) {
+      // The person chose; the gate said no. Nothing was started, and the Muse says it plainly and neutrally.
+      items.push({ kind: "bubble", id: "contact-chosen", from: "user", text: copy.contactChosen(snapshot.refusal.contactName) });
+      items.push({ kind: "bubble", id: "contact-refused", from: "muse", text: copy.contactRefused(mine.muse) });
+    }
+    if (role === "a") items.push({ kind: "contact-entry", id: "contact-entry" });
     return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status: null, items };
   }
 

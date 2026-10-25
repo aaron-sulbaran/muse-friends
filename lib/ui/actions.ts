@@ -30,8 +30,8 @@ export function postHandoff(planId: string, role: Role, via: "whatsapp" | "copy"
 }
 
 /** "The friend sent a reel": starts a real run. The agents take it from here and the Activity timeline fills as they talk. */
-export function postSignal() {
-  return post("/api/signals", { scenario: "shawarma" });
+export function postSignal(contact?: string) {
+  return post("/api/signals", { scenario: "shawarma", ...(contact ? { contact } : {}) });
 }
 
 /**

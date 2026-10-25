@@ -1,6 +1,6 @@
 "use client";
 
-import { BatteryFull, Shield, Signal, Wifi } from "lucide-react";
+import { BatteryFull, Shield, Signal, Users, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
@@ -10,6 +10,7 @@ import type { GoalContext } from "@/lib/ui/goals";
 import type { Role, UiSnapshot } from "@/lib/ui/types";
 import { ChatBubble, DaySeparator, TypingDots } from "./ChatBubble";
 import { AvatarSheet } from "./AvatarSheet";
+import { ContactSheet } from "./ContactSheet";
 import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
@@ -54,6 +55,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [contactsOpen, setContactsOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("chat");
   const [goalOpen, setGoalOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -110,6 +112,18 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         );
       case "draft-card":
         return <DraftCard draft={item.draft} onHandoff={(via) => handoff(item.plan.id, via)} />;
+      case "contact-entry":
+        return (
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={() => setContactsOpen(true)}
+            className="flex items-center gap-2 rounded-full px-3 py-2 text-[13px] font-semibold text-muted transition-colors hover:bg-group disabled:opacity-50"
+          >
+            <Users className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            {copy.contactEntry}
+          </button>
+        );
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
@@ -181,6 +195,9 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
           setGoalOpen(false);
         }}
       />
+      {contactsOpen && role === "a" ? (
+        <ContactSheet contacts={snapshot.contacts} museName={view.museName} onChanged={onChanged} onClose={() => setContactsOpen(false)} />
+      ) : null}
       {sheetOpen && role === "b" ? (
         <AvatarSheet
           simulated={simulated}

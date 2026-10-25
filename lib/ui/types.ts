@@ -80,10 +80,24 @@ export type FollowThroughEvent = {
   at: string;
 };
 
+/** Someone Sprout could follow up with. The person picks; the code decides whether Sprout may reach out. */
+export type UiContact = {
+  id: string;
+  name: string;
+  tier: "friend" | "acquaintance";
+  /** True when the two follow each other; Sprout only reaches out to people who do. */
+  mutualFollow: boolean;
+  /** One line on how they know each other. */
+  note: string;
+};
+
+/** The start-path gate said no: nothing was started, and the timeline says so plainly. */
+export type UiRefusal = { id: string; at: string; contactName: string; text: string };
+
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "contact_refused";
   at: string;
   text: string;
 };
@@ -110,6 +124,10 @@ export type UiSnapshot = {
   messages: UiMessage[];
   /** Non-message timeline rows, merged with the messages by time. */
   notes: UiNote[];
+  /** Who the "follow up with someone you met" entry offers. */
+  contacts: UiContact[];
+  /** The latest time the gate refused to start, while no plan is running; null otherwise. */
+  refusal: UiRefusal | null;
   plan: UiPlan | null;
   followThrough: {
     /** Plans that happened: the only thing the counter counts. */

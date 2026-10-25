@@ -48,6 +48,12 @@ export const copy = {
   goalsTitle: "Goals",
   goalsTracking: "Tracking",
   goalsEmpty: (friend: string) => `Nothing tracked yet. When you and ${friend} settle on a plan, it shows up here.`,
+  contactEntry: "Follow up with someone you met",
+  contactSheetTitle: "Who do you want to follow up with?",
+  contactSheetNote: (muse: string) => `You pick the person. ${muse} only reaches out to people who follow each other, and that is checked in code.`,
+  contactChosen: (name: string) => `Follow up with ${name}`,
+  contactRefused: (muse: string) => `${muse} only reaches out to people who follow each other.`,
+  refusedTitle: (name: string) => `Did not reach out to ${name}`,
   oldExchangeThem: "We should try that shawarma place!",
   oldExchangeYou: "Yes, let's go!",
 

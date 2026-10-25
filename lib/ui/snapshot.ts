@@ -1,7 +1,8 @@
 import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
-import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiPlan, UiSnapshot } from "./types";
+import { fixtureContacts } from "./contacts";
+import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiPlan, UiRefusal, UiSnapshot } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -92,12 +93,30 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed"]);
+/** A start-path refusal: the gate said no before any thread or message existed, so the event names neither. */
+function isRefusal(event: StateSnapshot["events"][number]): boolean {
+  return event.kind === "message_rejected" && !event.messageId;
+}
+
+const noteKinds = new Set<string>(["caption_extracted", "thread_opened", "policy_changed"]);
 
 function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
-  return events
-    .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]))
-    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(event.text) }));
+  return events.flatMap((event): UiNote[] => {
+    const text = rename(event.text);
+    if (isRefusal(event)) return [{ id: event.id, kind: "contact_refused", at: event.at, text }];
+    if (noteKinds.has(event.kind)) return [{ id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text }];
+    return [];
+  });
+}
+
+/** The latest refusal, shown on the phone only while no plan is running: a plan that started has superseded it. */
+function refusalOf(state: StateSnapshot, plan: Plan | null, rename: (text: string) => string): UiRefusal | null {
+  if (plan && plan.state !== "dropped") return null;
+  const refused = state.events.filter(isRefusal).at(-1);
+  if (!refused) return null;
+  const text = rename(refused.text);
+  const contact = fixtureContacts.find((candidate) => text.includes(candidate.name));
+  return { id: refused.id, at: refused.at, contactName: contact?.name ?? "them", text };
 }
 
 function toUiMessages(state: StateSnapshot): UiMessage[] {
@@ -171,6 +190,8 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
     notes: toNotes(state.events, renameFor(state)),
+    contacts: fixtureContacts,
+    refusal: refusalOf(state, plan, renameFor(state)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events, renameFor(state)),
