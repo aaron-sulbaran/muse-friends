@@ -51,6 +51,30 @@ describe("how a judge starts", () => {
   });
 });
 
+describe("what the header avatar is doing", () => {
+  it("reads the reel and negotiates as thinking, then talking, and rests while a person decides", () => {
+    expect(viewForRole(at("detected"), "a").mood).toBe("thinking");
+    expect(viewForRole(at("detected"), "b").mood).toBe("idle");
+    const between = { ...at("negotiating"), inFlight: null };
+    expect(viewForRole(between, "a").mood).toBe("talking");
+    expect(viewForRole(between, "b").mood).toBe("talking");
+    expect(viewForRole(at("awaiting_humans"), "a").mood).toBe("idle");
+    expect(viewForRole(at("scheduled"), "b").mood).toBe("idle");
+  });
+
+  it("thinks while its own model call is in flight, and only that Muse does", () => {
+    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    expect(viewForRole(inFlight, "a").mood).toBe("thinking");
+    expect(viewForRole(inFlight, "b").mood).toBe("talking");
+  });
+
+  it("rests when a turn failed, and before any plan", () => {
+    expect(viewForRole(toUiSnapshot(seedSnapshot(), live), "a").mood).toBe("idle");
+    const failed = { ...at("negotiating"), failure: { agent: "aaron" as const }, inFlight: null };
+    expect(viewForRole(failed, "a").mood).toBe("idle");
+  });
+});
+
 describe("the journey, phone by phone", () => {
   it("reading the reel, then talking, are status lines and nothing else in the chat", () => {
     expect(viewForRole(at("detected"), "a").status).toBe("🎞️ reading Mochi's reel");

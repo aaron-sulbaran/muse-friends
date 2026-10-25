@@ -22,6 +22,9 @@ import type {
 // category cannot silently break the adapter's types.
 export type { AgentId, Category, Decision, MessageReason, MessageType, PlanState, Role, ShareTier, ThreadState, TimeWindow };
 
+/** What a Muse is doing, for the header avatar's loop: nothing, reading or waiting on a model, or talking to the other Muse. */
+export type AvatarMood = "idle" | "thinking" | "talking";
+
 export type ModelProof = {
   model: string;
   responseId: string;
