@@ -11,6 +11,7 @@ import {
   messageTitle,
   namesFor,
   policyStampFor,
+  reelRowTitle,
 } from "@/lib/ui/format";
 import type { UiMessage } from "@/lib/ui/types";
 
@@ -111,5 +112,18 @@ describe("policy stamp", () => {
     expect(messageAccessibleName(message({ from: "lisa", to: "aaron", type: "accept", windows: [tuesday] }), namesFor(withMichelle))).toContain(
       "Michelle's Muse to Sprout",
     );
+  });
+});
+
+describe("the plan card's first row", () => {
+  it("names the place from the reel, capitalized", () => {
+    expect(reelRowTitle("shawarma point", "Mochi's")).toBe("Shawarma point from Mochi's reel");
+    expect(reelRowTitle("Shawarma Point", "your")).toBe("Shawarma Point from your reel");
+  });
+
+  it("falls back to A spot when the model named no place", () => {
+    expect(reelRowTitle("this spot", "Michelle's")).toBe("A spot from Michelle's reel");
+    expect(reelRowTitle("the plan", "Mochi's")).toBe("A spot from Mochi's reel");
+    expect(reelRowTitle("", "Mochi's")).toBe("A spot from Mochi's reel");
   });
 });
