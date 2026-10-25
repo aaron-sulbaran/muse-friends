@@ -3,7 +3,7 @@ import { snapshotAtPlanState } from "@/lib/seed/states";
 import { copy } from "@/lib/ui/copy";
 import { messageTitle } from "@/lib/ui/format";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
-import { startsRun, threadLines, type ThreadLine } from "@/lib/ui/thread";
+import { endsRun, startsRun, threadLines, type ThreadLine } from "@/lib/ui/thread";
 import type { Decision, UiMessage, UiSnapshot } from "@/lib/ui/types";
 
 const live = { mode: "live" } as const;
@@ -147,5 +147,11 @@ describe("runs of the same sender", () => {
     expect(startsRun(line("your-muse", "Sprout"), line("your-muse", "Sprout"))).toBe(false);
     expect(startsRun(line("your-muse", "Sprout"), line("friend-muse", "Mochi"))).toBe(true);
     expect(startsRun(line("friend", "Michelle"), line("friend-muse", "Mochi"))).toBe(true);
+  });
+
+  it("put the picture beside the last bubble of a run only", () => {
+    expect(endsRun(line("your-muse", "Sprout"), undefined)).toBe(true);
+    expect(endsRun(line("your-muse", "Sprout"), line("your-muse", "Sprout"))).toBe(false);
+    expect(endsRun(line("your-muse", "Sprout"), line("friend-muse", "Mochi"))).toBe(true);
   });
 });

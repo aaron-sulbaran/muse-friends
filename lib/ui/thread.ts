@@ -26,6 +26,8 @@ export type ThreadLine = {
   text: string;
   /** A Muse's private word to its own person: shown in the thread, marked, and never on the friend's phone. */
   onlyYou?: boolean;
+  /** For your own private question: the Muse it went to, named above the bubble. */
+  to?: string;
   at?: string;
 };
 
@@ -68,4 +70,9 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
 /** True when a line opens a run: a different sender than the line before it, so the chip shows above this bubble only. */
 export function startsRun(previous: ThreadLine | undefined, line: ThreadLine): boolean {
   return !previous || previous.sender.kind !== line.sender.kind || previous.sender.name !== line.sender.name || previous.sender.owner !== line.sender.owner;
+}
+
+/** True when a line closes a run: the next line is a different sender, or there is none. The picture sits beside it. */
+export function endsRun(line: ThreadLine, next: ThreadLine | undefined): boolean {
+  return !next || startsRun(line, next);
 }
