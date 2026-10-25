@@ -97,6 +97,13 @@ export class JsonStore implements Store {
     this.snap.messages.push(structuredClone(record));
     this.commit();
   }
+  async replaceMessage(record: MessageRecord) {
+    const { contextId, seq } = record.message;
+    const index = this.snap.messages.findIndex((existing) => existing.message.contextId === contextId && existing.message.seq === seq);
+    if (index === -1) this.snap.messages.push(structuredClone(record));
+    else this.snap.messages[index] = structuredClone(record);
+    this.commit();
+  }
   async listMessages(contextId?: string) {
     const messages = contextId ? this.snap.messages.filter((record) => record.message.contextId === contextId) : this.snap.messages;
     return structuredClone(
