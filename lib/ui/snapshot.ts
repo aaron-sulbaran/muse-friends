@@ -297,9 +297,11 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
   };
 }
 
+// The wallet is named for the person at that seat, as the rest of the screen says it ("Michelle's wallet" when the
+// simulated friend plays side b); the Nessie record keeps the seed's nickname.
 function walletFor(owner: AgentId, state: StateSnapshot): UiWallet | null {
   const wallet = state.room.wallets?.[owner];
-  return wallet ? { balance: wallet.balance, nickname: wallet.nickname, source: wallet.source, accountId: wallet.accountId } : null;
+  return wallet ? { balance: wallet.balance, nickname: renameFor(state)(wallet.nickname), source: wallet.source, accountId: wallet.accountId } : null;
 }
 
 function paymentsScopeFor(owner: AgentId, state: StateSnapshot): PaymentsSettings {
@@ -311,7 +313,13 @@ function sandboxFor(state: StateSnapshot): UiSnapshot["sandbox"] {
   const wallets = Object.values(state.room.wallets ?? {});
   const connected = wallets.length > 0 && wallets.every((wallet) => wallet.source === "nessie");
   const enabled = paymentsEnabled();
-  return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, local ledger" };
+  return {
+    enabled,
+    connected,
+    text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, local ledger",
+    // Only true of the real sandbox: its transactions are real records, but the balance field on its accounts never follows them.
+    ...(enabled && connected ? { balanceNote: "The sandbox records each payment but never changes an account's own balance, so Muse keeps the balances shown here." } : {}),
+  };
 }
 
 const dollars = (amount: number) => (amount < 0 ? `-$${-amount}` : `$${amount}`);
@@ -372,7 +380,7 @@ function toUiPayment(view: PaymentView, proposal?: PaymentProposal): UiPayment {
     ...(view.depositId ? { depositId: view.depositId } : {}),
     ...(view.balanceBefore !== undefined ? { balanceBefore: view.balanceBefore } : {}),
     ...(view.balanceAfter !== undefined ? { balanceAfter: view.balanceAfter } : {}),
-    ...(view.toolCalls ? { toolCalls: view.toolCalls } : {}),
+    ...(toolCallsOf({ toolCalls: view.toolCalls }) ? { toolCalls: toolCallsOf({ toolCalls: view.toolCalls }) } : {}),
     at: view.at,
   };
   if (!proposal) return base;
