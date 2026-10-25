@@ -223,8 +223,10 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
       } else {
         items.push({ kind: "bubble", id: "draft-intro", from: "muse", text: copy.draftIntroB(theirs.human) });
       }
-      if (plan.state !== "confirmed" && plan.window) {
-        items.push({ kind: "bubble", id: "hold-bubble", from: "muse", text: copy.holdBubble(formatWindowSpoken(plan.window)) });
+      // The calendar step follows the message as soon as it is sent, so settling up never jumps ahead of it; the
+      // "I added a hold" line waits for the agents to issue the hold.
+      if (plan.window) {
+        if (plan.state !== "confirmed") items.push({ kind: "bubble", id: "hold-bubble", from: "muse", text: copy.holdBubble(formatWindowSpoken(plan.window)) });
         items.push({
           kind: "hold-row",
           id: "hold-row",
