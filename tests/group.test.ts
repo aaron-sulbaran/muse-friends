@@ -102,11 +102,20 @@ describe("the fan-out", () => {
     ]);
   });
 
-  it("fails every pair thread and drops the plan when the model never sends to both friends", async () => {
+  it("sends to the missing friend in code when the model only reaches one", async () => {
     installFakeModel([...readAndLook, { calls: [send("lisa", { type: "intent", reason: "interest_match", activity: food, windows: [AARON_TUE] })] }, { text: "done" }, { text: "done" }]);
     const result = await runSignalTurn({ store, agent: "aaron", signalId: SIGNAL_ID, contextId: plan.contextId, group: plan.group, wallNow, deliver: deliverAs("aaron") });
-    expect(result.status).toBe("failed");
-    expect(await store.getPlan(plan.id)).toMatchObject({ state: "dropped", dropReason: "cap_reached" });
+    expect(result).toMatchObject({ status: "completed", fallback: true, failure: { detail: "no_tool_call" } });
+    const [toLisa, toKai] = await Promise.all([store.listMessages(contexts.lisa), store.listMessages(contexts.kai)]);
+    expect(toLisa).toHaveLength(1);
+    expect(toLisa[0].proof).toBeDefined();
+    expect(toKai).toHaveLength(1);
+    expect(toKai[0]).toMatchObject({ message: { from: "aaron", to: "kai", type: "intent" } });
+    expect(toKai[0].proof).toBeUndefined();
+    expect((await store.getPlan(plan.id))?.state).toBe("negotiating");
+    const marker = (await store.listEvents()).filter((event) => event.text.startsWith("Fallback"));
+    expect(marker).toHaveLength(1);
+    expect(marker[0]).toMatchObject({ contextId: contexts.kai, agent: "aaron", planId: plan.id });
   });
 });
 
@@ -374,5 +383,93 @@ describe("the third person's decision route", () => {
     await negotiate();
     expect((await post({ member: "nobody", choice: "accept" })).status).toBe(400);
     expect((await post({ role: "a", choice: "accept" })).status).toBe(400);
+  });
+});
+
+// The model is down for every call: the group still gets to a plan, in code.
+describe("the scripted fallback in a group", () => {
+  beforeEach(() => {
+    process.env.MODEL_RETRY_SCALE = "0";
+  });
+  afterEach(() => {
+    delete process.env.MODEL_RETRY_SCALE;
+  });
+
+  const down = () => installFakeModel(Array.from({ length: 80 }, () => ({ error: 404, code: "model_not_found" })));
+  const openDown = () => runSignalTurn({ store, agent: "aaron", signalId: SIGNAL_ID, contextId: plan.contextId, group: plan.group, wallNow, deliver: deliverAs("aaron") });
+  const replyDown = (agent: MemberId) => runInboxTurn({ store, agent, contextId: agent === "aaron" ? contexts.kai : contexts[agent], wallNow, deliver: deliverAs(agent) });
+
+  it("reaches awaiting_humans with the model down for all three agents, on the one window all three share", async () => {
+    down();
+    expect(await openDown()).toMatchObject({ status: "completed", fallback: true });
+    for (const friend of ["lisa", "kai"] as const) {
+      const [intent] = await store.listMessages(contexts[friend]);
+      expect(intent.message).toMatchObject({ from: "aaron", to: friend, type: "intent" });
+      expect(intent.proof).toBeUndefined();
+    }
+    expect(await replyDown("lisa")).toMatchObject({ fallback: true });
+    expect((await replyDown("kai")).fallback).toBe(true);
+    // A member never closes first: round 1 is a counter of every window that works for it.
+    const replies = (await Promise.all([store.listMessages(contexts.lisa), store.listMessages(contexts.kai)])).map((records) => records[1].message);
+    expect(replies.map((message) => message.type)).toEqual(["counter", "counter"]);
+
+    expect(await replyDown("aaron")).toMatchObject({ fallback: true });
+    await replyDown("lisa");
+    await replyDown("kai");
+
+    const settled = (await store.getPlan(plan.id))!;
+    expect(settled).toMatchObject({ state: "awaiting_humans", window: ALL_THREE, activity: { title: "Shawarma Point" } });
+    expect((await store.listCards({ planId: plan.id })).map((card) => card.forAgent).sort()).toEqual(["aaron", "kai", "lisa"]);
+    const threads = await Promise.all([store.getThread(contexts.lisa), store.getThread(contexts.kai)]);
+    expect(threads.map((thread) => thread?.state)).toEqual(["input-required", "input-required"]);
+    const markers = (await store.listEvents()).filter((event) => event.text.startsWith("Fallback"));
+    expect(markers).toHaveLength(8);
+    expect(markers.filter((event) => event.agent === undefined)).toHaveLength(2);
+  });
+
+  it("confirms the one window that works for everyone when only the coordinator's round 2 falls back", async () => {
+    await open();
+    await friendReplies("lisa", "counter");
+    await friendReplies("kai", "counter");
+    down();
+    const result = await replyDown("aaron");
+    expect(result).toMatchObject({ status: "completed", fallback: true });
+    for (const friend of ["lisa", "kai"] as const) {
+      const accept = (await store.listMessages(contexts[friend])).at(-1)!;
+      expect(accept.message).toMatchObject({ from: "aaron", type: "accept", windows: [ALL_THREE] });
+      expect(accept.proof).toBeUndefined();
+    }
+  });
+
+  it("answers only the member the model had not yet answered", async () => {
+    await open();
+    await friendReplies("lisa", "counter");
+    await friendReplies("kai", "counter");
+    installFakeModel([{ calls: [send("lisa", { type: "accept", reason: "both_free", windows: [ALL_THREE] })] }, ...Array.from({ length: 20 }, () => ({ error: 404, code: "model_not_found" }))]);
+    const result = await runInboxTurn({ store, agent: "aaron", contextId: contexts.kai, wallNow, deliver: deliverAs("aaron") });
+    expect(result.fallback).toBe(true);
+    const counts = await Promise.all([store.listMessages(contexts.lisa), store.listMessages(contexts.kai)]);
+    expect(counts.map((records) => records.filter((record) => record.message.from === "aaron" && record.message.type === "accept").length)).toEqual([1, 1]);
+    expect(counts[0].at(-1)?.proof).toBeDefined();
+    expect(counts[1].at(-1)?.proof).toBeUndefined();
+  });
+
+  it("declines both friends in code when no window works for all three, and the plan drops as no_overlap", async () => {
+    await open();
+    await friendReplies("lisa", "counter");
+    const lateTue: Window = { start: "2026-10-27T20:30:00-05:00", end: "2026-10-27T22:00:00-05:00" };
+    await friendReplies("kai", "counter", [lateTue]);
+    down();
+    await replyDown("aaron");
+    for (const friend of ["lisa", "kai"] as const) expect((await store.listMessages(contexts[friend])).at(-1)?.message).toMatchObject({ from: "aaron", type: "decline", reason: "no_overlap" });
+    expect(await store.getPlan(plan.id)).toMatchObject({ state: "dropped", dropReason: "no_overlap" });
+    expect((await Promise.all([store.getThread(contexts.lisa), store.getThread(contexts.kai)])).map((thread) => thread?.state)).toEqual(["rejected", "rejected"]);
+  });
+
+  it("drops the whole group as agent_unavailable when even the fallback cannot deliver", async () => {
+    down();
+    const result = await runSignalTurn({ store, agent: "aaron", signalId: SIGNAL_ID, contextId: plan.contextId, group: plan.group, wallNow, deliver: async () => ({ ok: false, status: 503, error: "inbox down" }) });
+    expect(result.status).toBe("failed");
+    expect(await store.getPlan(plan.id)).toMatchObject({ state: "dropped", dropReason: "agent_unavailable" });
   });
 });

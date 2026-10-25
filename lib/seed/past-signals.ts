@@ -20,6 +20,8 @@ export type PastSignal = {
   caption?: string;
   /** Under `public/`, for a reel's 9:16 thumbnail. */
   image?: string;
+  /** The reel's address. An instagram.com reel address shows as Instagram's embed; anything else keeps the card. */
+  permalink?: string;
   /** The friend's side of the share, read by side a ("Michelle sent you ..."). */
   sentLine: (friend: string) => string;
   /** The same share as side b sees it. */
@@ -41,6 +43,9 @@ export const SHAWARMA_REEL: PastSignal = {
   poster: "eastside.eats.atx",
   caption: "the garlic sauce at Shawarma Point should be illegal 🧄🔥",
   image: "/reels/shawarma-point.jpg",
+  // The same address as the seeded signal in lib/seed/fixtures.ts (a test holds them equal), so the reel on
+  // screen is the reel the agents read. Set both to the reel Aaron or Lisa owns.
+  permalink: "https://example.com/reel/seed-shawarma-001",
   sentLine: (friend) => `${friend} sent you a reel. 🎞️`,
   sentLineMine: (friend) => `You sent ${friend} a reel. 🎞️`,
   reply: "we should go!",

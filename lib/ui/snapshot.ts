@@ -96,6 +96,7 @@ function outcomeFor(plan: Plan, state: StateSnapshot): UiOutcome | null {
 }
 
 function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string {
+  if (reason === "agent_unavailable") return "An agent couldn't reply (model error)";
   if (turnFailed) return "A model call failed";
   switch (reason) {
     case "cap_reached":

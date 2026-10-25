@@ -105,7 +105,8 @@ async function run(label) {
   const messages = (last?.messages ?? []).filter((m) => m.contextId === contextId).sort((a, b) => a.seq - b.seq);
   check(last?.plan?.state === "awaiting_humans", `plan reached awaiting_humans (was ${last?.plan?.state ?? "none"})${last?.failure ? `, failure: ${JSON.stringify(last.failure)}` : ""}`);
   check(messages.length > 0 && messages.length <= 4, `agreed within 4 messages (${messages.length})`);
-  check(messages.every((m) => m.proof), "every message carries model proof");
+  const fallbacks = messages.filter((m) => !m.proof).length;
+  check(fallbacks === 0, `every message carries model proof${fallbacks > 0 ? ` (${fallbacks} sent by the scripted fallback: the model could not reply)` : ""}`);
 
   const rows = messages.map((m, index) => {
     const arrival = arrivals.get(m.seq) ?? 0;
@@ -116,7 +117,7 @@ async function run(label) {
   for (const { m, arrival, turn } of rows) {
     const windows = (m.windows ?? []).length;
     console.log(
-      `  ${m.seq}  ${String(nameOf(last, m.from)).padEnd(6)}  ${m.type.padEnd(6)}  ${seconds(arrival).padStart(7)}  ${seconds(turn).padStart(6)}  ${seconds(m.proof?.latencyMs ?? 0).padStart(9)}  ${String(m.proof?.outputTokens ?? "").padStart(7)}  ${windows} window(s)${m.note ? ` | "${m.note}"` : ""}  [shared: ${(m.shared ?? []).join(",") || "-"}; withheld: ${(m.removed ?? []).join(",") || "-"}]`,
+      `  ${m.seq}  ${String(nameOf(last, m.from)).padEnd(6)}  ${m.type.padEnd(6)}  ${seconds(arrival).padStart(7)}  ${seconds(turn).padStart(6)}  ${seconds(m.proof?.latencyMs ?? 0).padStart(9)}  ${String(m.proof?.outputTokens ?? "").padStart(7)}  ${windows} window(s)${m.note ? ` | "${m.note}"` : ""}${m.proof ? "" : " (fallback, no model proof)"}  [shared: ${(m.shared ?? []).join(",") || "-"}; withheld: ${(m.removed ?? []).join(",") || "-"}]`,
     );
   }
   console.log(`  agents ${last?.plan?.state === "awaiting_humans" ? "agreed" : "did not agree"} in ${messages.length} messages at ${seconds(agreedMs)}`);
@@ -199,7 +200,8 @@ async function runGroup(label) {
   const messages = (last?.messages ?? []).filter((m) => pairContexts.includes(m.contextId)).sort((a, b) => (arrivals.get(`${a.contextId}:${a.seq}`) ?? 0) - (arrivals.get(`${b.contextId}:${b.seq}`) ?? 0));
   check(last?.plan?.state === "awaiting_humans", `group plan reached awaiting_humans (was ${last?.plan?.state ?? "none"})${last?.failure ? `, failure: ${JSON.stringify(last.failure)}` : ""}`);
   check(pairContexts.every((context) => messages.filter((m) => m.contextId === context).length <= 6), "each pair thread stayed within the 6 message cap");
-  check(messages.every((m) => m.proof), "every message carries model proof");
+  const fallbacks = messages.filter((m) => !m.proof).length;
+  check(fallbacks === 0, `every message carries model proof${fallbacks > 0 ? ` (${fallbacks} sent by the scripted fallback: the model could not reply)` : ""}`);
   const sendersTo = new Set(messages.filter((m) => m.from === "aaron").map((m) => m.to));
   check(sendersTo.has("lisa") && sendersTo.has("kai"), "Sprout wrote to both Mochi and Pebble");
   check(messages.every((m) => m.from === "aaron" || m.to === "aaron"), "every message is between a friend and Sprout (no friend talks to the other)");
@@ -209,7 +211,7 @@ async function runGroup(label) {
   for (const m of messages) {
     const arrival = arrivals.get(`${m.contextId}:${m.seq}`) ?? 0;
     console.log(
-      `  ${m.contextId.slice(-4)}  ${m.seq}  ${String(nameOf(last, m.from)).padEnd(6)}  ${String(nameOf(last, m.to)).padEnd(6)}  ${m.type.padEnd(7)}  ${seconds(arrival).padStart(7)}  ${seconds(m.proof?.latencyMs ?? 0).padStart(9)}  ${String(m.proof?.outputTokens ?? "").padStart(7)}  ${(m.windows ?? []).length} window(s)${m.note ? ` | "${m.note}"` : ""}`,
+      `  ${m.contextId.slice(-4)}  ${m.seq}  ${String(nameOf(last, m.from)).padEnd(6)}  ${String(nameOf(last, m.to)).padEnd(6)}  ${m.type.padEnd(7)}  ${seconds(arrival).padStart(7)}  ${seconds(m.proof?.latencyMs ?? 0).padStart(9)}  ${String(m.proof?.outputTokens ?? "").padStart(7)}  ${(m.windows ?? []).length} window(s)${m.note ? ` | "${m.note}"` : ""}${m.proof ? "" : " (fallback, no model proof)"}`,
     );
   }
   console.log(`  three agents ${last?.plan?.state === "awaiting_humans" ? "agreed" : "did not agree"} in ${messages.length} messages at ${seconds(agreedMs)}; window ${last?.plan?.window?.start ?? "none"} to ${last?.plan?.window?.end?.slice(11, 16) ?? ""}`);

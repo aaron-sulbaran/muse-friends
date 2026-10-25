@@ -1,4 +1,9 @@
+"use client";
+
 import { Clapperboard, MapPin, Play } from "lucide-react";
+import { useCallback, useState } from "react";
+import { instagramEmbedUrl } from "@/lib/ui/reel";
+import { InstagramEmbed } from "./InstagramEmbed";
 
 type ReelCardProps = {
   image?: string;
@@ -7,10 +12,40 @@ type ReelCardProps = {
   place: string;
   align: "left" | "right";
   label?: string;
+  /** The reel's address. An instagram.com reel shows as Instagram's own embed; any other value keeps this card. */
+  permalink?: string;
 };
 
-/** A sample reel shared in a chat, styled in the spirit of a short-video share (original look). */
-export function ReelCard({ image, poster, caption, place, align, label = "Sample reel" }: ReelCardProps) {
+type EmbedState = "loading" | "embedded" | "failed";
+
+/**
+ * A reel shared in a chat. With an instagram.com permalink it becomes the real reel through Instagram's public
+ * embed, at the width of the chat; the plain card holds its place until the embed's frame appears, and stays if
+ * it never does (offline Wi-Fi, a blocked script, a permalink that is not Instagram's).
+ */
+export function ReelCard({ permalink, ...card }: ReelCardProps) {
+  const embedUrl = instagramEmbedUrl(permalink);
+  const [state, setState] = useState<EmbedState>("loading");
+  const onRendered = useCallback(() => setState("embedded"), []);
+  const onFailed = useCallback(() => setState("failed"), []);
+
+  if (!embedUrl || state === "failed") return <SampleReel {...card} />;
+  return (
+    <div className="relative">
+      {/*
+        While it loads, the embed sits invisibly over the card at the chat's full width. It must not be clipped or
+        collapsed: a frame with no area on screen is never loaded, and Instagram sizes it against this width.
+      */}
+      <div className={state === "embedded" ? "animate-fade-in" : "pointer-events-none absolute left-0 top-0 w-full opacity-0"} aria-hidden={state !== "embedded"}>
+        <InstagramEmbed url={embedUrl} onRendered={onRendered} onFailed={onFailed} />
+      </div>
+      {state === "loading" ? <SampleReel {...card} /> : null}
+    </div>
+  );
+}
+
+/** The card for a reel with no embed: styled in the spirit of a short-video share (original look). */
+function SampleReel({ image, poster, caption, place, align, label = "Sample reel" }: Omit<ReelCardProps, "permalink">) {
   return (
     <div className={`flex ${align === "right" ? "justify-end" : "justify-start"}`}>
       <figure className="w-[200px] animate-fade-in overflow-hidden rounded-card bg-group">

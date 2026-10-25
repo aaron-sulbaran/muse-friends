@@ -216,14 +216,16 @@ describe("a thread that hits the cap", () => {
     expect(model.calls).toHaveLength(0);
   });
 
-  it("an agent turn that fails at the cap is dropped with the same reason and a timeline row", async () => {
+  it("an agent turn that cannot recover is dropped as agent_unavailable, with a timeline row", async () => {
     const store = new JsonStore(null);
     const { contextId } = await injectSignal(store, rawShawarmaSignal());
     installFakeModel([{ text: "Sounds fun" }, { text: "Really" }]);
-    await runSignalTurn({ store, agent: "aaron", signalId: rawShawarmaSignal().id, contextId });
-    expect(await store.getPlanByContext(contextId)).toMatchObject({ state: "dropped", dropReason: "cap_reached" });
+    // The model never sends, and the scripted fallback cannot get its message into the friend's inbox either.
+    const deliver = async () => ({ ok: false as const, status: 503, error: "inbox down" });
+    await runSignalTurn({ store, agent: "aaron", signalId: rawShawarmaSignal().id, contextId, deliver });
+    expect(await store.getPlanByContext(contextId)).toMatchObject({ state: "dropped", dropReason: "agent_unavailable" });
     expect((await store.listEvents()).at(-1)).toMatchObject({ kind: "turn_failed" });
-    expect((await store.listEvents()).at(-1)?.text).toContain("cap_reached");
+    expect((await store.listEvents()).at(-1)?.text).toContain("agent_unavailable");
   });
 });
 

@@ -3,6 +3,7 @@ import { type ActivityEvent, type AgentId, type MemberId, type Plan, type PlanGr
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
+import { fallbackGroupConfirm, fallbackGroupOpening, fallbackOpening, fallbackReply, type FallbackOutcome } from "./fallback";
 import { failThread } from "./inbound";
 import { newId } from "./ids";
 import { ownFreeBlocks } from "./calendar";
@@ -55,8 +56,25 @@ function logFailure(agent: MemberId, result: TurnResult): void {
   if (process.env.NODE_ENV !== "test") console.error(`agent turn failed (${agent})`, result.failure);
 }
 
+// A turn the model could not finish still gets an answer: the scripted fallback sends a message built in code.
+// Only when that cannot send either does the thread end as failed, and the reason says why: no free time at
+// all is no_overlap; anything else is that an agent could not reply.
+// A group ends every one of its pair threads together, so the plan is dropped with the reason on the timeline.
+async function recoverOrFail(
+  options: RuntimeOptions & { agent: MemberId; contextId: string },
+  result: TurnResult,
+  fallback: () => Promise<FallbackOutcome>,
+  contexts: string[] = [options.contextId],
+): Promise<TurnResult> {
+  const outcome = await fallback();
+  if (outcome.sent) return { ...result, status: "completed", fallback: true };
+  const reason = outcome.reason === "no_windows" ? "no_overlap" : "agent_unavailable";
+  for (const contextId of contexts) await failThread(options.store, contextId, options.agent, result.failure?.detail ?? "turn failed", options.wallNow?.(), reason);
+  return result;
+}
+
 // The initiator's turn: read the reel, extract the place from the caption, check the calendar,
-// and open the conversation. A turn that cannot produce a message ends the thread as failed.
+// and open the conversation. A turn the model cannot finish falls back to a scripted opening.
 export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; signalId: string; contextId: string; group?: PlanGroup }): Promise<TurnResult> {
   const { store, agent, signalId, contextId, group } = options;
   // For a group the coordinator opens one pair thread per friend, in the same turn.
@@ -83,7 +101,8 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
   });
   if (result.status === "failed") {
     logFailure(agent, result);
-    await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+    if (group) return recoverOrFail(options, result, () => fallbackGroupOpening(ctx, group), memberContexts(group).map(({ contextId }) => contextId));
+    return recoverOrFail(options, result, () => fallbackOpening(ctx));
   }
   return result;
 }
@@ -132,7 +151,7 @@ export async function runInboxTurn(options: RuntimeOptions & { agent: MemberId; 
   });
   if (result.status === "failed") {
     logFailure(agent, result);
-    await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+    return recoverOrFail(options, result, () => fallbackReply(ctx, { thread, mutualWindows, ledger, group: plan?.group !== undefined }));
   }
   return result;
 }
@@ -168,7 +187,7 @@ export async function runGroupTurn(options: RuntimeOptions & { agent: MemberId; 
   });
   if (result.status === "failed") {
     logFailure(agent, result);
-    for (const { contextId } of memberContexts(group)) await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+    return recoverOrFail(options, result, () => fallbackGroupConfirm(ctx, plan, candidates), memberContexts(group).map(({ contextId }) => contextId));
   }
   return result;
 }

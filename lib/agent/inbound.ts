@@ -202,14 +202,22 @@ async function createPlan(store: Store, message: AgentMessage, at: string): Prom
   return plan;
 }
 
-// A turn that could not produce a valid message ends the thread as failed, with the reason on screen.
-export async function failThread(store: Store, contextId: string, agent: MemberId, detail: string, wallNow: number = Date.now()): Promise<void> {
+// A turn that could not produce a valid message ends the thread as failed, with the reason on screen. Unless the
+// caller knows better (no shared free time at all), the reason is that an agent could not reply, not the cap.
+export async function failThread(
+  store: Store,
+  contextId: string,
+  agent: MemberId,
+  detail: string,
+  wallNow: number = Date.now(),
+  reason: DropReason = "agent_unavailable",
+): Promise<void> {
   const at = toCentralIso(wallNow);
   const thread = await store.getThread(contextId);
   const plan = await store.getPlanByContext(contextId);
-  if (thread) await store.putThread({ ...thread, state: "failed", dropReason: "cap_reached", updatedAt: at });
+  if (thread) await store.putThread({ ...thread, state: "failed", dropReason: reason, updatedAt: at });
   if (plan && canTransition(plan.state, "dropped")) {
-    await store.putPlan(transitionPlan(plan, "dropped", at, { note: detail, dropReason: "cap_reached" }));
+    await store.putPlan(transitionPlan(plan, "dropped", at, { note: detail, dropReason: reason }));
   }
   await store.appendEvent({
     id: newId("evt"),
@@ -219,6 +227,6 @@ export async function failThread(store: Store, contextId: string, agent: MemberI
     agent: seatOf(agent),
     contextId,
     planId: plan?.id,
-    text: `${displayName(agent)}'s turn ended without a message (${detail}); the thread is marked failed and the plan dropped with reason cap_reached`,
+    text: `${displayName(agent)}'s turn ended without a message (${detail}); the thread is marked failed and the plan dropped with reason ${reason}`,
   });
 }

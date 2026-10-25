@@ -66,7 +66,9 @@ export const PLAN_STATES = [
 export const PlanState = z.enum(PLAN_STATES);
 export type PlanState = z.infer<typeof PlanState>;
 
-export const DROP_REASONS = ["cap_reached", "declined", "no_overlap", "policy_blocked", "failed"] as const;
+// cap_reached is only the real cap (6 messages). agent_unavailable: an agent could not reply (the model failed
+// and the scripted fallback could not send either).
+export const DROP_REASONS = ["cap_reached", "declined", "no_overlap", "policy_blocked", "failed", "agent_unavailable"] as const;
 export const DropReason = z.enum(DROP_REASONS);
 export type DropReason = z.infer<typeof DropReason>;
 
