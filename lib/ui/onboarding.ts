@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SEEDED_FRIEND_IDS } from "@/lib/seed/friends";
+import { SEEDED_FRIEND_IDS, SEEDED_FRIENDS } from "@/lib/seed/friends";
 import type { ShareTier } from "./types";
 
 /*
@@ -50,7 +50,11 @@ export function initialOnboarding(): OnboardingState {
 
 const optedOut = (state: OnboardingState): OnboardingState => ({ ...state, step: "done", friendsOn: false, tiers: tiersAt("off"), source: "none" });
 
-const anyoneAboveOff = (state: OnboardingState) => Object.values(state.tiers).some((tier) => tier !== "off");
+/**
+ * Only a friend whose Muse can take part can start a plan, so Continue means something when one of them is above Off.
+ * Someone else above Off with the room's friend at Off is the opt-out: no run starts.
+ */
+const anyoneAboveOff = (state: OnboardingState) => SEEDED_FRIENDS.some((friend) => friend.museModel !== null && state.tiers[friend.id] !== "off");
 
 /** Every action is a no-op outside the step it belongs to, so a stray tap cannot jump the flow. */
 export function reduceOnboarding(state: OnboardingState, action: OnboardingAction): OnboardingState {
@@ -72,7 +76,7 @@ export function reduceOnboarding(state: OnboardingState, action: OnboardingActio
       return { ...state, tiers: { ...state.tiers, [action.friendId]: action.tier } };
     case "continue":
       if (state.step !== "who" || state.source === "none") return state;
-      // Nobody above Off is the opt-out: no run starts.
+      // Nobody who can take part above Off is the opt-out: no run starts.
       return anyoneAboveOff(state) ? { ...state, step: "share" } : optedOut(state);
     case "back":
       if (state.step === "share") return { ...state, step: "who" };

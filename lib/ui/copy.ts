@@ -237,4 +237,6 @@ export const onboardingCopy = {
   shareLine: (friend: string, tier: string) =>
     `Set from ${friend}'s group, ${tier}. Change any of them. Off means Muse leaves it out and says so in Activity.`,
   done: "Done",
+  /** The persistent indicator on the avatar sheet's shield while Friends is on. */
+  friendsIsOn: "Friends is on",
 } as const;

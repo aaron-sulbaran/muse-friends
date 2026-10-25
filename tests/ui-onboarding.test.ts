@@ -60,6 +60,16 @@ describe("the onboarding steps", () => {
     expect(reduceOnboarding(state, { type: "continue" }).step).toBe("share");
   });
 
+  it("treats a Continue with only a friend who has no Muse above Off as the opt-out, since nobody can take part", () => {
+    const state = run([{ type: "friendsOn" }, { type: "pick" }, { type: "tier", friendId: "priya", tier: "close" }, { type: "continue" }]);
+    expect(state).toMatchObject({ step: "done", friendsOn: false });
+  });
+
+  it("goes to share when the room's friend is above Off, whoever else is", () => {
+    const state = run([{ type: "friendsOn" }, { type: "pick" }, { type: "tier", friendId: "michelle", tier: "friend" }, { type: "continue" }]);
+    expect(state.step).toBe("share");
+  });
+
   it("ignores a tier for a friend it does not list", () => {
     const state = run([{ type: "friendsOn" }, { type: "pick" }]);
     expect(reduceOnboarding(state, { type: "tier", friendId: "nobody", tier: "close" })).toEqual(state);
