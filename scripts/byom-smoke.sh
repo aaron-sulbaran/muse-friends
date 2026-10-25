@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs one "bring your own Muse" plan end to end over the REST mirror: closed without the right key,
-# bad windows refused, start_plan, check_plan until the agents agree, respond, and a check that the
+# free text and windows of your own refused, start_plan, check_plan until the agents agree, respond, and a check that the
 # demo room's content did not change. The judge key is read from .env and handed to curl on stdin, so it
 # never appears in the command line or the output.
 #
@@ -9,8 +9,8 @@
 #                                                            deployment's byom_rooms table (never the
 #                                                            demo room) and spends about 3 model calls
 #
-# Needs MCP_TOKEN_JUDGE in .env (the same value the server has). The window is Thu Oct 29, 7 to 9pm, which
-# the fictional friend Mochi shares; after Oct 28 it falls outside the "next 7 days" rule, so edit it.
+# Needs MCP_TOKEN_JUDGE in .env (the same value the server has). It picks the "evenings" preset; the presets'
+# fictional windows run Oct 26 to Oct 31, so after Oct 31 start_plan answers 422 slots_expired.
 # Use the www address for production: the bare name answers with a 308 redirect.
 set -uo pipefail
 
@@ -25,7 +25,7 @@ if [ -z "$token" ]; then
   exit 1
 fi
 
-window='{"free_windows":[{"day":"2026-10-29","start":"19:00","end":"21:00"}]}'
+window='{"slots":"evenings"}'
 body_file="$(mktemp)"
 trap 'rm -f "$body_file"' EXIT
 
@@ -66,8 +66,14 @@ if [ -n "$team_token" ]; then
   [ "$status" = "403" ] && check "a team key cannot start a plan (403)" ok || check "a team key cannot start a plan (403)" fail "got $status"
 fi
 
-status="$(call "$token" POST /api/connector/start_plan '{"free_windows":[{"day":"2026-10-26","start":"18:00","end":"19:00"},{"day":"2026-10-27","start":"18:00","end":"19:00"},{"day":"2026-10-28","start":"18:00","end":"19:00"},{"day":"2026-10-29","start":"18:00","end":"19:00"}]}')"
-[ "$status" = "400" ] && check "four windows are refused (400) before any model call" ok || check "four windows are refused (400) before any model call" fail "got $status"
+status="$(call "$token" POST /api/connector/start_plan '{"slots":"evenings","reel_hint":"anything I type"}')"
+[ "$status" = "400" ] && check "free text is refused (400) before any model call" ok || check "free text is refused (400) before any model call" fail "got $status"
+
+status="$(call "$token" POST /api/connector/start_plan '{"free_windows":[{"day":"2026-10-29","start":"19:00","end":"21:00"}]}')"
+[ "$status" = "400" ] && check "windows of your own are refused (400)" ok || check "windows of your own are refused (400)" fail "got $status"
+
+status="$(call "$token" POST /api/connector/start_plan '{"slots":"mornings"}')"
+[ "$status" = "400" ] && check "an unknown preset is refused (400)" ok || check "an unknown preset is refused (400)" fail "got $status"
 
 status="$(call "$token" POST /api/connector/start_plan "$window")"
 plan_id="$(pick data.planId)"

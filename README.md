@@ -50,9 +50,9 @@ Two separate Muse Spark agents, one per person, each given only that person's ca
 
 ## What we built versus what we used
 
-**Ours, written during the hacking period:** the agent loop, message protocol, sharing gate, plan lifecycle, seed story, Replay, screens, avatars, wordmark, and tests.
+**Ours, written during the hacking period:** the agent loop, message protocol, sharing gate, plan lifecycle, seed story, Replay, screens, avatars, wordmark, and tests. Also ours, and optional: the connector server (an MCP endpoint and matching web routes with the tools `get_status`, `start_plan`, `check_plan` and `respond`), the `/connect` page, and the fictional judge rooms behind them. The connector is a proposal for Muse, not a shipped or Meta-reviewed feature.
 
-**Used, not ours:** Next.js and React, Tailwind CSS, zod, the OpenAI SDK (pointed at Meta's endpoint), Supabase, Vercel, lucide icons, Vitest, and the Meta Model API serving Muse Spark. We also used Claude Code as a coding assistant.
+**Used, not ours:** Next.js and React, Tailwind CSS, zod, the OpenAI SDK (pointed at Meta's endpoint), Supabase, Vercel, lucide icons, Vitest, and the Meta Model API serving Muse Spark. The MCP SDK (`@modelcontextprotocol/server` and `mcp-handler`) is a library we call; the connector server built on it is ours. Muse itself, the app a judge may connect to our server, is Meta's client: we did not build or change it. We also used Claude Code as a coding assistant.
 
 ## Run it yourself
 
