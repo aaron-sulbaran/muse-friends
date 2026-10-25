@@ -113,6 +113,26 @@ Who: anyone with a phone. Time: 5 minutes. Run it on venue Wi-Fi and again on mo
 
 First full run (Sat Oct 24, about 9:50pm, Wi-Fi, 375 px window, production `b5d41bd`): the tap to a plan awaiting both people took about 15 seconds (reel read at about 3 seconds, first agent message at about 12, third at about 17 on a polling clock), the simulated friend answered within a few seconds of the tap, the plan was confirmed, and the database held 1 signal, 1 thread, 3 messages, 1 plan, 2 cards, and 10 timeline events. Replay played from the stage's Demo controls.
 
+## Scheduled sweep (cron)
+
+`GET /api/cron/sweep` moves plans along in **real time**: for each plan, the next step (the reminder two hours before the plan, the end, the next-day follow-up) is run if its moment has already passed. It decides nothing itself: `nextStepDue` and `advanceClock` in `lib/agent/lifecycle.ts` say which step is due and run it, the same functions the demo clock uses. One step per call, and each transition writes one Activity row stamped `Scheduled sweep: <title> moved from <state> to <state>`. Idempotent: a moved plan has no due step, so a second run or a duplicate delivery finds nothing to do. It returns counts as JSON: `{"data":{"at","checked","advanced","skipped","transitions":[...]},"error":null}`.
+
+**Closed by default.** It needs `Authorization: Bearer <CRON_SECRET>`, which Vercel Cron sends on its own when the project has a `CRON_SECRET` environment variable. Without a secret (unset or under 16 characters) every request answers **503**; with a wrong or missing bearer it answers **401**. Nothing runs either way.
+
+**Schedule.** `vercel.json` has one entry, `0 14 * * *`: once a day at 14:00 UTC (9:00am Central), which is the most the **Hobby** plan allows (this project is on Hobby; checked with `vercel teams ls`). Hobby runs it any time in that hour, plus or minus up to 59 minutes, and an expression that fires more than daily fails the deploy. On Pro it could be every 15 minutes. Cron jobs run only on **production** deployments.
+
+**What you will and will not see.** The seeded plan is Tuesday Oct 27, 6 to 8pm Central, so its first real-time step (the reminder) is due Tuesday at 4:00pm. Before then a run finds nothing due and writes nothing. Do not say the app "reminds people" on Sunday; the true statement is that a scheduled run exists, runs daily, is idempotent, and is covered by tests (unauthorized, closed when unset, idempotent on a second call, the Scheduled stamp).
+
+### H5. Give the sweep its secret (Aaron, 2 minutes, with H4's key push if you are doing it)
+
+The secret has to be added from a machine with your Vercel login; the platform lane's session is not allowed to write secrets.
+
+1. From the `code` folder: `./scripts/push-env-to-vercel.sh --dry-run --with-cron-secret`. Expect `would generate CRON_SECRET into .env` and `would push CRON_SECRET (64 characters, secret)` in the list.
+2. `./scripts/push-env-to-vercel.sh --with-cron-secret` (add `--with-mcp-tokens` too if you are also doing H4). It generates `CRON_SECRET` (32 random bytes, hex) into `.env`, never prints it, and pushes it to Vercel for Production and Preview.
+3. Redeploy production (H1 step 4).
+4. Check, with no secret needed: `curl -i https://www.musefriends.tech/api/cron/sweep`. Expect `HTTP/2 401` (the secret exists and you did not send it). A `503` means the secret did not reach this deployment; redeploy.
+5. Check the schedule is registered: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/cron-jobs lists `/api/cron/sweep` at `0 14 * * *`. Its **Run** button calls the route with the right header; with no plan due it reads the store and writes nothing.
+
 ## If production shows old styles after a deploy
 
 Symptom: the stage renders black and unstyled (system font, dark mode), yet `/api/health` shows the new commit.

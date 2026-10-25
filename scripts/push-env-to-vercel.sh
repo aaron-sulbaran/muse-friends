@@ -7,6 +7,8 @@
 #   ./scripts/push-env-to-vercel.sh --dry-run          show what would be pushed, change nothing
 #   ./scripts/push-env-to-vercel.sh --with-mcp-tokens  first generate MCP_TOKEN_A and MCP_TOKEN_B
 #                                                      into .env if they are missing, then push
+#   ./scripts/push-env-to-vercel.sh --with-cron-secret first generate CRON_SECRET into .env if it is
+#                                                      missing, then push (the flags combine)
 #
 # Safe to re-run: it overwrites the same variables. Environment variables only reach deployments made
 # after the push, so redeploy afterwards (Deployments, the latest production deployment, Redeploy).
@@ -16,10 +18,12 @@ cd "$(dirname "$0")/.."
 
 dry_run=false
 with_mcp_tokens=false
+with_cron_secret=false
 for argument in "$@"; do
   case "$argument" in
     --dry-run) dry_run=true ;;
     --with-mcp-tokens) with_mcp_tokens=true ;;
+    --with-cron-secret) with_cron_secret=true ;;
     *) echo "unknown option: $argument" >&2; exit 1 ;;
   esac
 done
@@ -39,14 +43,15 @@ read_value() {
 }
 
 ensure_token() {
-  if [ -n "$(read_value "$1")" ]; then return; fi
+  local name="$1" bytes="${2:-24}"
+  if [ -n "$(read_value "$name")" ]; then return; fi
   if $dry_run; then
-    echo "would generate $1 into $env_file"
+    echo "would generate $name into $env_file"
     return
   fi
   if [ -n "$(tail -c1 "$env_file")" ]; then echo >> "$env_file"; fi
-  echo "$1=$(openssl rand -hex 24)" >> "$env_file"
-  echo "generated $1 into $env_file"
+  echo "$name=$(openssl rand -hex "$bytes")" >> "$env_file"
+  echo "generated $name into $env_file"
 }
 
 send() {
@@ -94,7 +99,12 @@ if $with_mcp_tokens; then
   ensure_token MCP_TOKEN_B
 fi
 
+if $with_cron_secret; then
+  ensure_token CRON_SECRET 32
+fi
+
 push MODEL_API_KEY secret
+push CRON_SECRET secret
 push MCP_TOKEN_A secret
 push MCP_TOKEN_B secret
 push SUPABASE_SERVICE_ROLE_KEY secret
