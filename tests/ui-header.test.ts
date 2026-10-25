@@ -60,23 +60,36 @@ describe("the stage header", () => {
     expect(html).not.toContain("<svg");
   });
 
-  it("shows the primary lockup at a 12 pixel symbol, 4 pixels after by, with Meta as its alt text", () => {
+  it("shows the primary lockup sized by its letters to the subtitle, 4 pixels after by, with Meta as its alt text", () => {
     const image = /<img [^>]*>/.exec(html)?.[0] ?? "";
     expect(image).toContain('alt="Meta"');
     expect(image).toContain('src="/brand/meta-lockup-primary-12px@3x.png"');
     expect(image).toContain('srcSet="/brand/meta-lockup-primary-12px@2x.png 2x, /brand/meta-lockup-primary-12px@3x.png 3x"');
-    expect(image).toContain('height="12"');
-    expect(image).toContain('width="59"');
+    // Sun 8:45am: the wordmark's capitals (about 8.5px) match the subtitle's, so 9 by 44, not Meta's 12px minimum.
+    expect(image).toContain('height="9"');
+    expect(image).toContain('width="44"');
+    expect(image).toContain('class="mb-px"');
     expect(html).toMatch(/<span class="[^"]*\bgap-1\b[^"]*\bitems-end\b|<span class="[^"]*\bitems-end\b[^"]*\bgap-1\b/);
     expect(html).not.toMatch(/<img [^>]*>[^<]*<(?!\/span)/);
   });
 
-  it("keeps the files the lockup points at, rasterized at 2x and 3x of a 12 pixel symbol", () => {
+  it("keeps the files the lockup points at, rasterized at 2x and 3x of the 12 pixel original", () => {
     for (const [file, width, height] of [["@2x", 119, 24], ["@3x", 178, 36]] as const) {
       const png = readFileSync(`public/brand/meta-lockup-primary-12px${file}.png`);
       expect(png.subarray(1, 4).toString()).toBe("PNG");
       expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([width, height]);
     }
+  });
+
+  it("sets the subtitle at 12 over 16 with the logo, and with the plain text fallback, under a 22 pixel title", () => {
+    const logo = renderToStaticMarkup(createElement(Subline));
+    const plain = renderToStaticMarkup(createElement(Subline, { imageFailed: true }));
+    for (const markup of [logo, plain]) {
+      expect(markup).toContain("text-[12px]");
+      expect(markup).toContain("leading-[16px]");
+      expect(markup).not.toContain("text-[11px]");
+    }
+    expect(html).toContain("text-[22px]");
   });
 
   it("falls back to the plain text subline when the image does not load", () => {
