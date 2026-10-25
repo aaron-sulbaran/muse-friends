@@ -131,9 +131,14 @@ describe("money in the chat", () => {
     const view = viewForRole(afterWent(), "a").items;
     expect(kinds(view)).toContain("settle-card");
     expect(kinds(viewForRole(afterWent(), "b").items)).toContain("settle-card");
-    // After the outcome reply and the next idea, never before them, and nothing with buttons below it.
+    // After the outcome reply, never before it, and nothing with buttons below it. The next idea and the
+    // closing line wait until after the money, so the chat ends on what to do next.
     const settle = view.findIndex((item) => item.kind === "settle-card");
     expect(view.findIndex((item) => item.kind === "bubble" && item.id === "outcome-reply")).toBeLessThan(settle);
+    expect(view.findIndex((item) => item.id === "next-idea")).toBeGreaterThan(settle);
+    expect(view.at(-1)).toMatchObject({ id: "closing" });
+    const paid = viewForRole(afterWent({ payments: [payment()] }), "a").items;
+    expect(paid.findIndex((item) => item.id === "next-idea")).toBeGreaterThan(paid.findIndex((item) => item.kind === "payment-card"));
     expect(view.slice(settle + 1).filter((item) => ["plan-card", "draft-card", "hold-row", "outcome-replies", "payment-card"].includes(item.kind))).toEqual([]);
     expect(view[settle]).toMatchObject({ museName: "Sprout" });
     expect(kinds(viewForRole(afterWent({ payments: [payment()] }), "a").items)).not.toContain("settle-card");
