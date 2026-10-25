@@ -76,9 +76,9 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   const today = daySeparatorFor(plan.history[0]?.at ?? snapshot.now, plan.history[0]?.at ?? snapshot.now);
   items.push({ kind: "separator", id: "sep-today", day: "Today", time: today.time });
   // Muse picks up the plan that died in the chat a week ago.
+  // Side a started it, so side b hears about it from its own Muse: the other person's Muse is asking.
   if (role === "b") {
-    items.push({ kind: "bubble", id: "reel-sent", from: "user", text: copy.nudgeSent(theirs.human) });
-    items.push({ kind: "bubble", id: "reel-sent-ack", from: "muse", text: SHAWARMA_REEL.nextIdeaMine(theirs.human) });
+    items.push({ kind: "bubble", id: "reel-asked", from: "muse", text: copy.friendMuseAsking(theirs.human) });
   } else {
     items.push({ kind: "bubble", id: "pickup", from: "muse", text: SHAWARMA_REEL.nextIdea(theirs.human) });
   }

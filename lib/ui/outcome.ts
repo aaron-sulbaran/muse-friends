@@ -3,6 +3,7 @@ import type { LifecycleResult } from "@/lib/agent/lifecycle";
 import { newId } from "@/lib/agent/ids";
 import type { ActivityEvent, Role } from "@/lib/protocol";
 import { displayName, ROLE_TO_AGENT } from "@/lib/seed/fixtures";
+import { personName } from "./tokens";
 import { pastSignal } from "@/lib/seed/past-signals";
 import type { Store } from "@/lib/store";
 import { chooseNextIdea, type NextIdeaChooser } from "./next-idea";
@@ -33,8 +34,10 @@ export function recordOutcome(
 
     const at = (await store.getClock()).now;
     const title = plan.activity?.title ?? "the plan";
-    const person = displayName(ROLE_TO_AGENT[input.role]);
-    const friend = displayName(ROLE_TO_AGENT[input.role === "a" ? "b" : "a"]);
+    // People, never their Muses: Alex, and Michelle (simulated) or Jordan.
+    const simulated = (await store.getRoom()).simulatedFriend;
+    const person = personName(ROLE_TO_AGENT[input.role], simulated);
+    const friend = personName(ROLE_TO_AGENT[input.role === "a" ? "b" : "a"], simulated);
     const base = { at, contextId: plan.contextId, planId: plan.id };
     const suffix = newId("o").slice(2);
 

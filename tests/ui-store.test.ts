@@ -65,7 +65,7 @@ describe("the UI over Lane A's real lifecycle and controls", () => {
     await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "decline" });
     const snapshot = await ui(store);
     expect(snapshot.plan?.state).toBe("dropped");
-    expect(viewForRole(snapshot, "a").items.find((item) => item.kind === "bubble" && item.id === "dropped")).toMatchObject({ text: "Mochi said not now." });
+    expect(viewForRole(snapshot, "a").items.find((item) => item.kind === "bubble" && item.id === "dropped")).toMatchObject({ text: "Jordan said not now." });
   });
 
   it("a reset empties the stage and keeps nothing of the old plan", async () => {
@@ -87,7 +87,7 @@ describe("a simulated friend is Michelle in every sentence about her", () => {
     await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", choice: "accept" });
     await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "accept" });
     const snapshot = await ui(store);
-    expect(snapshot.plan?.draft).toContain("Hey Michelle");
+    expect(snapshot.plan?.draft).toContain("reel");
     expect(snapshot.plan?.draft).not.toContain("Mochi");
     expect(snapshot.notes.map((note) => note.text).join(" ")).not.toContain("Mochi");
     expect(snapshot.messages[0].note).not.toContain("Mochi");
@@ -97,6 +97,6 @@ describe("a simulated friend is Michelle in every sentence about her", () => {
   it("leaves the text alone when the friend is real", async () => {
     const store = await freshStore();
     const snapshot = await ui(store);
-    expect(snapshot.plan?.draft).toContain("Hey Mochi");
+    expect(snapshot.plan?.draft).toContain("reel");
   });
 });

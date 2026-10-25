@@ -99,6 +99,8 @@ export type UiNote = {
   kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source";
   at: string;
   text: string;
+  /** The raw technical text behind a reworded row, shown only on hover. */
+  detail?: string;
 };
 
 export type InFlight = {

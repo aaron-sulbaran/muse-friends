@@ -48,7 +48,7 @@ export const copy = {
   outcomeWentReply: "Love that. That's one plan that made it out of the chat. 🎉",
   outcomeDidntReply: (activity: string) => `No worries, plans slip. I'll keep ${activity} in mind for another time.`,
   closingLine: "✓ Done. It's in Goals.",
-  nudgeSent: (friend: string) => `Can you check with ${friend} about the shawarma reel? 🎞️`,
+  friendMuseAsking: (friend: string) => `${friend}'s Muse is asking about the shawarma reel you sent. I'm checking if you two can make it happen.`,
   reelLabel: "Sample reel",
   reelLiveLabel: "Lisa's own reel, live from Instagram",
   reelLivePlace: "Instagram reel",

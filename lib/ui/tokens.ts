@@ -1,4 +1,4 @@
-import type { Category, PlanState } from "./types";
+import type { AgentId, Category, PlanState } from "./types";
 
 /*
  * Names for the values defined in app/globals.css. Hex and font values live
@@ -39,6 +39,16 @@ export const phone = {
 
 /** The simulated friend who stands in for side b when one judge plays alone. */
 export const simulatedFriend = { human: "Michelle", muse: "Michelle's Muse" } as const;
+
+/**
+ * The people behind the two Muses, fictional. Sprout and Mochi are Muses, never people: copy names the other
+ * person, and a Muse only as "<person>'s Muse" or by its Muse name. Side b's person is Michelle when simulated.
+ */
+export const sidePeople: Record<AgentId, string> = { aaron: "Alex", lisa: "Jordan" };
+
+export function personName(agent: AgentId, simulated: boolean): string {
+  return agent === "lisa" && simulated ? simulatedFriend.human : sidePeople[agent];
+}
 
 export const categoryLabel: Record<Category, string> = {
   food: "food",

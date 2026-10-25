@@ -1,7 +1,7 @@
 import type { RunBudget } from "@/lib/agent/caps";
 import { AGENT_IDS, CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
-import { simulatedFriend } from "./tokens";
+import { personName, simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
 import type { UiReel, Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiSnapshot } from "./types";
 
@@ -181,10 +181,40 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
   }));
 }
 
-function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
+/** The sender's Muse, as people see it: Michelle's Muse when the simulated friend plays side b. */
+function museName(agent: AgentId, simulated: boolean): string {
+  return agent === "lisa" && simulated ? simulatedFriend.muse : displayName(agent);
+}
+
+/** A rejection as privacy proof: one plain sentence per reason. The raw text stays as the hover detail. */
+function privacySentence(event: StateSnapshot["events"][number], simulated: boolean): string {
+  const recipient = event.agent ?? "lisa";
+  const sender = otherSide(recipient);
+  const muse = museName(sender, simulated);
+  const senderPerson = personName(sender, simulated);
+  const recipientPerson = personName(recipient, simulated);
+  const reason = /\(\d{3}\):\s*(.*)$/.exec(event.text)?.[1] ?? "";
+  const status = /\((\d{3})\)/.exec(event.text)?.[1];
+  const categories = /sharing policy does not allow \(([^)]*)\)/.exec(reason)?.[1];
+  if (categories) return `Blocked: ${muse} tried to share ${categories}, which ${senderPerson} doesn't share with ${recipientPerson}`;
+  if (/outside the sender's free blocks/.test(reason)) return `Blocked: ${muse} offered a time ${senderPerson} isn't free; only real free times go out`;
+  if (/already passed over/.test(reason)) return `Blocked: ${muse} offered a time that was already turned down`;
+  if (status === "403") return `Blocked: a message that didn't come from ${muse} was refused`;
+  return `Held back: an out-of-turn message from ${muse} was stopped before it reached ${museName(recipient, simulated)}`;
+}
+
+function otherSide(agent: AgentId): AgentId {
+  return agent === "aaron" ? "lisa" : "aaron";
+}
+
+function toNotes(events: StateSnapshot["events"], rename: (text: string) => string, simulated: boolean): UiNote[] {
   return events
     .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]) && isWorthARow(event))
-    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(event.text) }));
+    .map((event) =>
+      event.kind === "message_rejected"
+        ? { id: event.id, kind: event.kind, at: event.at, text: privacySentence(event, simulated), detail: rename(event.text) }
+        : { id: event.id, kind: event.kind, at: event.at, text: rename(event.text) },
+    );
 }
 
 /** The message's proof, with its recorded tool calls tidied for display when there are any. */
@@ -272,7 +302,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state))].sort((first, second) => first.at.localeCompare(second.at)),
+    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state), Boolean(state.room.simulatedFriend))].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events, renameFor(state)),

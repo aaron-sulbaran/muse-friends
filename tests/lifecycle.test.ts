@@ -58,7 +58,7 @@ describe("decide", () => {
 describe("recordHandoff", () => {
   it("logs the human opening WhatsApp or copying the draft, and returns the draft", async () => {
     const result = ok(await recordHandoff(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", via: "whatsapp" }, options()));
-    expect(result.draft).toContain("Hey Mochi");
+    expect(result.draft).toContain("reel");
     await recordHandoff(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", via: "copy" }, options());
     const texts = (await store.listEvents()).filter((event) => event.kind === "handoff_opened").map((event) => event.text);
     expect(texts).toEqual(["Sprout opened WhatsApp with the drafted message", "Sprout copied the drafted message"]);

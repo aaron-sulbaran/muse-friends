@@ -1,4 +1,4 @@
-import { categoryLabel, simulatedFriend } from "./tokens";
+import { categoryLabel, personName, simulatedFriend } from "./tokens";
 import type { AgentId, Category, TimeWindow, UiMessage, UiSnapshot } from "./types";
 
 /** Every time the UI shows is Central, matching the event schedule. */
@@ -134,7 +134,7 @@ export function formatLatency(ms: number): string {
 export type Names = {
   /** The Muse's name as shown on a row or a pill: "Sprout", "Mochi", or "Michelle's Muse". */
   muse: Record<AgentId, string>;
-  /** What the other person calls that side in a sentence: "Mochi", or "Michelle". */
+  /** The person behind that side, never the Muse: "Alex", "Jordan", or "Michelle". */
   human: Record<AgentId, string>;
 };
 
@@ -143,7 +143,8 @@ export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "simulatedFriend">
   const simulated = snapshot.simulatedFriend;
   return {
     muse: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.muse : snapshot.sides.lisa },
-    human: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.human : snapshot.sides.lisa },
+    // The people are never their Muses: Alex for side a, Michelle (simulated) or Jordan for side b.
+    human: { aaron: personName("aaron", simulated), lisa: personName("lisa", simulated) },
   };
 }
 

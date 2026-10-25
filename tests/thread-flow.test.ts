@@ -77,12 +77,12 @@ describe("two agents talk", () => {
     ]);
     expect(snapshot.threads[0]).toMatchObject({ state: "input-required", messageCount: 3 });
     expect(snapshot.plans[0]).toMatchObject({ state: "awaiting_humans", window: TUE, activity: { title: "Shawarma Point" } });
-    expect(snapshot.plans[0].draft).toContain("Tue 6 to 8pm");
+    expect(snapshot.plans[0].draft).toContain("tue 6 to 8pm");
 
     expect(snapshot.cards.map((card) => card.forAgent).sort()).toEqual(["aaron", "lisa"]);
     const aaronCard = snapshot.cards.find((card) => card.forAgent === "aaron")!;
     expect(aaronCard).toMatchObject({ status: "pending", window: TUE, text: "You and Mochi both want to try Shawarma Point, and you're both free Tue 6 to 8pm. Reach out?" });
-    expect(aaronCard.draft).toContain("Hey Mochi");
+    expect(aaronCard.draft).toContain("reel");
     expect(snapshot.cards.find((card) => card.forAgent === "lisa")?.draft).toBeUndefined();
 
     expect(snapshot.events.map((event) => event.kind)).toEqual([

@@ -42,7 +42,7 @@ describe("try to leak", () => {
     expect(rejections).toHaveLength(1);
     expect(rejections[0].text).toMatch(/inbox rejected a message from .+ \(422\)/);
     const notes = toUiSnapshot(state, { mode: "live" }).notes;
-    expect(notes).toEqual([expect.objectContaining({ kind: "message_rejected", text: rejections[0].text })]);
+    expect(notes).toEqual([expect.objectContaining({ kind: "message_rejected", text: expect.stringMatching(/^Blocked: /), detail: rejections[0].text })]);
   });
 
   it("forges a message that is valid in every way but its note, so the policy is what refuses it", () => {

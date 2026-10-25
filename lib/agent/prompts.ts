@@ -30,11 +30,10 @@ export function signalTurnInput(agent: AgentId, signalId: string, nowMs: number)
   return [
     `It is ${describeInstant(nowMs)} Central. Your calendar tool covers now through Sat Oct 31.`,
     `${friend} just sent your person a reel (signal ${signalId}) with a message. Plans like this usually die in the chat.`,
-    "Do this:",
-    "1. Call read_signal to see the reel.",
-    "2. Call record_reel_details with the place, area, cuisine, and opening hours you read in the caption.",
-    "3. Call get_my_calendar for the coming week to find free blocks, and pick up to 3 windows of 1 to 3 hours that suit the place and its opening hours (a restaurant meal is an evening plan, between 5pm and 9pm).",
-    `4. Call send_to_friend_agent with type intent to open the conversation with ${friend}: name the place as the activity, offer those windows, and add a short note.`,
+    "Do this, in as few steps as possible (call independent tools together in one step):",
+    "Step 1: call read_signal to see the reel, and get_my_calendar for the coming week, together.",
+    "Step 2: pick up to 3 windows of 1 to 3 hours that suit the place and its opening hours (a restaurant meal is an evening plan, between 5pm and 9pm), then call record_reel_details (the place, area, cuisine, and opening hours you read in the caption) and send_to_friend_agent together.",
+    `The send_to_friend_agent call is type intent, opening the conversation with ${friend}: name the place as the activity, offer those windows, and add a short note.`,
   ].join("\n");
 }
 

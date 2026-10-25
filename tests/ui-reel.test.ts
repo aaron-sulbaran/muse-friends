@@ -5,7 +5,7 @@ import { viewForRole } from "@/lib/ui/chat";
 import { instagramEmbedUrl } from "@/lib/ui/reel";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 
-describe("which addresses become Instagram's embed", () => {
+describe("which addresses get the View on Instagram link", () => {
   it("takes an instagram.com reel or post and gives back the canonical address", () => {
     expect(instagramEmbedUrl("https://www.instagram.com/reel/Cabcde12345/")).toBe("https://www.instagram.com/reel/Cabcde12345/");
     expect(instagramEmbedUrl("https://instagram.com/reel/Cabcde12345")).toBe("https://www.instagram.com/reel/Cabcde12345/");
@@ -20,7 +20,7 @@ describe("which addresses become Instagram's embed", () => {
     expect(instagramEmbedUrl("https://www.instagram.com/someone.here/reel/Cabcde12345/")).toBe("https://www.instagram.com/reel/Cabcde12345/");
   });
 
-  it("keeps the plain card for anything else, including the seed's stand-in address", () => {
+  it("shows no link for anything else, including the seed's stand-in address", () => {
     expect(instagramEmbedUrl(undefined)).toBeNull();
     expect(instagramEmbedUrl("")).toBeNull();
     expect(instagramEmbedUrl("https://example.com/reel/seed-shawarma-001")).toBeNull();
