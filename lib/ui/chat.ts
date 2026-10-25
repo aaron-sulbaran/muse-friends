@@ -1,5 +1,5 @@
 import { copy } from "./copy";
-import { daySeparatorFor, formatWindowSpoken, humanName, museName } from "./format";
+import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, humanName, museName } from "./format";
 import type { AgentId, Role, UiPlan, UiSnapshot } from "./types";
 
 /*
@@ -30,6 +30,7 @@ export type PhoneView = {
 };
 
 const roleAgent: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
+const agentRole: Record<AgentId, Role> = { aaron: "a", lisa: "b" };
 
 export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   const simulated = snapshot.simulatedFriend;
@@ -67,6 +68,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     items.push({ kind: "bubble", id: "reel-sent-ack", from: "muse", text: `Sent it to ${theirs.human}.` });
   }
 
+  const initiatorRole = agentRole[plan.initiator];
   let status: string | null = null;
   const myDecision = plan.decisions[role];
   const theirDecision = plan.decisions[role === "a" ? "b" : "a"];
@@ -84,7 +86,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
           kind: "bubble",
           id: "proposal",
           from: "muse",
-          text: copy.proposalBubble(theirs.human, formatWindowSpoken(plan.window)),
+          text: copy.proposalBubble(theirs.human, plan.activityTitle, formatWindowSpoken(plan.window)),
         });
       }
       if (myDecision === "accepted") {
@@ -104,11 +106,11 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
           kind: "bubble",
           id: "proposal",
           from: "muse",
-          text: copy.proposalBubble(theirs.human, formatWindowSpoken(plan.window)),
+          text: copy.proposalBubble(theirs.human, plan.activityTitle, formatWindowSpoken(plan.window)),
         });
       }
       items.push({ kind: "collapsed", id: "decision-collapsed", text: copy.youSaidYes });
-      if (role === "a" && plan.draft) {
+      if (role === initiatorRole && plan.draft) {
         items.push({ kind: "bubble", id: "draft-intro", from: "muse", text: copy.draftIntroA(theirs.human) });
         items.push({ kind: "draft-card", id: "draft-card", plan, draft: plan.draft });
       } else {
@@ -119,7 +121,7 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
         items.push({
           kind: "hold-row",
           id: "hold-row",
-          title: copy.holdTitle(theirs.human),
+          title: copy.holdTitle(plan.activityTitle, theirs.human),
           detail: copy.holdAction,
           planId: plan.id,
         });
@@ -129,7 +131,8 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
         if (reminded) {
           const sep = daySeparatorFor(reminded.at, reminded.at);
           items.push({ kind: "separator", id: "sep-reminded", day: dayWordFor(reminded.at), time: sep.time });
-          items.push({ kind: "bubble", id: "reminder", from: "muse", text: copy.reminder(theirs.human) });
+          const startTime = plan.window ? formatSpokenHour(plan.window.start) : "the start";
+          items.push({ kind: "bubble", id: "reminder", from: "muse", text: copy.reminder(plan.activityTitle, theirs.human, startTime) });
         }
       }
       if (plan.state === "followed_up") {

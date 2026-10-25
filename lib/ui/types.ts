@@ -1,10 +1,12 @@
 /*
- * The shape the UI renders. It mirrors the AgentMessage and plan vocabulary in
- * docs/TECH_SPEC.md so the adapter from the Store (lib/ui/source.ts) stays a
- * thin mapping. Components import from here, never from the Store directly.
+ * The shape the UI renders. lib/ui/snapshot.ts maps the Store's StateSnapshot
+ * (lib/protocol.ts) onto it, so components never import the Store or the wire
+ * schemas directly and a contract change lands in one adapter.
  */
 
-export type AgentId = "aaron" | "lisa";
+import type { AgentId } from "@/lib/protocol";
+
+export type { AgentId };
 
 /** Phone roles: "a" is Aaron's Muse (Sprout), "b" is Lisa's Muse (Mochi) or the simulated friend. */
 export type Role = "a" | "b";
@@ -67,6 +69,8 @@ export type Decision = "pending" | "accepted" | "declined";
 export type UiPlan = {
   id: string;
   contextId: string;
+  /** The agent that opened the thread; only its human gets the WhatsApp draft. */
+  initiator: AgentId;
   state: PlanState;
   activityTitle: string;
   /** Null when the place was withheld by policy. */
@@ -88,7 +92,6 @@ export type FollowThroughEvent = {
 export type InFlight = {
   /** The agent whose model call is running. */
   agent: AgentId;
-  since: string;
 };
 
 export type SharingSettings = {

@@ -12,8 +12,8 @@ export const copy = {
   statusWaitingFriend: (friend: string) => `⏳ waiting for ${friend}`,
   statusTrouble: (muse: string) => `⚠️ having trouble reaching ${muse}`,
 
-  proposalBubble: (friend: string, when: string) =>
-    `You and ${friend} both want to try that shawarma place, and you're both free ${when}.`,
+  proposalBubble: (friend: string, place: string, when: string) =>
+    `You and ${friend} both want to try ${place}, and you're both free ${when}.`,
   cardTitle: (muse: string, friend: string) => `${muse} wants to make a plan with ${friend}`,
   /** `reelOwner` is already possessive: "Lisa's" or "your". */
   cardReason: (reelOwner: string) => `Based on ${reelOwner} reel and both calendars.`,
@@ -33,9 +33,9 @@ export const copy = {
   draftCopied: "Copied",
   draftOpenWhatsApp: "Open WhatsApp",
   holdBubble: (when: string) => `I added a hold for ${when}.`,
-  holdTitle: (friend: string) => `Shawarma with ${friend}`,
+  holdTitle: (activity: string, friend: string) => `${activity} with ${friend}`,
   holdAction: "Add to calendar",
-  reminder: (friend: string) => `Shawarma with ${friend} at 6. Leave by 5:40.`,
+  reminder: (activity: string, friend: string, time: string) => `${activity} with ${friend} at ${time}.`,
   followUp: (friend: string) => `How was it? Want me to find a time with ${friend} next month?`,
   dropped: (friend: string) => `${friend}'s Muse couldn't find a time that works this week. I'll keep an eye out.`,
 

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { humanName } from "@/lib/ui/format";
 import { buildHoldIcs } from "@/lib/ui/ics";
 import { readSnapshot } from "@/lib/ui/source";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, ctx: RouteContext<"/api/plans/[id]/hold.ics">) {
+export async function GET(request: Request, ctx: RouteContext<"/api/plans/[id]/hold.ics">) {
   const { id } = await ctx.params;
+  const role = new URL(request.url).searchParams.get("role") === "b" ? "b" : "a";
   const snapshot = readSnapshot();
   const plan = snapshot.plan;
   if (!plan || plan.id !== id) {
@@ -17,7 +19,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/plans/[id]/
   const stampedAt = plan.history.find((entry) => entry.state === "scheduled")?.at ?? snapshot.now;
   const body = buildHoldIcs({
     uid: `${plan.id}@muse-friends`,
-    summary: "Shawarma with Lisa",
+    summary: `${plan.activityTitle} with ${humanName(role === "a" ? "lisa" : "aaron", snapshot.simulatedFriend)}`,
     window: plan.window,
     stampedAt,
   });

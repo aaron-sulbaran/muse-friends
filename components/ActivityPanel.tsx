@@ -15,16 +15,15 @@ type Props = {
   onOpenMessage: (message: UiMessage) => void;
 };
 
+/** Counts seconds from when this row first appeared; the parent re-keys it per turn so each model call starts at 0. */
 function ThinkingRow({ snapshot }: { snapshot: UiSnapshot }) {
-  const since = snapshot.inFlight?.since;
+  const [startedAt] = useState(() => Date.now());
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    if (!since) return;
-    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 1000)));
-    const timer = setInterval(tick, 500);
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 500);
     return () => clearInterval(timer);
-  }, [since]);
+  }, [startedAt]);
 
   if (!snapshot.inFlight) return null;
   const agent = snapshot.inFlight.agent;
@@ -83,7 +82,7 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage }: Props) {
           {snapshot?.messages.map((message) => (
             <ActivityRow key={message.id} message={message} simulatedFriend={snapshot.simulatedFriend} onOpen={onOpenMessage} />
           ))}
-          {snapshot ? <ThinkingRow snapshot={snapshot} /> : null}
+          {snapshot?.inFlight ? <ThinkingRow key={`${snapshot.inFlight.agent}-${snapshot.messages.length}`} snapshot={snapshot} /> : null}
         </ul>
       </div>
     </section>

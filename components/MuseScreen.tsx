@@ -93,7 +93,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged }: Props) {
       case "draft-card":
         return <DraftCard draft={item.draft} onHandoff={(via) => handoff(item.plan.id, via)} />;
       case "hold-row":
-        return <HoldRow planId={item.planId} title={item.title} action={item.detail} />;
+        return <HoldRow planId={item.planId} role={role} title={item.title} action={item.detail} />;
     }
   }
 

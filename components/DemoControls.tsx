@@ -14,8 +14,8 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /** Bumped by every load and reset so an older playback stops itself. One controls panel exists at a time. */
 let activeRun = 0;
 
-/** Gaps between the four recorded messages when the reel is loaded; roughly what live model calls take. */
-const messageGapsMs = [2200, 2600, 2400, 2200];
+/** Gaps between the six recorded messages when the reel is loaded; roughly what live model calls take. */
+const messageGapsMs = [2200, 2600, 2400, 2200, 2000, 2000];
 
 /**
  * Presenter-only controls. While the recorded run stands in for the live

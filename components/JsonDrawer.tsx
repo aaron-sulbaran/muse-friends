@@ -2,13 +2,13 @@
 
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { THREAD_CAP } from "@/lib/protocol";
 import { copy } from "@/lib/ui/copy";
 import { formatLatency, formatTimeWithSeconds, museName } from "@/lib/ui/format";
 import type { UiMessage } from "@/lib/ui/types";
 
 type Props = {
   message: UiMessage | null;
-  total: number;
   simulatedFriend: boolean;
   onClose: () => void;
 };
@@ -23,7 +23,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** Raw protocol JSON for Q&A. Collapsed by default; the consumer view never shows it. */
-export function JsonDrawer({ message, total, simulatedFriend, onClose }: Props) {
+export function JsonDrawer({ message, simulatedFriend, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -60,7 +60,7 @@ export function JsonDrawer({ message, total, simulatedFriend, onClose }: Props) 
           <header className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-[17px] font-semibold leading-[22px]">
-                Message {message.seq} of {Math.max(total, 6)}
+                Message {message.seq} of {THREAD_CAP}
               </h2>
               <p className="text-[13px] leading-[18px] text-muted">
                 {museName(message.from, simulatedFriend)} to {museName(message.to, simulatedFriend)}, {formatTimeWithSeconds(message.at)}

@@ -42,6 +42,12 @@ export function formatStatusBarTime(iso: string): string {
   return `${p.hour}:${String(p.minute).padStart(2, "0")}`;
 }
 
+/** "6" or "6:30": the hour without a meridiem, the way a reminder says it. */
+export function formatSpokenHour(iso: string): string {
+  const p = partsOf(iso);
+  return hourText(p.hour, p.minute);
+}
+
 /** "8:42 PM". */
 export function formatTime(iso: string): string {
   const p = partsOf(iso);

@@ -2,15 +2,17 @@ import { CalendarPlus } from "lucide-react";
 
 type Props = {
   planId: string;
+  /** The phone's role, so the calendar entry names the other person. */
+  role: "a" | "b";
   title: string;
   action: string;
 };
 
 /** The calendar hold as a Muse list row; the action downloads hold.ics. */
-export function HoldRow({ planId, title, action }: Props) {
+export function HoldRow({ planId, role, title, action }: Props) {
   return (
     <a
-      href={`/api/plans/${planId}/hold.ics`}
+      href={`/api/plans/${planId}/hold.ics?role=${role}`}
       download="hold.ics"
       className="flex max-w-[92%] animate-card-in items-center gap-3 rounded-card bg-surface p-3.5 shadow-float transition-colors hover:bg-group"
     >

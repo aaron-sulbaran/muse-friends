@@ -49,7 +49,6 @@ export function Stage() {
       </footer>
       <JsonDrawer
         message={openMessage}
-        total={snapshot?.messages.length ?? 0}
         simulatedFriend={snapshot?.simulatedFriend ?? false}
         onClose={() => setOpenMessage(null)}
       />
