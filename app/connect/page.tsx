@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { productionDeps } from "@/app/api/connector/_lib/byom";
+import { judgeKeyConfigured, linkSentence, normalizeCode, roomKeyOfCode } from "@/app/api/connector/_lib/keyless";
 import { describePresets } from "@/app/api/connector/_lib/presets";
 import { CopyButton } from "./CopyButton";
 
@@ -12,8 +14,6 @@ export const metadata: Metadata = {
   description: "Optional and unofficial: connect your own Muse to a student prototype that uses fixed, fictional time slots.",
   robots: { index: false, follow: false },
 };
-
-const MIN_KEY_LENGTH = 24;
 
 async function originOf(): Promise<string> {
   const requestHeaders = await headers();
@@ -99,10 +99,35 @@ const tools: ToolDoc[] = [
   },
 ];
 
-export default async function ConnectPage() {
+const NOTICES: Record<string, string> = {
+  room_cap: "That is all the links this station gives out for this hour. Try again in a few minutes.",
+  unavailable: "The link station is not set up yet. Ask someone from the team.",
+  expired: "That link has expired or is not valid. Get a new one.",
+};
+
+// The code in the address, if it names a live room: its minutes left. Anything else shows as an expired link.
+async function liveCode(raw: string | undefined): Promise<{ code: string; minutesLeft: number } | { notice: string } | null> {
+  if (raw === undefined) return null;
+  const code = normalizeCode(raw);
+  if (!code) return { notice: NOTICES.expired };
+  try {
+    const now = Date.now();
+    const found = await productionDeps().repo.lookup(roomKeyOfCode(code), now);
+    if (found.status !== "live") return { notice: NOTICES.expired };
+    return { code, minutesLeft: Math.max(1, Math.ceil((found.expiresAt - now) / 60_000)) };
+  } catch {
+    return { notice: NOTICES.unavailable };
+  }
+}
+
+export default async function ConnectPage({ searchParams }: { searchParams: Promise<{ code?: string; notice?: string }> }) {
   const key = process.env.MCP_TOKEN_JUDGE;
-  const open = Boolean(key) && (key as string).length >= MIN_KEY_LENGTH;
+  const open = judgeKeyConfigured();
   const origin = await originOf();
+  const query = await searchParams;
+  const minted = open ? await liveCode(query.code) : null;
+  const notice = minted && "notice" in minted ? minted.notice : query.notice ? NOTICES[query.notice] : undefined;
+  const liveLink = minted && "code" in minted ? minted : null;
   const presets = describePresets();
 
   const mcpMessage = `Connect my Muse Friends tool: remote MCP server, streamable HTTP, ${origin}/api/mcp . Auth is an Authorization: Bearer header; ask for the token in your secure credential prompt. Test get_status, then save it as a skill.`;
@@ -119,7 +144,7 @@ export default async function ConnectPage() {
 
       <Card title="Before you connect">
         <p>
-          <strong>What we receive:</strong> the label of the key you connect with (it says &ldquo;judge&rdquo; and nothing about you), the name of one preset (evenings, lunches or weekend), a plan id, and your yes or no. No calendar, contacts, messages or location are read, and nothing you type is accepted: the only inputs are those listed below.
+          <strong>What we receive:</strong> on the link path, only which of six fictional times were ticked, a link code and your yes or no. On the tool path, the label of the key you connect with (it says &ldquo;judge&rdquo; and nothing about you), the name of one preset (evenings, lunches or weekend), a plan id, and your yes or no. No calendar, contacts, messages or location are read, and nothing you type is accepted: the only inputs are those listed on this page.
         </p>
         <p>
           <strong>What we keep:</strong> each plan is a room of its own, made of fictional times, a fictional friend (Mochi, played by a model) and a made-up reel. A room is no longer served after 2 hours, and we delete all of them when the expo ends. Everything in it is fictional.
@@ -134,7 +159,36 @@ export default async function ConnectPage() {
 
       {open ? (
         <>
-          <Card title="Connect">
+          <Card title="Try it with your own Muse, no key">
+            {liveLink ? (
+              <>
+                <p>
+                  Paste this into your Muse. The link is yours for about {liveLink.minutesLeft} minutes and starts one plan. Your Muse opens the page, ticks the fictional times that suit you, and later shows you the plan so you can approve it.
+                </p>
+                <Message label="Paste into Muse" text={linkSentence(origin, liveLink.code)} />
+                <div className="rounded-group bg-group p-4 text-sm">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Table screen</div>
+                  <p className="break-words font-mono text-[13px]">{`${origin}/?room=${liveLink.code}`}</p>
+                  <p className="mt-1 text-muted">Open this on the laptop to watch the plan unfold, read only.</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p>
+                  This path needs no key and no setup in Muse beyond one pasted sentence. Press the button to get a link that lasts 2 hours and starts one plan. Muse opens a plain page, ticks the proposed times that suit you (we only receive the boxes it ticks), and you approve or decline at the end.
+                </p>
+                {notice ? <p className="rounded-group bg-group p-3 text-sm" role="alert">{notice}</p> : null}
+                <form method="post" action="/connect/code">
+                  <button type="submit" className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white active:opacity-80">
+                    Get a link for my Muse
+                  </button>
+                </form>
+              </>
+            )}
+            <p className="text-sm text-muted">Nothing here relies on your Muse acting on its own: each step happens when you ask for it in the chat.</p>
+          </Card>
+
+          <Card title="Or connect a tool (MCP or web API)">
             <ol className="list-decimal space-y-3 pl-5">
               <li>Open Muse (the app or muse.ai) and start a new chat.</li>
               <li>

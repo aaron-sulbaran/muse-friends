@@ -52,3 +52,35 @@ export function describePresets(): Array<{ name: SlotPreset; description: string
     mochi: SLOT_PRESETS[name].mochi.map(describeWindow),
   }));
 }
+
+// The link path (/j/<code>): six fixed, fictional proposed times a judge's Muse ticks the ones that suit its
+// person. The ticks become Sprout's free time; the server accepts only these ids, so nothing else can get in,
+// and a real calendar never reaches us, only which of these boxes were ticked. Mochi's free time is fixed too.
+// Wednesday is the decoy: Mochi is busy, so ticking only that one cannot make a plan.
+export const CANDIDATE_SLOTS: ReadonlyArray<{ id: string; window: Window }> = [
+  { id: "tue-18", window: central("2026-10-27", 18, 20) },
+  { id: "wed-18", window: central("2026-10-28", 18, 20) },
+  { id: "thu-19", window: central("2026-10-29", 19, 21) },
+  { id: "fri-12", window: central("2026-10-30", 12, 15) },
+  { id: "sat-11", window: central("2026-10-31", 11, 13) },
+  { id: "sat-19", window: central("2026-10-31", 19, 22) },
+];
+
+export const CANDIDATE_MOCHI_FREE: ReadonlyArray<Window> = [
+  central("2026-10-27", 17, 20),
+  central("2026-10-29", 19, 22),
+  central("2026-10-30", 13, 15),
+  central("2026-10-31", 11, 13),
+  central("2026-10-31", 19, 22),
+];
+
+/** "Tue Oct 27, 6 to 8pm": the day, the date and the hours, as a checkbox label. */
+export function candidateLabel(window: Window): string {
+  const date = `Oct ${Number(window.start.slice(8, 10))}`;
+  const [day, ...hours] = describeWindow(window).split(" ");
+  return `${day} ${date}, ${hours.join(" ")}`;
+}
+
+export function candidateById(id: string): { id: string; window: Window } | undefined {
+  return CANDIDATE_SLOTS.find((candidate) => candidate.id === id);
+}
