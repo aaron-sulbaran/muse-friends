@@ -1,13 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-190 2 449 108" role="img" aria-label="Muse Friends">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-240 4 515 104" role="img" aria-label="Muse Friends">
   <defs>
-    <linearGradient id="mf-friends" gradientUnits="userSpaceOnUse" x1="3" y1="0" x2="255" y2="0">
-      <stop offset="0" stop-color="#2FB36B"/>
-      <stop offset="0.38" stop-color="#1F7BF2"/>
-      <stop offset="0.7" stop-color="#8E6CF0"/>
-      <stop offset="1" stop-color="#F0609A"/>
+    <linearGradient id="mf-blue" gradientUnits="userSpaceOnUse" x1="262" y1="104" x2="0" y2="6">
+      <stop offset="0.25" stop-color="#0082FB"/>
+      <stop offset="0.7" stop-color="#0064E0"/>
+      <stop offset="1" stop-color="#0040DC"/>
     </linearGradient>
   </defs>
-  <text x="-11" y="90" text-anchor="end" fill="#000000" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif" font-size="69.5" font-weight="700" letter-spacing="-0.7">Muse</text>
-  <path id="mf-friends-stroke" d="M4 66 C14 48 30 12 42 8 C50 6 48 16 40 30 L26 100 C24 108 16 106 18 96 C20 86 28 66 34 58 C38 52 46 50 58 50 C64 50 62 60 60 70 L56 90 C58 72 64 56 74 52 C78 50 82 52 84 54 C86 66 84 80 84 88 C86 94 94 90 98 82 C101 76 104 70 106 68 C114 62 118 52 110 50 C100 48 96 70 98 82 C100 92 112 92 120 84 C124 80 126 74 128 66 C130 58 132 52 134 52 C136 56 134 74 132 90 C134 72 144 52 154 52 C162 52 160 70 158 86 C160 92 170 90 180 84 C186 76 194 66 200 58 C192 48 178 56 178 72 C178 88 192 94 200 82 C206 66 212 36 218 8 C214 40 208 70 206 88 C208 92 214 90 220 84 C226 76 230 66 238 56 C242 52 250 52 252 56 C248 52 238 54 238 62 C238 70 254 72 254 82 C254 92 240 96 228 88" pathLength="1" fill="none" stroke="url(#mf-friends)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle id="mf-friends-dot" cx="88" cy="30" r="5.4" fill="#1F7BF2"/>
+  <text x="-14" y="100" text-anchor="end" fill="#000000" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, sans-serif" font-size="86" font-weight="700" letter-spacing="-1">Muse</text>
+  <g transform="translate(9 0) skewX(-9)" fill="none" stroke="url(#mf-blue)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <path class="mf-stroke" data-order="1" id="mf-f-stem" d="M16 100 L24 26 C26 10 42 6 50 18" pathLength="1"/>
+    <path class="mf-stroke" data-order="2" id="mf-r" d="M54 100 L56 58 M55.5 74 C58 62 66 54 78 58" pathLength="1"/>
+    <path class="mf-stroke" data-order="3" id="mf-i" d="M89 58 L86.5 96 C86.5 101 90.5 101 93.5 97.5" pathLength="1"/>
+    <path class="mf-stroke" data-order="4" id="mf-e" d="M110 80 L130 76 C132 64 122 54 114 58 C104 64 104 94 116 100 C124 103 130 99 134 94" pathLength="1"/>
+    <path class="mf-stroke" data-order="5" id="mf-n" d="M138 94 L145 58 C146 54 149 55 148 61 L144 100 C148 76 156 57 167 56 C175 56 175 67 173 79 L170 100" pathLength="1"/>
+    <path class="mf-stroke" data-order="6" id="mf-d-bowl" d="M216 64 C208 54 192 56 190 76 C188 94 202 104 212 92" pathLength="1"/>
+    <path class="mf-stroke" data-order="7" id="mf-d-stem" d="M218 12 L208 100" pathLength="1"/>
+    <path class="mf-stroke" data-order="8" id="mf-s" d="M227 94 C235 102 255 101 255 88 C255 76 231 75 233 64 C235 54 251 53 261 60" pathLength="1"/>
+    <path class="mf-stroke" data-order="9" id="mf-f-bar" d="M4 58 L40 56" pathLength="1"/>
+    <circle id="mf-i-dot" data-order="10" cx="93" cy="33" r="6.6" fill="#0064E0" stroke="none"/>
+  </g>
 </svg>
