@@ -19,6 +19,8 @@ type Props = {
   disabled?: boolean;
   /** Which way the hold was already taken, for a row drawn after the fact. */
   initiallyAdded?: CalendarRoute;
+  /** Either button was tapped: the phone skips ahead to the reminder. */
+  onAdded?: () => void;
 };
 
 const pill = "rounded-full bg-group px-3.5 py-2 text-[13px] font-semibold leading-[18px] transition-colors";
@@ -30,13 +32,17 @@ const pill = "rounded-full bg-group px-3.5 py-2 text-[13px] font-semibold leadin
  * on the line under it, and Change plans at the right. The check and the title are the same link, so a second tap
  * opens the event again.
  */
-export function HoldRow({ planId, role, title, googleUrl, when, disabled = false, initiallyAdded }: Props) {
+export function HoldRow({ planId, role, title, googleUrl, when, disabled = false, initiallyAdded, onAdded }: Props) {
   const [added, setAdded] = useState<CalendarRoute | null>(initiallyAdded ?? null);
   const icsHref = `/api/plans/${planId}/hold.ics?role=${role}`;
   const taken = added === "google" && googleUrl ? "google" : added === "ics" ? "ics" : null;
   // The row swaps its buttons once one is tapped. Swapping inside the click detaches the tapped link before the
   // browser follows it (and "Change plans", the WhatsApp link, can land under the pointer), so wait a tick.
-  const markAdded = (route: CalendarRoute) => setTimeout(() => setAdded(route), 0);
+  const markAdded = (route: CalendarRoute) =>
+    setTimeout(() => {
+      setAdded(route);
+      onAdded?.();
+    }, 0);
 
   if (taken && !disabled) {
     const detail = when ? `${title}, ${when}` : title;
