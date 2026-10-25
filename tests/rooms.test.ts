@@ -12,6 +12,7 @@ vi.mock("next/server", async (importOriginal) => ({
 }));
 
 import { converse, chooseRoom, freshRoomSnapshot, maxPhoneRooms, phoneRoomKey, withRoom, withoutRoom, type RoomDeps } from "@/app/api/_lib/room";
+import { GET as stateGet } from "@/app/api/state/route";
 import { POST as clockPost } from "@/app/api/clock/route";
 import { clearMemoryRooms, memoryRoomRepo } from "@/app/api/connector/_lib/rooms";
 import { POST as controlsPost } from "@/app/api/controls/route";
@@ -357,5 +358,40 @@ describe("the repository count by prefix", () => {
     expect(await repo.countCreatedSince(0, "p_")).toBe(2);
     expect(await repo.countCreatedSince(0, "j_")).toBe(1);
     expect(await repo.countCreatedSince(0)).toBe(4);
+  });
+});
+
+describe("/api/state for a phone room", () => {
+  const read = (query: string, headers: Record<string, string> = {}) => stateGet(new Request(`https://muse-friends.test/api/state${query}`, { headers }));
+
+  it("shows the empty stage for a room nobody has written to yet, without making it", async () => {
+    const response = await read(`?room=${A}`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ mode: "live", plan: null, messages: [], simulatedFriend: false });
+    expect(await stateOf(A)).toBeNull();
+  });
+
+  it("shows each room its own plan and the demo room its own, and answers 304 until the room changes", async () => {
+    await post(signalsPost, `/api/signals?room=${A}`);
+    const inA = await read(`?room=${A}`);
+    const inB = await read(`?room=${B}`);
+    const inDemo = await read("");
+    expect((await inA.clone().json()).plan?.state).toBe("detected");
+    expect((await inB.json()).plan).toBeNull();
+    expect((await inDemo.json()).plan).toBeNull();
+    const etag = inA.headers.get("etag")!;
+    expect(etag).toMatch(/^"room-/);
+    expect((await read(`?room=${A}`, { "if-none-match": etag })).status).toBe(304);
+    await post(controlsPost, `/api/controls?room=${A}`, { type: "simulated_friend", on: true });
+    expect((await read(`?room=${A}`, { "if-none-match": etag })).status).toBe(200);
+  });
+
+  it("leaves a judge's code and the demo room to their own readers", async () => {
+    vi.stubEnv("MCP_TOKEN_JUDGE", "j".repeat(48));
+    const judge = await read("?room=k7m2xq9");
+    // No such judge room: the demo room answers, as it did before phone rooms existed.
+    expect(judge.status).toBe(200);
+    expect((await judge.json()).plan).toBeNull();
   });
 });

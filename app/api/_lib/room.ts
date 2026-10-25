@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { judgeKeyConfigured, normalizeCode } from "@/app/api/connector/_lib/keyless";
 import { persistingStore } from "@/app/api/connector/_lib/room-store";
@@ -11,6 +12,10 @@ import type { AgentId, StateSnapshot, Wallet } from "@/lib/protocol";
 import { DEFAULT_ROOM, seedSnapshot } from "@/lib/seed/fixtures";
 import { getStore, type Store } from "@/lib/store";
 import { JsonStore } from "@/lib/store/json";
+import { runBudget } from "@/lib/agent/caps";
+import { getLiveReel } from "@/lib/instagram";
+import { toUiSnapshot } from "@/lib/ui/snapshot";
+import type { UiSnapshot } from "@/lib/ui/types";
 import { DEMO_ROOM, ROOM_PATTERN } from "@/lib/ui/room";
 
 // Which room a phone call is for. The phones send `?room=<id>` on every call (lib/ui/room.ts); a body may carry
@@ -209,4 +214,19 @@ export async function converse(scope: RoomScope, contextId: string, first: () =>
     const agent = scope.pending.shift()!;
     await runInboxTurn({ store: scope.store, agent, contextId, wallNow: Date.now, deliver: scope.deliver("", agent) });
   }
+}
+
+// What /api/state shows for a phone room: that room's own state, as the UI draws the demo room's. A room that has not
+// been made yet (a phone that just scanned the QR has made nothing) shows the empty stage, built here and not saved,
+// so the page can draw its start card; the first reel or control makes the room. Null for the demo room, a judge's
+// link code and an id that is not a room id, which /api/state answers as before. The ETag is a hash of the document,
+// because a room read from storage has no running counter.
+export async function readPhoneRoom(request: Request, deps: RoomDeps = roomDeps()): Promise<{ etag: string; ui: UiSnapshot } | null> {
+  const choice = chooseRoom(request);
+  if (choice.kind !== "phone") return null;
+  const now = deps.now();
+  const found = await deps.repo.lookup(phoneRoomKey(choice.id), now);
+  const snapshot = found.status === "live" ? found.snapshot : await freshRoomSnapshot(now);
+  const etag = `room-${createHash("sha1").update(JSON.stringify(snapshot)).digest("hex").slice(0, 16)}`;
+  return { etag, ui: toUiSnapshot(snapshot, { mode: "live", budget: runBudget(choice.id), liveReel: await getLiveReel() }) };
 }
