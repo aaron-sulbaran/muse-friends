@@ -287,9 +287,8 @@ describe("the person declines", () => {
     // Told, not asked: the friend's Muse has nothing to do about it.
     expect(received.map((delivered) => (delivered.ok ? delivered.runTurn : null))).toEqual([false]);
     const rows = (await store.listEvents()).filter((event) => event.kind.startsWith("payment_"));
-    expect(rows.map((row) => row.kind)).toEqual(["payment_proposed", "payment_cancelled", "payment_cancelled"]);
-    expect(rows[1].text).toBe("Sprout declined the $16 for Mochi. Nothing moved.");
-    expect(rows[2].text).toMatch(/Sprout's person declined the \$16 prepared for Mochi: nothing moved/);
+    expect(rows.map((row) => row.kind)).toEqual(["payment_proposed", "payment_cancelled"]);
+    expect(rows[1].text).toMatch(/Sprout's person declined the \$16 prepared for Mochi: nothing moved/);
     expect(toUiSnapshot(await store.snapshot(), { mode: "live" }).payments).toMatchObject([{ id, status: "declined" }]);
     expect(toUiSnapshot(await store.snapshot(), { mode: "live" }).payments[0].confirmUrl).toBeUndefined();
   });
@@ -324,6 +323,9 @@ describe("the person declines", () => {
     const result = await declineProposal({ store, wallNow, deliver: async () => ({ ok: false, status: 503, error: "inbox down" }) }, id, "aaron");
     expect(result).toMatchObject({ ok: true, proposal: { status: "declined" } });
     expect(await balances()).toEqual({ aaron: 120, lisa: 80 });
+    const rows = (await store.listEvents()).filter((event) => event.kind === "payment_cancelled");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text).toMatch(/Sprout declined the \$16 for Mochi\. Nothing moved\..*could not be told/);
   });
 });
 

@@ -607,10 +607,11 @@ describe("NessieWithLedger", () => {
 
   it("reads the transaction records back by id", async () => {
     const http = new NessieHttp({ key: "abc123" });
-    stub((url) => (url.includes("/withdrawals/") ? json({ _id: "w1", amount: 7, status: "completed", description: "x" }, 200) : json({ _id: "d1", amount: 7 }, 200)));
-    expect(await http.getWithdrawal("w1")).toEqual({ data: { id: "w1", amount: 7, status: "completed", description: "x" }, error: null });
+    stub((url) => (url.includes("/withdrawals") ? json([{ _id: "w0", amount: 1 }, { _id: "w1", amount: 7, status: "completed", description: "x" }], 200) : json({ _id: "d1", amount: 7 }, 200)));
+    expect(await http.getWithdrawal("acct", "w1")).toEqual({ data: { id: "w1", amount: 7, status: "completed", description: "x" }, error: null });
+    expect(await http.getWithdrawal("acct", "missing")).toEqual({ data: null, error: "no such withdrawal on that account" });
     expect(await http.getDeposit("d1")).toEqual({ data: { id: "d1", amount: 7, status: "", description: "" }, error: null });
-    expect(calls.map((call) => new URL(call.url).pathname)).toEqual(["/withdrawals/w1", "/deposits/d1"]);
+    expect(calls.map((call) => new URL(call.url).pathname)).toEqual(["/accounts/acct/withdrawals", "/accounts/acct/withdrawals", "/deposits/d1"]);
   });
 
   it("moves the wallet chip's balance through a whole payment on the real sandbox, on our ledger, with one record each side", async () => {
