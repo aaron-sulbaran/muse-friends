@@ -1,20 +1,26 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { postSimulatedFriend } from "@/lib/ui/actions";
+import { copy } from "@/lib/ui/copy";
+import { runInProgress, wantsSimulatedFriend } from "@/lib/ui/entry";
 import { namesFor } from "@/lib/ui/format";
 import { useMediaQuery } from "@/lib/ui/use-media-query";
 import { useReplay } from "@/lib/ui/use-replay";
 import { useSimulatedFriend } from "@/lib/ui/use-simulated-friend";
 import { useSnapshot } from "@/lib/ui/use-snapshot";
-import type { Role } from "@/lib/ui/types";
+import type { Role, UiMessage } from "@/lib/ui/types";
+import { ActivityPanel } from "./ActivityPanel";
+import { JsonDrawer } from "./JsonDrawer";
 import { MuseScreen } from "./MuseScreen";
 import { PausedNotice } from "./PausedNotice";
 import { FitPhone } from "./PhoneFrame";
-import { ReplayBadge } from "./ReplayBadge";
 
 /**
  * One phone alone, for a judge's own device. Under 600px the screen is the
- * whole page; wider, it sits in the bezel on the stage gradient.
+ * whole page; wider, it sits in the bezel on the stage gradient. With no Activity
+ * panel beside it, Activity opens as a sheet from the phone, and a pill switches sides.
+ * Arriving at /a with the simulated-friend flag (the chooser's third option) starts that game once.
  */
 export function PhoneRoute({ role }: { role: Role }) {
   const live = useSnapshot();
@@ -34,22 +40,80 @@ export function PhoneRoute({ role }: { role: Role }) {
     [startReplay],
   );
   useSimulatedFriend(live.snapshot, refresh, !replay.active, pause);
+  const stopReplay = replay.stop;
+  const backToLive = useCallback(() => {
+    stopReplay();
+    setPausedText(null);
+  }, [stopReplay]);
+  const [openMessage, setOpenMessage] = useState<UiMessage | null>(null);
+
+  const arrivedForFriend = useRef(false);
+  const startedFriend = useRef(false);
+  useEffect(() => {
+    if (role !== "a" || !wantsSimulatedFriend(window.location.search)) return;
+    arrivedForFriend.current = true;
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [role]);
+  const liveSnapshot = live.snapshot;
+  useEffect(() => {
+    if (!arrivedForFriend.current || startedFriend.current || !liveSnapshot) return;
+    startedFriend.current = true;
+    // A run still going in the room is shown as it is, not wiped; the start card stays available if this fails.
+    if (runInProgress(liveSnapshot.plan)) return;
+    void postSimulatedFriend().then((result) => {
+      if (!result.ok && result.paused) pause(result.message);
+      refresh();
+    });
+  }, [liveSnapshot, pause, refresh]);
 
   if (!snapshot) return <div className="h-dvh bg-screen" />;
 
-  const screen = <MuseScreen snapshot={snapshot} role={role} framed={framed} onChanged={refresh} readOnly={replay.active} onPaused={pause} />;
+  const names = namesFor(snapshot);
+  const screen = (
+    <MuseScreen
+      snapshot={snapshot}
+      role={role}
+      framed={framed}
+      onChanged={refresh}
+      readOnly={replay.active}
+      onPaused={pause}
+      standalone={{
+        activity: (close) => (
+          <ActivityPanel
+            snapshot={snapshot}
+            connected={connected}
+            onOpenMessage={setOpenMessage}
+            onClose={close}
+            footer={
+              <>
+                <button
+                  type="button"
+                  onClick={replay.active ? backToLive : () => void replay.start()}
+                  className="w-full rounded-full bg-group px-4 py-2.5 text-[15px] font-semibold transition-colors hover:bg-bubble-muse"
+                >
+                  {replay.active ? copy.pausedBack : copy.replayStart}
+                </button>
+                {replay.error ? (
+                  <p role="alert" className="mt-2 text-center text-[13px] leading-[18px] text-withheld">
+                    {replay.error}
+                  </p>
+                ) : null}
+              </>
+            }
+          />
+        ),
+      }}
+    />
+  );
+  const drawer = <JsonDrawer message={openMessage} budget={liveSnapshot?.budget ?? null} names={names} onClose={() => setOpenMessage(null)} />;
   const notice =
     pausedText !== null && replay.active ? (
       <PausedNotice
         text={pausedText}
-        onBack={() => {
-          replay.stop();
-          setPausedText(null);
-        }}
+        onBack={backToLive}
         className="absolute inset-x-3 bottom-[84px] z-40"
       />
     ) : null;
-  const names = namesFor(snapshot);
   const label = role === "a" ? `${names.muse.aaron}'s side` : snapshot.simulatedFriend ? `${names.muse.lisa}, a simulated friend` : `${names.muse.lisa}'s side`;
 
   if (!framed) {
@@ -57,27 +121,19 @@ export function PhoneRoute({ role }: { role: Role }) {
       <div className="relative h-dvh">
         {screen}
         {notice}
-        {snapshot.mode === "replay" ? (
-          <div className="pointer-events-none absolute left-3 top-[max(env(safe-area-inset-top),8px)]">
-            <ReplayBadge mode="replay" compact />
-          </div>
-        ) : null}
         {!connected ? <p className="absolute inset-x-0 top-1 text-center text-[12px] text-muted">Reconnecting...</p> : null}
+        {drawer}
       </div>
     );
   }
 
   return (
     <div className="relative grid min-h-dvh place-items-center bg-linear-to-b from-surface to-stage-end p-6">
-      {snapshot.mode === "replay" ? (
-        <div className="absolute left-6 top-4">
-          <ReplayBadge mode="replay" compact />
-        </div>
-      ) : null}
       <div className="h-[min(864px,calc(100dvh-48px))] w-full">
         <FitPhone label={label}>{screen}</FitPhone>
       </div>
       {notice ? <div className="absolute left-1/2 top-4 -translate-x-1/2">{notice}</div> : null}
+      {drawer}
     </div>
   );
 }
