@@ -1,8 +1,8 @@
 import type { Category, Role, ShareTier } from "./types";
 
-export type Result = { ok: true } | { ok: false; message: string };
+export type Result = { ok: true } | { ok: false; message: string; paused?: boolean };
 
-type ErrorBody = { error?: string | { message?: string } | null };
+type ErrorBody = { error?: string | { message?: string } | null; paused?: boolean; text?: string };
 
 async function post(url: string, body: unknown): Promise<Result> {
   try {
@@ -15,6 +15,8 @@ async function post(url: string, body: unknown): Promise<Result> {
     const payload = (await response.json().catch(() => null)) as ErrorBody | null;
     const error = payload?.error;
     const message = typeof error === "string" ? error : error?.message;
+    // A paused budget (429) is not a failure: the page falls back to a recording and says why.
+    if (response.status === 429 && payload?.paused === true) return { ok: false, message: payload.text ?? "Live runs paused, playing a recording", paused: true };
     return { ok: false, message: message ?? `Request failed with ${response.status}` };
   } catch {
     return { ok: false, message: "Could not reach the server" };
@@ -23,6 +25,10 @@ async function post(url: string, body: unknown): Promise<Result> {
 
 export function postDecision(planId: string, role: Role, choice: "accept" | "decline") {
   return post(`/api/plans/${planId}/decision`, { role, choice });
+}
+
+export function postOutcome(planId: string, role: Role, result: "went" | "didnt"): Promise<Result> {
+  return post(`/api/plans/${planId}/outcome`, { role, result });
 }
 
 export function postHandoff(planId: string, role: Role, via: "whatsapp" | "copy") {
@@ -47,6 +53,16 @@ export async function postSimulatedFriend(): Promise<Result> {
 /** Asks the simulated friend to answer her card. Safe to repeat: the server answers once. */
 export function postSimulatedAnswer(planId: string) {
   return post("/api/simulated-friend", { planId });
+}
+
+/**
+ * "That time doesn't work for me": mark the plan's window busy for this person, then start a new run so the
+ * agents plan around it.
+ */
+export async function postReplan(planId: string, role: Role): Promise<Result> {
+  const marked = await post(`/api/plans/${planId}/busy`, { role });
+  if (!marked.ok) return marked;
+  return postSignal();
 }
 
 export function postClockAdvance() {

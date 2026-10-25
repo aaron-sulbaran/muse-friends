@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runAgentTurn, type ToolDefinition } from "@/lib/model";
 import { installFakeModel, removeFakeModel } from "./helpers/fakeModel";
 
@@ -157,6 +157,55 @@ describe("runAgentTurn (stateless, the default)", () => {
     const result = await runAgentTurn({ ...base, handlers: {} });
     expect(result.status).toBe("failed");
     expect(result.failure).toMatchObject({ reason: "cap_reached", detail: "api_error" });
+  });
+});
+
+describe("a model_not_found flap on the Meta API", () => {
+  beforeEach(() => {
+    process.env.MODEL_RETRY_SCALE = "0";
+  });
+  afterEach(() => {
+    delete process.env.MODEL_RETRY_SCALE;
+  });
+
+  it("retries a 404 model_not_found on a stateless call and carries on", async () => {
+    const fake = installFakeModel([{ error: 404, code: "model_not_found" }, { error: 404, code: "model_not_found" }, { text: "done" }]);
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.status).toBe("completed");
+    expect(fake.calls).toHaveLength(3);
+  });
+
+  it("rides out eight 404s in a row before a valid reply", async () => {
+    const fake = installFakeModel([...Array.from({ length: 8 }, () => ({ error: 404, code: "model_not_found" })), { text: "done" }]);
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.status).toBe("completed");
+    expect(fake.calls).toHaveLength(9);
+  });
+
+  it("retries a flap on a later call of the turn too", async () => {
+    const fake = installFakeModel([
+      { calls: [{ name: "get_my_calendar", args: {} }] },
+      ...Array.from({ length: 5 }, () => ({ error: 404, code: "model_not_found" })),
+      { text: "done" },
+    ]);
+    const result = await runAgentTurn({ ...base, handlers: { get_my_calendar: async () => ({}) } });
+    expect(result.status).toBe("completed");
+    expect(fake.calls).toHaveLength(7);
+  });
+
+  it("gives up after the retries and reports the API error", async () => {
+    const fake = installFakeModel(Array.from({ length: 12 }, () => ({ error: 404, code: "model_not_found" })));
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.status).toBe("failed");
+    expect(result.failure).toMatchObject({ detail: "api_error", message: expect.stringContaining("model was not found") });
+    expect(fake.calls).toHaveLength(9);
+  });
+
+  it("does not retry a plain 404 that is not model_not_found", async () => {
+    const fake = installFakeModel([{ error: 404 }, { text: "unused" }]);
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.status).toBe("failed");
+    expect(fake.calls).toHaveLength(1);
   });
 });
 

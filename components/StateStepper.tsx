@@ -16,9 +16,13 @@ function statusesFor(plan: UiPlan | null): StepStatus[] {
   });
 }
 
-/** The plan lifecycle in eight dots. On a dropped plan the line stops where it got to and a red dot says why. */
-export function StateStepper({ plan }: { plan: UiPlan | null }) {
+/**
+ * The plan lifecycle in eight dots. On a dropped plan the line stops where it got to and a red dot says why.
+ * Compact (a phone sheet is too narrow for eight labels) names only the step the plan is on.
+ */
+export function StateStepper({ plan, compact = false }: { plan: UiPlan | null; compact?: boolean }) {
   const statuses = statusesFor(plan);
+  const currentLabel = lifecycleSteps[statuses.indexOf("current")]?.label ?? null;
   return (
     <div className="px-1">
       <ol className="relative grid grid-cols-8" aria-label="Plan progress">
@@ -37,7 +41,7 @@ export function StateStepper({ plan }: { plan: UiPlan | null }) {
               <span
                 className={`text-center text-[12px] leading-4 ${
                   status === "current" ? "font-semibold text-ink" : status === "reached" ? "text-ink" : "text-faint"
-                }`}
+                } ${compact ? "sr-only" : ""}`}
               >
                 {step.label}
               </span>
@@ -45,6 +49,7 @@ export function StateStepper({ plan }: { plan: UiPlan | null }) {
           );
         })}
       </ol>
+      {compact && currentLabel ? <p className="mt-2 text-center text-[13px] font-semibold leading-[18px]">{currentLabel}</p> : null}
       {plan?.state === "dropped" ? (
         <p className="mt-2 flex items-center gap-1.5 text-[13px] leading-[18px]">
           <span aria-hidden="true" className="size-2 rounded-full bg-withheld" />

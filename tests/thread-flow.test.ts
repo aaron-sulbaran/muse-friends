@@ -166,13 +166,16 @@ describe("two agents talk", () => {
     expect((await store.listEvents()).some((event) => event.kind === "redaction")).toBe(true);
   });
 
-  it("marks the thread failed when the receiving agent never answers with a tool call", async () => {
+  it("answers in code when the receiving agent never answers with a tool call", async () => {
     await opening();
     installFakeModel([{ text: "Sounds fun!" }, { text: "Really." }]);
     const result = await runInboxTurn({ store, agent: "lisa", contextId, wallNow: () => (clock += 3000), deliver: localDeliver(store, "lisa") });
-    expect(result.status).toBe("failed");
-    expect(await store.getThread(contextId)).toMatchObject({ state: "failed", dropReason: "cap_reached" });
-    expect(await store.getPlanByContext(contextId)).toMatchObject({ state: "dropped" });
+    expect(result).toMatchObject({ status: "completed", fallback: true });
+    expect(await store.getThread(contextId)).toMatchObject({ state: "working", messageCount: 2 });
+    const [, reply] = await store.listMessages(contextId);
+    // Both Tuesday (2 hours) and Saturday (3 hours) work for her; the fallback closes on the longer one.
+    expect(reply.message).toMatchObject({ from: "lisa", type: "accept", windows: [SAT] });
+    expect(reply.proof).toBeUndefined();
   });
 
   it("surfaces an inbox rejection to the sending agent as an error it can repair", async () => {

@@ -8,13 +8,15 @@ type Props = {
   snapshot: UiSnapshot | null;
   onChanged: () => void;
   replay: { active: boolean; start: () => Promise<void>; stop: () => void; error: string | null };
+  /** A run could not start because the live-run caps are reached; the stage falls back to a recording. */
+  onPaused: (text: string) => void;
 };
 
 /**
  * Presenter-only controls: start the run, move the clock, reset the room. Each
  * posts to the real route and the timeline fills from the store as the agents work.
  */
-export function DemoControls({ snapshot, onChanged, replay }: Props) {
+export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -25,7 +27,8 @@ export function DemoControls({ snapshot, onChanged, replay }: Props) {
 
   async function run(action: () => Promise<Result>) {
     const result = await action();
-    setMessage(result.ok ? null : result.message);
+    if (!result.ok && result.paused) onPaused(result.message);
+    setMessage(result.ok || result.paused ? null : result.message);
     onChanged();
   }
 

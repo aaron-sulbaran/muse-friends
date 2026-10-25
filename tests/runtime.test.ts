@@ -169,13 +169,14 @@ describe("runSignalTurn with a scripted model", () => {
     expect(await store.listMessages()).toHaveLength(1);
   });
 
-  it("marks the thread failed with cap_reached when the model never sends", async () => {
+  it("opens the thread in code when the model never sends (the scripted fallback)", async () => {
     installFakeModel([{ text: "I think we should go." }, { text: "Still thinking." }]);
     const result = await runSignalTurn({ store, agent: "aaron", signalId: SIGNAL_ID, contextId, wallNow: () => clock });
-    expect(result.status).toBe("failed");
     expect(result.nudged).toBe(true);
-    expect(await store.getPlanByContext(contextId)).toMatchObject({ state: "dropped", dropReason: "cap_reached" });
-    expect((await store.listEvents()).at(-1)).toMatchObject({ kind: "turn_failed" });
-    expect(await store.listMessages()).toHaveLength(0);
+    expect(result).toMatchObject({ status: "completed", fallback: true, failure: { detail: "no_tool_call" } });
+    expect(await store.getPlanByContext(contextId)).toMatchObject({ state: "negotiating" });
+    const [record] = await store.listMessages();
+    expect(record.message).toMatchObject({ from: "aaron", to: "lisa", type: "intent", activity: { title: "Shawarma Point" } });
+    expect(record.proof).toBeUndefined();
   });
 });

@@ -51,6 +51,30 @@ describe("how a judge starts", () => {
   });
 });
 
+describe("what the header avatar is doing", () => {
+  it("reads the reel and negotiates as thinking, then talking, and rests while a person decides", () => {
+    expect(viewForRole(at("detected"), "a").mood).toBe("thinking");
+    expect(viewForRole(at("detected"), "b").mood).toBe("idle");
+    const between = { ...at("negotiating"), inFlight: null };
+    expect(viewForRole(between, "a").mood).toBe("talking");
+    expect(viewForRole(between, "b").mood).toBe("talking");
+    expect(viewForRole(at("awaiting_humans"), "a").mood).toBe("idle");
+    expect(viewForRole(at("scheduled"), "b").mood).toBe("idle");
+  });
+
+  it("thinks while its own model call is in flight, and only that Muse does", () => {
+    const inFlight = { ...at("negotiating"), inFlight: { agent: "aaron" as const } };
+    expect(viewForRole(inFlight, "a").mood).toBe("thinking");
+    expect(viewForRole(inFlight, "b").mood).toBe("talking");
+  });
+
+  it("rests when a turn failed, and before any plan", () => {
+    expect(viewForRole(toUiSnapshot(seedSnapshot(), live), "a").mood).toBe("idle");
+    const failed = { ...at("negotiating"), failure: { agent: "aaron" as const }, inFlight: null };
+    expect(viewForRole(failed, "a").mood).toBe("idle");
+  });
+});
+
 describe("the journey, phone by phone", () => {
   it("reading the reel, then talking, are status lines and nothing else in the chat", () => {
     expect(viewForRole(at("detected"), "a").status).toBe("🎞️ reading Mochi's reel");
@@ -90,11 +114,45 @@ describe("the journey, phone by phone", () => {
     for (const role of ["a", "b"] as Role[]) expect(kinds(viewForRole(at("scheduled"), role).items)).toContain("hold-row");
   });
 
+  it("the hold row offers a prefilled Google Calendar event naming the other person, in UTC, with the place", () => {
+    const row = viewForRole(at("scheduled"), "a").items.find((item) => item.kind === "hold-row");
+    const url = new URL(row && row.kind === "hold-row" && row.googleUrl ? row.googleUrl : "");
+    expect(url.searchParams.get("text")).toBe("Shawarma Point with Mochi");
+    expect(url.searchParams.get("dates")).toBe("20261027T230000Z/20261028T010000Z");
+    expect(url.searchParams.get("details")).toBe("Sprout and Mochi planned this in Muse Friends.");
+    expect(url.searchParams.get("location")).toBe("E 6th St, Austin");
+    const other = viewForRole(at("scheduled"), "b").items.find((item) => item.kind === "hold-row");
+    expect(new URL(other && other.kind === "hold-row" && other.googleUrl ? other.googleUrl : "").searchParams.get("text")).toBe("Shawarma Point with Sprout");
+  });
+
+  it("the Google Calendar link never carries a place that was withheld", () => {
+    const state = snapshotAtPlanState("scheduled");
+    state.redactions.push({ id: "red_x", contextId: state.threads[0].contextId, messageId: state.messages[1].message.id, from: "lisa", to: "aaron", removed: ["location"], detail: "Location removed.", at: state.clock.now });
+    const row = viewForRole(toUiSnapshot(state, live), "a").items.find((item) => item.kind === "hold-row");
+    const url = new URL(row && row.kind === "hold-row" && row.googleUrl ? row.googleUrl : "");
+    expect(url.searchParams.has("location")).toBe(false);
+  });
+
   it("reminded and followed up add a day separator and the Muse's line", () => {
     const reminded = viewForRole(at("reminded"), "a").items;
     expect(reminded.some((item) => item.kind === "bubble" && item.text.startsWith("Shawarma Point with Mochi at 6"))).toBe(true);
     const followed = viewForRole(at("followed_up"), "a").items;
-    expect(followed.some((item) => item.kind === "bubble" && item.text.includes("next month"))).toBe(true);
+    expect(followed.some((item) => item.kind === "bubble" && item.text === "Did you two make it?")).toBe(true);
+    // The recording counted the hangout, so the answer shows and the next idea comes from another shared signal.
+    expect(followed.find((item) => item.id === "outcome-answer")).toMatchObject({ text: "We went!" });
+    const next = followed.find((item) => item.id === "next-idea");
+    expect(next?.kind === "bubble" && !next.text.includes("Shawarma")).toBe(true);
+  });
+
+  it("opens on the stale chat: last week's reel card under Last Saturday, then Muse picks it up today", () => {
+    const items = viewForRole(at("detected"), "a").items;
+    const reel = items.findIndex((item) => item.kind === "reel-card" && item.place === "Shawarma Point");
+    const lastWeek = items.findIndex((item) => item.kind === "separator" && item.day.startsWith("Last "));
+    const today = items.findIndex((item) => item.kind === "separator" && item.day === "Today");
+    expect(lastWeek).toBeGreaterThan(-1);
+    expect(reel).toBeGreaterThan(lastWeek);
+    expect(today).toBeGreaterThan(reel);
+    expect(items[today + 1]).toMatchObject({ kind: "bubble", from: "muse", text: "Mochi sent you this a week ago. Want me to see if you two can make it happen?" });
   });
 
   it("a friend's no reads neutrally on each side", () => {

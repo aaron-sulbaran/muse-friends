@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetRunBudget, runBudget } from "@/lib/agent/caps";
 import { startFollowUp } from "@/lib/agent/followup";
 import { runFollowUpTurn, runInboxTurn } from "@/lib/agent/runtime";
 import { followUpTurnInput } from "@/lib/agent/prompts";
@@ -197,14 +198,20 @@ describe("the signals route", () => {
     expect((await store.listSignals()).length).toBe(1);
   });
 
-  it("counts refusals and follow-ups against the room's run cap", async () => {
-    process.env.MAX_RUNS_PER_ROOM = "2";
+  it("counts refusals and follow-ups against the room's hourly run cap, but gives the slot back for an unknown contact", async () => {
+    resetRunBudget();
+    process.env.MAX_LIVE_RUNS_PER_ROOM_PER_HOUR = "2";
     try {
+      expect((await post({ scenario: "follow_up", target: "somebody" })).status).toBe(404);
+      expect(runBudget().room.used).toBe(0);
       expect((await post({ scenario: "follow_up", target: "riley" })).status).toBe(409);
       expect((await post({ scenario: "follow_up", target: "riley" })).status).toBe(409);
-      expect((await post({ scenario: "follow_up", target: "riley" })).status).toBe(429);
+      const paused = await post({ scenario: "follow_up", target: "riley" });
+      expect(paused.status).toBe(429);
+      expect(await paused.json()).toMatchObject({ paused: true, text: "Live runs paused, playing a recording" });
     } finally {
-      delete process.env.MAX_RUNS_PER_ROOM;
+      delete process.env.MAX_LIVE_RUNS_PER_ROOM_PER_HOUR;
+      resetRunBudget();
     }
   });
 });
@@ -286,5 +293,36 @@ describe("an acquaintance-tier negotiation never shares location", () => {
     expect(body.error).toContain("location");
     expect(JSON.stringify(body)).not.toContain("Mueller");
     expect(await store.listMessages(started.contextId)).toHaveLength(0);
+  });
+});
+
+describe("a model outage does not drop a follow-up", () => {
+  beforeEach(() => {
+    process.env.MODEL_RETRY_SCALE = "0";
+  });
+  afterEach(() => {
+    delete process.env.MODEL_RETRY_SCALE;
+  });
+
+  it("opens the coffee in code from the person's own daytime windows, with no place and no model proof", async () => {
+    installFakeModel(Array.from({ length: 30 }, () => ({ error: 404, code: "model_not_found" })));
+    const started = await startFollowUp(store, { target: "jules" });
+    if (!started.ok || !started.started) throw new Error("expected a start");
+    const result = await runFollowUpTurn({ store, agent: "aaron", contact: jules, contextId: started.contextId, deliver: localDeliver(store, "aaron") });
+    expect(result).toMatchObject({ status: "completed", fallback: true });
+
+    const [record] = await store.listMessages(started.contextId);
+    expect(record.message).toMatchObject({ from: "aaron", to: "lisa", type: "intent", activity: { kind: "events", title: "Coffee" } });
+    expect(record.message.activity?.place).toBeUndefined();
+    expect(record.proof).toBeUndefined();
+    for (const window of record.message.windows ?? []) {
+      expect(Date.parse(window.end) - Date.parse(window.start)).toBeLessThanOrEqual(2 * 3_600_000);
+      const hour = Number(window.start.slice(11, 13));
+      expect(hour).toBeGreaterThanOrEqual(10);
+      expect(hour).toBeLessThan(19);
+    }
+    expect(JSON.stringify(record.message)).not.toMatch(/location/);
+    expect((await store.getPlanByContext(started.contextId))?.state).toBe("negotiating");
+    expect((await store.listEvents()).some((event) => event.text.startsWith("Fallback") && event.text.includes("Jules"))).toBe(true);
   });
 });

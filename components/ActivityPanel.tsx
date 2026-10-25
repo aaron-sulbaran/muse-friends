@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/lib/ui/copy";
 import { namesFor } from "@/lib/ui/format";
@@ -15,6 +16,10 @@ type Props = {
   snapshot: UiSnapshot | null;
   connected: boolean;
   onOpenMessage: (message: UiMessage) => void;
+  /** Set when the panel is a sheet on a phone: no card chrome, a compact stepper, and a way to close it. */
+  onClose?: () => void;
+  /** Below the timeline: on a phone, the one control the presenter's keyboard would otherwise hold. */
+  footer?: React.ReactNode;
 };
 
 /** Counts seconds from when this row first appeared; the parent re-keys it per turn so each model call starts at 0. */
@@ -62,8 +67,10 @@ function FailureRow({ snapshot }: { snapshot: UiSnapshot }) {
 }
 
 /** The one new surface: Muse's Activity view, extended from one agent to two. */
-export function ActivityPanel({ snapshot, connected, onOpenMessage }: Props) {
+export function ActivityPanel({ snapshot, connected, onOpenMessage, onClose, footer }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const sheet = onClose !== undefined;
   const stuckToBottom = useRef(true);
   const messageCount = snapshot?.messages.length ?? 0;
   const thinking = Boolean(snapshot?.inFlight);
@@ -73,6 +80,10 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage }: Props) {
     if (element && stuckToBottom.current) element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
   }, [messageCount, thinking]);
 
+  useEffect(() => {
+    if (sheet) closeButton.current?.focus();
+  }, [sheet]);
+
   function trackScroll() {
     const element = scroller.current;
     if (!element) return;
@@ -80,14 +91,30 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage }: Props) {
   }
 
   return (
-    <section aria-label={copy.activityTitle} className="flex h-full min-h-0 flex-col rounded-card bg-surface p-5 shadow-float">
-      <header className="flex items-center justify-between">
+    <section
+      aria-label={copy.activityTitle}
+      className={`flex h-full min-h-0 flex-col bg-surface ${sheet ? "px-4 pb-4 pt-5" : "rounded-card p-5 shadow-float"}`}
+    >
+      <header className="flex items-center justify-between gap-2">
         <h2 className="text-[22px] font-semibold leading-7">{copy.activityTitle}</h2>
-        {snapshot ? <ReplayBadge mode={snapshot.mode} /> : null}
+        <div className="flex items-center gap-2">
+          {snapshot ? <ReplayBadge mode={snapshot.mode} compact={sheet} /> : null}
+          {sheet ? (
+            <button
+              ref={closeButton}
+              type="button"
+              onClick={onClose}
+              aria-label={copy.activityClose}
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-group transition-colors hover:bg-bubble-muse"
+            >
+              <X className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
       </header>
       {!connected ? <p className="mt-1 text-[13px] leading-[18px] text-muted">{copy.reconnecting}</p> : null}
       <div className="mt-4">
-        <StateStepper plan={snapshot?.plan ?? null} />
+        <StateStepper plan={snapshot?.plan ?? null} compact={sheet} />
       </div>
       <div ref={scroller} onScroll={trackScroll} className="quiet-scroll -mx-2 mt-4 min-h-0 flex-1 overflow-y-auto px-2">
         {snapshot && snapshot.messages.length === 0 && snapshot.notes.length === 0 && !snapshot.inFlight ? (
@@ -107,6 +134,7 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage }: Props) {
           {snapshot?.inFlight ? <ThinkingRow key={`${snapshot.inFlight.agent}-${snapshot.messages.length}`} snapshot={snapshot} /> : null}
         </ul>
       </div>
+      {footer ? <div className="mt-3 shrink-0">{footer}</div> : null}
     </section>
   );
 }

@@ -5,7 +5,7 @@ import { setModelClient } from "@/lib/model";
 export type Step =
   | { calls: Array<{ name: string; args: unknown }>; text?: string; reasoning?: boolean }
   | { text: string }
-  | { error: number };
+  | { error: number; code?: string };
 
 export type RecordedCall = Record<string, unknown> & { input: unknown };
 
@@ -19,7 +19,10 @@ export function installFakeModel(steps: Step[]) {
     const step = steps[index];
     index += 1;
     if (!step) throw new Error("fake model ran out of steps");
-    if ("error" in step) throw OpenAI.APIError.generate(step.error, { message: "scripted" }, "scripted", new Headers());
+    if ("error" in step) {
+      const body = step.code ? { message: "The requested model was not found.", code: step.code } : { message: "scripted" };
+      throw OpenAI.APIError.generate(step.error, body, body.message, new Headers());
+    }
 
     responseCounter += 1;
     const id = `resp_${responseCounter}`;

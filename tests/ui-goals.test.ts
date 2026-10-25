@@ -26,20 +26,20 @@ describe("the plan as a Goals item", () => {
       "On calendar",
       "Reminded",
       "Happened",
-      "Again?",
+      "Made it?",
     ]);
   });
 
   it("has one timeline step per state reached, with the spec's details", () => {
     const steps = goalSteps(at("followed_up"), ctx);
-    expect(steps.map((step) => step.label)).toEqual(["Found", "Talking", "Your call", "Confirmed", "On calendar", "Reminded", "Happened", "Again?"]);
+    expect(steps.map((step) => step.label)).toEqual(["Found", "Talking", "Your call", "Confirmed", "On calendar", "Reminded", "Happened", "Done"]);
     expect(steps[0].detail).toBe("From Mochi's reel");
     expect(steps[1].detail).toBe("Sprout and Mochi are comparing times");
     expect(steps[2].detail).toBe("Waiting for you and Mochi");
     expect(steps[3].detail).toBe("You both said yes");
     expect(steps[4].detail).toBe("Tue 6 to 8 PM");
     expect(steps[5].detail).toMatch(/^Tuesday 4:00 PM$/);
-    expect(steps[7].detail).toBe("Asked about next month");
+    expect(steps[7].detail).toBe("You two made it");
     expect(steps.every((step) => /^\d{1,2}:\d{2} (AM|PM)$/.test(step.time))).toBe(true);
   });
 
@@ -50,7 +50,7 @@ describe("the plan as a Goals item", () => {
   it("the row's detail follows the plan and says when the hold is on the calendar", () => {
     expect(goalRowDetail(at("confirmed"), ctx)).toBe("You both said yes");
     expect(goalRowDetail(at("scheduled"), ctx)).toBe("Tue 6 to 8 PM, hold added");
-    expect(goalRowDetail(at("followed_up"), ctx)).toBe("Asked about next month");
+    expect(goalRowDetail(at("followed_up"), ctx)).toBe("You two made it");
   });
 
   it("a dropped plan's last step says why", () => {

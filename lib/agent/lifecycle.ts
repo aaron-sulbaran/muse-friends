@@ -222,8 +222,7 @@ async function runStep(store: Store, plan: Plan, step: Exclude<ClockStep, "next"
 
   if (step === "end") {
     await store.appendEvent(row(plan, at, "clock_advanced", "system", "Demo clock moved to the end of the plan"));
-    // The Follow-through counter counts this event and nothing an agent does.
-    await store.appendEvent(row(plan, at, "followed_through", "human", `${displayName(first)} and ${displayName(second)} got together for ${title}`));
+    // No followed_through here: only a person's "We went!" tap (the outcome route) counts for the KPI.
     const next = transitionPlan(plan, "happened", at, { note: "The plan took place" });
     await store.putPlan(next);
     return { ok: true, value: { clock, plan: next } };
@@ -231,7 +230,7 @@ async function runStep(store: Store, plan: Plan, step: Exclude<ClockStep, "next"
 
   await store.appendEvent(row(plan, at, "clock_advanced", "system", "Demo clock moved to the next morning"));
   for (const agent of [first, second]) {
-    await store.appendEvent(row(plan, at, "plan_state", "agent", `${displayName(agent)} asked their person: want to do ${title} with ${displayName(otherAgent(agent))} again next month?`, { agent }));
+    await store.appendEvent(row(plan, at, "plan_state", "agent", `${displayName(agent)} asked their person whether they made it to ${title} with ${displayName(otherAgent(agent))}`, { agent }));
   }
   const next = transitionPlan(plan, "followed_up", at, { note: "Asked about next month" });
   await store.putPlan(next);
