@@ -280,6 +280,21 @@ describe("when someone cannot make it", () => {
     const candidates = await groupCandidates(store, (await store.getPlan(plan.id))!);
     expect(candidates).toEqual([]);
   });
+
+  it("ends the plan for everyone when the coordinator finds no shared window and declines both friends", async () => {
+    await open();
+    await friendReplies("lisa", "counter");
+    const lateTue: Window = { start: "2026-10-27T20:30:00-05:00", end: "2026-10-27T22:00:00-05:00" };
+    await friendReplies("kai", "counter", [lateTue]);
+    const result = await coordinatorAccepts(ALL_THREE, [
+      { calls: [send("lisa", { type: "decline", reason: "no_overlap" }), send("kai", { type: "decline", reason: "no_overlap" })] },
+    ]);
+    expect(result.status).toBe("completed");
+    expect(await store.getPlan(plan.id)).toMatchObject({ state: "dropped", dropReason: "no_overlap" });
+    const threads = await Promise.all([store.getThread(contexts.lisa), store.getThread(contexts.kai)]);
+    expect(threads.map((thread) => thread?.state)).toEqual(["rejected", "rejected"]);
+    expect(await store.listCards({ planId: plan.id })).toHaveLength(0);
+  });
 });
 
 describe("the plan's life with three people", () => {
