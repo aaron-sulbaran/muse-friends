@@ -1,6 +1,6 @@
 "use client";
 
-import { BatteryFull, Shield, Signal, Wifi } from "lucide-react";
+import { BatteryFull, Shield, Signal, Wallet, Wifi } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
@@ -8,7 +8,7 @@ import { copy } from "@/lib/ui/copy";
 import { formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
 import { postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
-import type { Role, UiSnapshot } from "@/lib/ui/types";
+import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
 import { ChatBubble, DaySeparator, TypingDots } from "./ChatBubble";
 import { AgreedLine } from "./AgreedLine";
 import { AvatarSheet } from "./AvatarSheet";
@@ -17,13 +17,17 @@ import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
 import { MemberCard } from "./MemberCard";
 import { MuseAvatar } from "./MuseAvatar";
+import { PaymentCard } from "./PaymentCard";
 import { OutcomeReplies } from "./OutcomeReplies";
+import { SimulatedFriendDisc } from "./PersonDisc";
 import { ReelCard } from "./ReelCard";
 import { RecommendationCard } from "./RecommendationCard";
+import { SettleCard } from "./SettleCard";
 import { ReplayBadge } from "./ReplayBadge";
 import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
 import { TabBar, type Tab } from "./TabBar";
+import { WalletChip } from "./WalletChip";
 
 // The Invite sheet carries a QR encoder, so it loads only when someone opens it.
 const InviteSheet = dynamic(() => import("./InviteSheet").then((module) => module.InviteSheet), { ssr: false });
@@ -39,6 +43,8 @@ type Props = {
   readOnly?: boolean;
   /** A run could not start because the live-run caps are reached; the page falls back to a recording. */
   onPaused?: (text: string) => void;
+  /** Opens a payment's ledger ids in the page's drawer; without it a payment card has no Details link. */
+  onOpenPayment?: (payment: UiPayment) => void;
   /**
    * Set when this screen is a phone on its own (the stage has the Activity panel and the other phone beside
    * it): adds a row to switch sides and open Activity as a sheet, whose content the page supplies.
@@ -70,7 +76,7 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
 }
 
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
-export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, standalone }: Props) {
+export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, onOpenPayment, standalone }: Props) {
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
   const [replanError, setReplanError] = useState<string | null>(null);
@@ -157,7 +163,6 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             plan={item.plan}
             role={role}
             view={view}
-            simulatedFriend={simulated}
             pending={pending || readOnly}
             onDecide={(choice) => decide(item.plan.id, choice)}
             onReplan={() => replan(item.plan.id)}
@@ -179,14 +184,37 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
         return <HoldRow planId={item.planId} role={role} title={item.title} googleUrl={item.googleUrl} disabled={readOnly} />;
+      case "payment-card":
+        return <PaymentCard payment={item.payment} side={item.side} friendName={item.friendName} friendMuse={item.friendMuse} onOpen={onOpenPayment} />;
+      case "settle-card":
+        return (
+          <SettleCard
+            planId={item.planId}
+            role={role}
+            offer={item.offer}
+            friendName={item.friendName}
+            friendMuse={item.friendMuse}
+            paymentCount={snapshot.payments.length}
+            readOnly={readOnly}
+            onChanged={onChanged}
+            onPaused={onPaused}
+            onOpenSettings={() => setSheetOpen(true)}
+          />
+        );
     }
   }
+
+  // Side a has no sharing switches, but it still has a wallet: a payments button opens the same sheet, payments only.
+  const paymentsOnA = role === "a" && !readOnly && snapshot.sandbox.enabled;
 
   return (
     <div className="relative flex h-full flex-col bg-screen">
       {framed ? <StatusBar time={formatStatusBarTime(snapshot.now)} /> : <div className="h-[env(safe-area-inset-top)] shrink-0" />}
       {simulated && role === "b" ? (
-        <p className="shrink-0 bg-group px-4 py-2 text-center text-[13px] font-semibold">{copy.simulatedFriendBanner}</p>
+        <p className="flex shrink-0 items-center justify-center gap-2 bg-group px-4 py-2 text-center text-[13px] font-semibold">
+          <SimulatedFriendDisc size={20} />
+          {copy.simulatedFriendBanner}
+        </p>
       ) : null}
       {tab === "chat" ? (
         <>
@@ -198,7 +226,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={`Open ${view.museName} settings`}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
+                <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
               </button>
             ) : standalone && !readOnly ? (
               // Muse opens Activity from the avatar; Sprout's phone has no settings sheet to compete with.
@@ -208,25 +236,40 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={copy.activityOpen}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
+                <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
               </button>
             ) : (
-              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
+              <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
             )}
             <StatusPill name={view.museName} status={view.status} />
+            <WalletChip snapshot={snapshot} agent={view.agent} />
             {standalone && snapshot.mode === "replay" ? (
               <div className="absolute left-4 top-2">
                 <ReplayBadge mode="replay" compact />
               </div>
             ) : null}
-            {role === "a" && standalone && !readOnly ? (
-              <button
-                type="button"
-                onClick={() => setInviteOpen(true)}
-                className="absolute right-4 top-2 inline-flex h-8 items-center rounded-full bg-group px-3 text-[13px] font-semibold transition-colors hover:bg-bubble-muse"
-              >
-                {copy.invitePill}
-              </button>
+            {role === "a" && !readOnly && (paymentsOnA || standalone) ? (
+              <div className="absolute right-4 top-2 flex items-center gap-2">
+                {paymentsOnA ? (
+                  <button
+                    type="button"
+                    onClick={() => setSheetOpen(true)}
+                    aria-label={`${view.museName} payments`}
+                    className="grid size-8 place-items-center rounded-full bg-group transition-colors hover:bg-bubble-muse"
+                  >
+                    <Wallet className="size-[18px]" strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                ) : null}
+                {standalone ? (
+                  <button
+                    type="button"
+                    onClick={() => setInviteOpen(true)}
+                    className="inline-flex h-8 items-center rounded-full bg-group px-3 text-[13px] font-semibold transition-colors hover:bg-bubble-muse"
+                  >
+                    {copy.invitePill}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
             {role === "b" && !readOnly ? (
               <button
@@ -295,12 +338,13 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       {inviteOpen && role === "a" ? (
         <InviteSheet plan={snapshot.plan} simulatedFriend={simulated} onChanged={onChanged} onClose={() => setInviteOpen(false)} />
       ) : null}
-      {sheetOpen && role === "b" ? (
+      {sheetOpen && (role === "b" || paymentsOnA) ? (
         <AvatarSheet
-          simulated={simulated}
+          role={role}
           museName={view.museName}
           friendMuseName={view.friendMuseName}
-          sharing={snapshot.sharing.lisa}
+          sharing={role === "b" ? snapshot.sharing.lisa : undefined}
+          payments={snapshot.sandbox.enabled ? snapshot.paymentsScope[view.agent] : undefined}
           onOpenActivity={
             standalone
               ? () => {

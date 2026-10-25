@@ -2,24 +2,22 @@ import { mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkPlan, parseFreeWindows, respond, startPlan, type ByomDeps } from "@/app/api/connector/_lib/byom";
+import { checkPlan, respond, startPlan, type ByomDeps } from "@/app/api/connector/_lib/byom";
+import { SLOT_PRESET_NAMES, SLOT_PRESETS, describePresets, presetWindows } from "@/app/api/connector/_lib/presets";
 import { persistingStore } from "@/app/api/connector/_lib/room-store";
 import { ROOM_TTL_MS, RoomStorageError, clearMemoryRooms, memoryRoomRepo } from "@/app/api/connector/_lib/rooms";
 import { ownCalendar, ownFreeBlocks } from "@/lib/agent/calendar";
 import { resetRunBudget } from "@/lib/agent/caps";
+import { intersectWindows, toMs } from "@/lib/agent/windows";
 import { transitionPlan } from "@/lib/plans";
 import type { Plan, StateSnapshot } from "@/lib/protocol";
-import { getPersona, recordedSnapshot } from "@/lib/seed/fixtures";
+import { CALENDAR_RANGE, getPersona, rawShawarmaSignal, recordedSnapshot } from "@/lib/seed/fixtures";
 import { getStore, type Store } from "@/lib/store";
 import { JsonStore } from "@/lib/store/json";
 
 // Sunday Oct 25, 3pm Central: the expo afternoon.
 const NOW = Date.parse("2026-10-25T15:00:00-05:00");
-// Thursday evening: Mochi is free after 6:30pm, and Sprout's seeded library shift (3 to 10pm) would
-// swallow it if the seeded calendar still applied.
-const THURSDAY_EVENING = [{ day: "2026-10-29", start: "19:00", end: "21:00" }];
-// Wednesday just after Mochi's classes and before her book club.
-const WEDNESDAY_EARLY_EVENING = [{ day: "2026-10-28", start: "18:00", end: "19:00" }];
+const EVENINGS = { slots: "evenings" };
 
 type Harness = ReturnType<typeof harness>;
 
@@ -56,7 +54,7 @@ async function agreeOnRamen(store: Store, input: { contextId: string }): Promise
   await store.putPlan({ ...waiting, window, activity: { kind: "food", title: "Ramen", place: "Downtown" }, draft: "Hey Mochi, ramen Thursday at 7? Want to go?" } satisfies Plan);
 }
 
-async function start(h: Harness, input: unknown = { free_windows: THURSDAY_EVENING }) {
+async function start(h: Harness, input: unknown = EVENINGS) {
   const outcome = await startPlan(input, h.deps);
   if (!outcome.ok) throw new Error(`start_plan failed: ${outcome.code} ${outcome.message}`);
   return outcome.value;
@@ -75,124 +73,137 @@ afterEach(() => {
   resetRunBudget();
 });
 
-describe("free windows are checked in code", () => {
-  const parse = (windows: Array<{ day: string; start: string; end: string }>) => parseFreeWindows(windows, NOW);
-  const refusal = (windows: Array<{ day: string; start: string; end: string }>) => {
-    const result = parse(windows);
-    return result.ok ? null : { code: result.code, message: result.message };
-  };
+describe("the slot presets", () => {
+  const whole = (iso: string) => /T\d\d:00:00-05:00$/.test(iso);
 
-  it("accepts whole-hour windows in the week and returns them sorted, as Central times", () => {
-    const result = parse([
-      { day: "2026-10-30", start: "18:00", end: "20:00" },
-      { day: "2026-10-27", start: "17:00", end: "19:00" },
-    ]);
-    expect(result).toEqual({
-      ok: true,
-      value: [
-        { start: "2026-10-27T17:00:00-05:00", end: "2026-10-27T19:00:00-05:00" },
-        { start: "2026-10-30T18:00:00-05:00", end: "2026-10-30T20:00:00-05:00" },
-      ],
-    });
+  it("are exactly evenings, lunches and weekend", () => {
+    expect([...SLOT_PRESET_NAMES]).toEqual(["evenings", "lunches", "weekend"]);
+    expect(Object.keys(SLOT_PRESETS).sort()).toEqual(["evenings", "lunches", "weekend"]);
   });
 
-  it("refuses a window that ends before it starts, or that is not inside waking hours", () => {
-    expect(refusal([{ day: "2026-10-27", start: "20:00", end: "18:00" }])?.code).toBe("bad_window");
-    expect(refusal([{ day: "2026-10-27", start: "07:00", end: "09:00" }])?.message).toContain("between 09:00 and 22:00");
-    expect(refusal([{ day: "2026-10-27", start: "21:00", end: "23:00" }])?.code).toBe("bad_window");
+  it("each give Sprout and Mochi at least an hour they both have free, so a plan always has something to agree on", () => {
+    for (const name of SLOT_PRESET_NAMES) {
+      const { sprout, mochi } = SLOT_PRESETS[name];
+      expect(intersectWindows(sprout, mochi).length, name).toBeGreaterThan(0);
+    }
   });
 
-  it("refuses a day that is not a real date", () => {
-    expect(refusal([{ day: "2026-02-31", start: "18:00", end: "20:00" }])?.message).toContain("not a real date");
+  it("are whole hours inside the demo calendar, at most 3 windows a person, none overlapping", () => {
+    for (const name of SLOT_PRESET_NAMES) {
+      for (const person of ["sprout", "mochi"] as const) {
+        const windows = [...SLOT_PRESETS[name][person]].sort((a, b) => toMs(a.start) - toMs(b.start));
+        expect(windows.length, `${name} ${person}`).toBeGreaterThanOrEqual(1);
+        expect(windows.length, `${name} ${person}`).toBeLessThanOrEqual(3);
+        for (const [index, window] of windows.entries()) {
+          expect(whole(window.start) && whole(window.end), `${name} ${person} whole hours`).toBe(true);
+          expect(toMs(window.start), name).toBeGreaterThanOrEqual(toMs(CALENDAR_RANGE.start));
+          expect(toMs(window.end), name).toBeLessThanOrEqual(toMs(CALENDAR_RANGE.end));
+          expect(toMs(window.end), name).toBeGreaterThan(toMs(window.start));
+          if (index > 0) expect(toMs(window.start), name).toBeGreaterThanOrEqual(toMs(windows[index - 1].end));
+        }
+      }
+    }
   });
 
-  it("refuses a window already over, more than 7 days out, or outside the demo week", () => {
-    expect(refusal([{ day: "2026-10-25", start: "09:00", end: "11:00" }])?.code).toBe("window_in_past");
-    expect(refusal([{ day: "2026-11-03", start: "18:00", end: "20:00" }])?.code).toBe("window_too_far");
-    expect(refusal([{ day: "2026-11-01", start: "10:00", end: "12:00" }])?.code).toBe("outside_calendar");
+  it("drop windows that have already ended, so a plan never starts from a calendar in the past", () => {
+    expect(presetWindows("evenings", NOW).sprout).toHaveLength(3);
+    expect(presetWindows("evenings", Date.parse("2026-10-28T12:00:00-05:00")).sprout).toHaveLength(2);
+    expect(presetWindows("evenings", Date.parse("2026-11-02T12:00:00-05:00"))).toEqual({ sprout: [], mochi: [] });
   });
 
-  it("refuses windows that overlap each other", () => {
-    expect(refusal([{ day: "2026-10-27", start: "17:00", end: "20:00" }, { day: "2026-10-27", start: "19:00", end: "21:00" }])?.code).toBe("windows_overlap");
+  it("read as plain words for the /connect page", () => {
+    const described = describePresets();
+    expect(described.map((preset) => preset.name)).toEqual(["evenings", "lunches", "weekend"]);
+    expect(described[0].sprout[0]).toMatch(/^Tue /);
+    expect(described[2].sprout.every((label) => label.startsWith("Sat "))).toBe(true);
   });
 });
 
 describe("start_plan", () => {
-  it("refuses more than 3 windows, none, minutes, and extra shapes, as bad input", async () => {
+  it("takes only a preset name: anything else is refused as bad input and starts nothing", async () => {
     const h = harness();
-    const four = Array.from({ length: 4 }, (_, index) => ({ day: `2026-10-${26 + index}`, start: "18:00", end: "20:00" }));
-    for (const input of [{ free_windows: four }, { free_windows: [] }, {}, { free_windows: [{ day: "2026-10-29", start: "18:30", end: "20:00" }] }, { free_windows: [{ day: "Thursday", start: "18:00", end: "20:00" }] }]) {
+    const refused = [{}, { slots: "mornings" }, { slots: 3 }, { slots: ["evenings"] }, { slots: null }, "evenings", null, [], { slots: "" }, { slots: "EVENINGS" }];
+    for (const input of refused) {
       const result = await startPlan(input, h.deps);
-      expect(result.ok).toBe(false);
-      expect(result.ok ? 0 : result.status).toBe(400);
+      expect(result.ok, JSON.stringify(input)).toBe(false);
+      expect(result.ok ? 0 : result.status, JSON.stringify(input)).toBe(400);
     }
     expect(h.scheduled).toHaveLength(0);
-    const tooMany = await startPlan({ free_windows: four }, h.deps);
-    expect(tooMany.ok ? "" : tooMany.message).toContain("at most 3");
+    expect(await h.repo.countCreatedSince(0)).toBe(0);
   });
 
-  it("drops the free-text hint, never storing it, when BYOM_ALLOW_HINT is 0", async () => {
-    vi.stubEnv("BYOM_ALLOW_HINT", "0");
+  it("refuses free text and windows of the person's own, and does not echo them back", async () => {
     const h = harness();
-    const started = await start(h, { reel_hint: "dinner with my wife on our anniversary", free_windows: THURSDAY_EVENING });
-    expect(started.reel_hint).toBe("ignored: this server does not take free text");
-    const snapshot = (await h.repo.load(started.planId, NOW))!;
-    expect(JSON.stringify(snapshot)).not.toContain("anniversary");
-    expect(snapshot.signals[0].media.caption).not.toContain("wife");
+    const secret = "dinner with my wife on our anniversary";
+    const withHint = await startPlan({ slots: "evenings", reel_hint: secret }, h.deps);
+    expect(withHint).toMatchObject({ ok: false, status: 400, code: "bad_input" });
+    expect(withHint.ok ? "" : withHint.message).toContain("reel_hint");
+    expect(withHint.ok ? "" : withHint.message).not.toContain("anniversary");
+
+    const ownWindows = await startPlan({ slots: "evenings", free_windows: [{ day: "2026-10-29", start: "19:00", end: "21:00" }] }, h.deps);
+    expect(ownWindows).toMatchObject({ ok: false, status: 400, code: "bad_input" });
+    expect(ownWindows.ok ? "" : ownWindows.message).toContain("free_windows");
+
+    const legacy = await startPlan({ free_windows: [{ day: "2026-10-29", start: "19:00", end: "21:00" }] }, h.deps);
+    expect(legacy).toMatchObject({ ok: false, status: 400, code: "bad_input" });
+    expect(h.scheduled).toHaveLength(0);
+    expect(await h.repo.countCreatedSince(0)).toBe(0);
   });
 
-  it("says whether the hint was used", async () => {
-    expect((await start(harness(), { reel_hint: "ramen", free_windows: THURSDAY_EVENING })).reel_hint).toBe("used");
-    expect((await start(harness(), { free_windows: THURSDAY_EVENING })).reel_hint).toBe("not given");
+  it("creates an isolated room for each preset, returns its key and how to check, and schedules the conversation", async () => {
+    for (const name of SLOT_PRESET_NAMES) {
+      const h = harness();
+      const started = await start(h, { slots: name });
+      expect(started.planId).toMatch(/^room_[A-Za-z0-9_-]{16}$/);
+      expect(started.contextId).toMatch(/^ctx_/);
+      expect(started.state).toBe("negotiating");
+      expect(started.slots).toBe(name);
+      expect(started.free_windows.map(({ start, end }) => ({ start, end }))).toEqual(presetWindows(name, NOW).sprout);
+      expect(started.free_windows.every((window) => window.label.length > 0)).toBe(true);
+      expect(started.how_to_check).toContain(started.planId);
+      expect(started.how_to_check).toContain("check_plan");
+      expect(started.expires_in_minutes).toBe(120);
+      expect(h.scheduled).toHaveLength(1);
+
+      const snapshot = (await h.repo.load(started.planId, NOW))!;
+      expect(snapshot.room.simulatedFriend).toBe(true);
+      expect(snapshot.plans).toHaveLength(1);
+      expect(snapshot.plans[0].state).toBe("detected");
+      expect(snapshot.signals[0].media.caption).toBe(rawShawarmaSignal().media.caption);
+      expect(snapshot.clock.now).toBe("2026-10-25T15:00:00-05:00");
+    }
   });
 
-  it("refuses a reel_hint over 140 characters", async () => {
-    const result = await startPlan({ reel_hint: "x".repeat(141), free_windows: THURSDAY_EVENING }, harness().deps);
-    expect(result.ok).toBe(false);
-  });
-
-  it("creates an isolated room, returns its key and how to check, and schedules the conversation", async () => {
+  it("makes both calendars exactly the preset's windows, not the seeded personas'", async () => {
     const h = harness();
-    const started = await start(h, { reel_hint: "ramen near campus", free_windows: THURSDAY_EVENING });
-    expect(started.planId).toMatch(/^room_[A-Za-z0-9_-]{16}$/);
-    expect(started.contextId).toMatch(/^ctx_/);
-    expect(started.state).toBe("negotiating");
-    expect(started.how_to_check).toContain(started.planId);
-    expect(started.how_to_check).toContain("check_plan");
-    expect(started.expires_in_minutes).toBe(120);
-    expect(h.scheduled).toHaveLength(1);
-
-    const snapshot = (await h.repo.load(started.planId, NOW))!;
-    expect(snapshot.room.simulatedFriend).toBe(true);
-    expect(snapshot.plans).toHaveLength(1);
-    expect(snapshot.plans[0].state).toBe("detected");
-    expect(snapshot.signals[0].media.caption).toBe("ramen near campus");
-    expect(snapshot.clock.now).toBe("2026-10-25T15:00:00-05:00");
-  });
-
-  it("makes Sprout's calendar exactly the windows typed, not the seeded persona's", async () => {
-    const h = harness();
-    const started = await start(h);
+    const started = await start(h, { slots: "lunches" });
     const store = new JsonStore(null);
     await store.replaceAll((await h.repo.load(started.planId, NOW))!);
 
-    expect(await ownFreeBlocks(store, "aaron")).toEqual([{ start: "2026-10-29T19:00:00-05:00", end: "2026-10-29T21:00:00-05:00" }]);
-    // The seeded library shift is not part of this calendar, only busy blocks around the typed window.
-    const titles = (await ownCalendar(store, "aaron")).map((event) => event.title);
-    expect(titles).not.toContain("Library closing shift");
-    expect(new Set(titles)).toEqual(new Set(["Busy"]));
-    // Mochi keeps her own seeded calendar.
-    expect((await ownCalendar(store, "lisa")).map((event) => event.id)).toEqual(getPersona("lisa").calendar.map((event) => event.id));
+    expect(await ownFreeBlocks(store, "aaron")).toEqual(SLOT_PRESETS.lunches.sprout);
+    expect(await ownFreeBlocks(store, "lisa")).toEqual(SLOT_PRESETS.lunches.mochi);
+    // Nothing of the personas' real calendars is in the room, only busy blocks around the preset windows.
+    for (const agent of ["aaron", "lisa"] as const) {
+      const titles = (await ownCalendar(store, agent)).map((event) => event.title);
+      expect(new Set(titles)).toEqual(new Set(["Busy"]));
+      for (const event of getPersona(agent).calendar) expect(titles).not.toContain(event.title);
+    }
   });
 
-  it("refuses, before any model call, windows Mochi could not also do, and says when she is free", async () => {
+  it("stores nothing about the person: one seeded signal, busy blocks, and nothing the caller sent", async () => {
     const h = harness();
-    const result = await startPlan({ free_windows: [{ day: "2026-10-27", start: "10:00", end: "12:00" }] }, h.deps);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(422);
-    expect(result.code).toBe("no_overlap_with_mochi");
-    expect((result.hint as { mochi_is_free: unknown[] }).mochi_is_free.length).toBeGreaterThan(0);
+    const started = await start(h, { slots: "weekend" });
+    const snapshot = (await h.repo.load(started.planId, NOW))!;
+    expect(snapshot.signals).toHaveLength(1);
+    expect(snapshot.signals[0].media.caption).toBe(rawShawarmaSignal().media.caption);
+    expect(new Set(snapshot.busy.map((block) => block.event.title))).toEqual(new Set(["Busy", "Calendar set by the room"]));
+    expect(snapshot.messages).toHaveLength(0);
+  });
+
+  it("answers 422 slots_expired and starts nothing once the fictional week is over", async () => {
+    const h = harness({ now: () => Date.parse("2026-11-02T12:00:00-05:00") });
+    const result = await startPlan(EVENINGS, h.deps);
+    expect(result).toMatchObject({ ok: false, status: 422, code: "slots_expired" });
     expect(h.scheduled).toHaveLength(0);
     expect(await h.repo.countCreatedSince(0)).toBe(0);
   });
@@ -201,19 +212,19 @@ describe("start_plan", () => {
     const h = harness({ maxRoomsPerHour: 2 });
     await start(h);
     await start(h);
-    const third = await startPlan({ free_windows: THURSDAY_EVENING }, h.deps);
+    const third = await startPlan(EVENINGS, h.deps);
     expect(third.ok).toBe(false);
     if (third.ok) return;
     expect(third).toMatchObject({ status: 429, code: "room_cap", retryAfterSeconds: 300 });
     // An hour later the first two no longer count.
     h.advance(61 * 60 * 1000);
-    expect((await startPlan({ free_windows: WEDNESDAY_EARLY_EVENING }, h.deps)).ok).toBe(true);
+    expect((await startPlan({ slots: "lunches" }, h.deps)).ok).toBe(true);
   });
 
   it("stops when the app's hourly run budget is spent, and creates nothing", async () => {
     vi.stubEnv("MAX_LIVE_RUNS_PER_HOUR", "0");
     const h = harness();
-    const result = await startPlan({ free_windows: THURSDAY_EVENING }, h.deps);
+    const result = await startPlan(EVENINGS, h.deps);
     expect(result).toMatchObject({ ok: false, status: 429, code: "runs_paused" });
     expect(await h.repo.countCreatedSince(0)).toBe(0);
   });
@@ -226,7 +237,7 @@ describe("start_plan", () => {
       },
     };
     const h = harness({ repo: broken });
-    const result = await startPlan({ free_windows: THURSDAY_EVENING }, h.deps);
+    const result = await startPlan(EVENINGS, h.deps);
     expect(result).toMatchObject({ ok: false, status: 503, code: "rooms_unavailable" });
     expect(h.scheduled).toHaveLength(0);
   });
@@ -279,7 +290,7 @@ describe("check_plan", () => {
     expect(await checkPlan({ planId }, h.deps)).toMatchObject({ ok: false, status: 404 });
     expect(await h.repo.load(planId, NOW + ROOM_TTL_MS + 1000)).toBeNull();
 
-    await startPlan({ free_windows: [{ day: "2026-10-30", start: "16:00", end: "19:00" }] }, { ...h.deps, now: () => NOW + ROOM_TTL_MS + 1000 });
+    await startPlan({ slots: "weekend" }, { ...h.deps, now: () => NOW + ROOM_TTL_MS + 1000 });
     expect(await h.repo.countCreatedSince(0)).toBe(1);
   });
 });

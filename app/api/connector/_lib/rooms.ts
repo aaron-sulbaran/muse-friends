@@ -7,10 +7,15 @@ import { createServiceClient } from "@/lib/store/supabase";
 export const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 export const ROOM_CAP_WINDOW_MS = 60 * 60 * 1000;
 
+// What a lookup finds: a live room with its expiry, one past its expiry that nobody has deleted yet, or nothing.
+export type RoomLookup = { status: "live"; snapshot: StateSnapshot; expiresAt: number } | { status: "expired" } | { status: "missing" };
+
 export type RoomRepo = {
   create(roomKey: string, snapshot: StateSnapshot, now: number): Promise<void>;
   // The room's snapshot, or null when there is none or it has expired. Expired rooms are never served.
   load(roomKey: string, now: number): Promise<StateSnapshot | null>;
+  // Like load, but says whether a missing room was never there or has just expired (a link answers 404 or 410).
+  lookup(roomKey: string, now: number): Promise<RoomLookup>;
   save(roomKey: string, snapshot: StateSnapshot): Promise<void>;
   // How many rooms were created at or after `sinceMs`, for the cap on rooms per hour.
   countCreatedSince(sinceMs: number): Promise<number>;
@@ -38,6 +43,11 @@ export function memoryRoomRepo(): RoomRepo {
     async load(roomKey, now) {
       const stored = rooms.get(roomKey);
       return stored && stored.expiresAt > now ? structuredClone(stored.snapshot) : null;
+    },
+    async lookup(roomKey, now) {
+      const stored = rooms.get(roomKey);
+      if (!stored) return { status: "missing" };
+      return stored.expiresAt > now ? { status: "live", snapshot: structuredClone(stored.snapshot), expiresAt: stored.expiresAt } : { status: "expired" };
     },
     async save(roomKey, snapshot) {
       const stored = rooms.get(roomKey);
@@ -75,6 +85,13 @@ export function supabaseRoomRepo(db: SupabaseClient): RoomRepo {
       if (error) throw new RoomStorageError("load", error.message);
       if (!data || Date.parse(data.expires_at as string) <= now) return null;
       return data.snapshot as StateSnapshot;
+    },
+    async lookup(roomKey, now) {
+      const { data, error } = await db.from("byom_rooms").select("snapshot, expires_at").eq("room_key", roomKey).maybeSingle();
+      if (error) throw new RoomStorageError("lookup", error.message);
+      if (!data) return { status: "missing" };
+      const expiresAt = Date.parse(data.expires_at as string);
+      return expiresAt > now ? { status: "live", snapshot: data.snapshot as StateSnapshot, expiresAt } : { status: "expired" };
     },
     async save(roomKey, snapshot) {
       const { error } = await db.from("byom_rooms").update({ snapshot }).eq("room_key", roomKey);

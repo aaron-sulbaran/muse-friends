@@ -9,7 +9,7 @@ Status: v2.1, Sat Oct 24, 2026. Smoke tests 1 to 3 passed on live Muse Spark at 
 | App | Next.js (App Router), TypeScript strict, Tailwind |
 | Agents | OpenAI SDK with `baseURL: "https://api.meta.ai/v1"` and `apiKey: process.env.MODEL_API_KEY` (passed explicitly; the SDK does not read that variable), model `muse-spark-1.3`, Responses API (`client.responses.create`) with function tools. The message schema is the parameters of the `send_to_friend_agent` tool, zod-parsed on receipt |
 | Validation | zod (the same schemas, converted to JSON schema, are the tool parameters) |
-| State | `Store` interface; in-memory implementation persisted to `data/store.json` |
+| State | `Store` interface with two implementations: Supabase (Postgres) in production, and an in-memory store persisted to `data/store.json` for local development |
 | Live UI | Polling `/api/state` every second |
 | Handoff | `https://wa.me/?text=<encodeURIComponent(draft)>` click-to-chat with no phone number, plus a copy-draft fallback button; `.ics` file for the calendar hold, served by `GET /api/plans/[id]/hold.ics` |
 | Package manager | pnpm |
@@ -26,6 +26,7 @@ app/
 ├── api/signals/                POST: inject a seeded signal (e.g. "Lisa sent Aaron a reel")
 ├── api/plans/[id]/decision/    POST: a human accepts or declines a recommendation
 ├── api/plans/[id]/hold.ics/route.ts   GET: the calendar hold, returned as text/calendar; charset=utf-8
+├── api/plans/[id]/settle/      POST: a person asks their Muse to settle up (payments)
 ├── api/clock/                  POST: demo clock fast-forward
 └── api/state/                  GET: threads, messages, plans, cards, for the UI
 lib/
@@ -46,7 +47,7 @@ components/
 
 ## Protocol (R3)
 
-Every agent-to-agent message is one of five types, validated with zod on send and on receipt. The vocabulary is A2A-shaped: a thread is a `contextId`, and `state` borrows A2A v0.3 task-state names. No A2A SDK is used and the inbox does not implement the A2A methods; it is a plain HTTP inbox. The sender POSTs the message to the peer's inbox with a bearer header. The inbox validates it, persists it, answers `202` with the task state, and runs the turn after responding, so a chain of agent-to-agent calls never waits on a model call. Each agent also serves an agent card that pins A2A v0.3 field names (current A2A docs show v1.0 names, which are not used here).
+Every agent-to-agent message is one of seven types (five for negotiating, two for payments), validated with zod on send and on receipt. The vocabulary is A2A-shaped: a thread is a `contextId`, and `state` borrows A2A v0.3 task-state names. No A2A SDK is used and the inbox does not implement the A2A methods; it is a plain HTTP inbox. The sender POSTs the message to the peer's inbox with a bearer header. The inbox validates it, persists it, answers `202` with the task state, and runs the turn after responding, so a chain of agent-to-agent calls never waits on a model call. Each agent also serves an agent card that pins A2A v0.3 field names (current A2A docs show v1.0 names, which are not used here).
 
 ```ts
 type AgentMessage = {
@@ -55,13 +56,14 @@ type AgentMessage = {
   seq: number;              // position in the thread, 1 to 6
   from: AgentId;            // "aaron" | "lisa"
   to: AgentId;
-  type: "intent" | "propose" | "counter" | "accept" | "decline";
+  type: "intent" | "propose" | "counter" | "accept" | "decline" | "payment" | "payment_received";   // the last two: see Payments
   state: "working" | "input-required" | "completed" | "rejected" | "failed";
   activity?: { kind: Category; title: string; place?: string };   // title: max 60 characters
   windows?: Array<{ start: string; end: string }>;   // free windows only; ISO, Central; max 3
-  reason: "both_free" | "interest_match" | "no_overlap" | "cap_reached";
+  reason: "both_free" | "interest_match" | "no_overlap" | "cap_reached" | "settle_up";
   note?: string;            // max 140 characters, scanned at send
   shared?: Partial<Record<Category, unknown>>;       // allowlist-projected, never availability
+  payment?: Payment;        // only on payment and payment_received; see Payments
   at: string;
 };
 
@@ -122,7 +124,7 @@ The runtime caps tool calls per turn at 6. Because `tool_choice` accepts only `"
 ## Privacy (R4, R9)
 
 ```ts
-type SharePolicy = { friend: AgentId; tier: "close" | "friend" | "off"; categories: Partial<Record<Category, boolean>> };
+type SharePolicy = { friend: AgentId; tier: "close" | "friend" | "off"; categories: Partial<Record<Category, boolean>>; payments?: { enabled: boolean; capPerPlan: number } };
 ```
 
 `enforceSharePolicy(message, policy)` runs inside `send_to_friend_agent`, in code, after the model has written the message. It removes `shared` keys for categories that are off, blanks `activity.place` when location is off, scans `note` for off-category values and private event titles, and appends a `Redaction` record (`{ messageId, removed: Category[] }`) that the inspector shows. Default for a new friend is `off`: nothing is shared until the user opts in.
@@ -143,12 +145,49 @@ detected -> negotiating -> awaiting_humans -> confirmed -> scheduled -> reminded
 - `reminded` and `happened`: driven by the demo clock (`/api/clock`). Crossing the reminder time triggers each agent's reminder turn; crossing the end time marks it happened.
 - `followed_up`: the next-day agent turn asks its human whether to repeat it.
 
+## Payments (D22)
+
+Friend-to-friend money, on Capital One's Nessie sandbox (paper dollars, whole numbers only). The agents hold the tools; the code holds the limits. Behind `PAYMENTS=off` the whole feature disappears (no wallets, tools, or routes).
+
+**Wallets.** Each seat gets a Nessie customer and one checking account, created at Reset and kept on the room (jsonb, no migration): Sprout starts with $120, Mochi with $80 (the simulated friend uses Mochi's). A Reset puts the same accounts back to their starting balance instead of creating new ones. `NESSIE_KEY` (sent as `?key=`, never logged) selects the real sandbox at `https://api.nessieisreal.com`. Its writes land as real records (withdrawals and deposits with ids you can read back), but the sandbox never moves an account's `balance` field (checked live), so the balance is ours: `NessieWithLedger` writes the Nessie transaction first, then moves the balance in the room's ledger, and the wallet chip and the payment cards read that ledger, never the sandbox balance. Without a key a local ledger with the same shapes stands in, backed by the room so every instance agrees, and the snapshot says `sandbox: { connected: false, text: "Sandbox not connected, using a local ledger" }`. A wallet keeps the ledger it was created on until the next Reset. Everything written to the real sandbox is readable by every team: fictional names and addresses only.
+
+**Tools** (offered only in payment turns, never in the negotiation turns):
+
+| Tool | Who | What the runtime does |
+|---|---|---|
+| `get_wallet` | either | reads the balance back from the ledger; shows the cap and what is already sent for the plan |
+| `send_money({ to, amount, reason, note? })` | payer | checks the payments scope and cap, the balance and that the plan is confirmed; withdraws from the payer's account; sends a `payment` message; refunds on a failed delivery |
+| `accept_payment({ paymentId })` | receiver | deposits into the receiver's account, reads the balance back, sends `payment_received` with the balance delta |
+| `decline_payment({ paymentId, reason? })` | receiver | the withdrawal already happened, so it deposits the amount back into the payer's account (a refund) and sends `payment_received` with outcome `declined` |
+
+The amount and the reason are the model's, from the plan, the place, the party, the person's note, and who offered what; nothing in the code names one. A settle turn starts when a person taps (`POST /api/plans/[id]/settle { role, note? }`, which takes a run slot from the hourly caps); a payment arriving in an inbox starts the receiver's payment turn. A model that cannot answer a payment is replaced by a code `accept` marked as a fallback; a model that is down decides to send nothing.
+
+**Messages.** Two more types, `payment` and `payment_received`, on a payment thread of their own (`contextId` `pay_<paymentId>`, linked to the plan by `planId`, two messages, ending `completed`). They carry a `payment` object, and only they do:
+
+```ts
+type Payment = {
+  paymentId: string; planId: string; amount: number /* whole USD, 1 to 500 */; currency: "USD";
+  reason: string;                        // max 100 characters, scanned like a note
+  source: "nessie" | "local";            // which ledger moved the money
+  payerAccountId: string; withdrawalId?: string;                     // payment
+  outcome?: "accepted" | "declined"; payeeAccountId?: string; depositId?: string;   // payment_received (depositId is the refund id when declined)
+  balanceBefore?: number; balanceAfter?: number;                     // the receiver's, when accepted
+};
+```
+
+`reason` is `settle_up`. A payment never changes a plan: no transition, no card, no windows ledger. `send_to_friend_agent` cannot author these types.
+
+**Privacy and limits.** `SharePolicy.payments?: { enabled: boolean; capPerPlan: number }` is the payments scope: off by default, no tier turns it on, set by the owner (`POST /api/controls { type: "payments", side, enabled, cap }`). The cap counts dollars sent for a plan and still held by the friend; a refunded payment frees it. It is enforced at send (`paymentsCheck`) and again in the receiver's inbox, which also checks that the plan exists and is confirmed or later, that the payer account is the sender's own wallet, that the payment id is new, that an answer comes from the person paid, and that the amount matches. Only account ids this app created are ever acted on. `enforceSharePolicy` scans `payment.reason` and `note` like any text, and the inbox rejects a message that would have been rewritten.
+
+**Timeline and snapshot.** Activity rows `payment_sent`, `payment_received`, `payment_declined`, `payment_failed` carry the ledger and the Nessie ids; a ledger error reads "Payment failed, sandbox error: ..." and never drops a plan or fails a Reset. The UI snapshot adds `wallets`, `payments`, `paymentsScope` and `sandbox` (payments are not in `messages`).
+
 ## Demo controls
 
 - **Inject signal:** loads the seeded "Lisa sent Aaron a reel" event.
 - **Fast-forward:** jumps the demo clock to the reminder, then to the next day.
 - **Privacy toggle:** on Lisa's phone settings, flip location for Aaron off.
 - **Replay:** plays back a recorded run from `data/` for a no-network fallback.
+- **Payments:** a cap per plan for each person's Muse (off by default), and a settle-up tap on a confirmed plan.
 
 ## Testing
 

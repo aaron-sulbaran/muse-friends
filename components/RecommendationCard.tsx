@@ -9,7 +9,6 @@ type Props = {
   plan: UiPlan;
   role: Role;
   view: PhoneView;
-  simulatedFriend: boolean;
   /** True while a decision is on its way to the server. */
   pending: boolean;
   onDecide: (choice: "accept" | "decline") => void;
@@ -33,14 +32,14 @@ function Row({ icon, title, detail }: { icon: React.ReactNode; title: string; de
 const decisionWords: Record<Decision, string> = { pending: copy.groupWaiting, accepted: copy.groupSaidYes, declined: copy.groupSaidNo };
 
 /** Who is in a plan for three and what each has said; every Muse already agreed, the people are the ones still deciding. */
-function WhoIsIn({ group, simulatedFriend }: { group: GroupView; simulatedFriend: boolean }) {
+function WhoIsIn({ group }: { group: GroupView }) {
   return (
     <div className="py-2">
       <p className="text-[13px] leading-[18px] text-muted">{copy.groupMusesAgreed}</p>
       <ul className="mt-1.5 flex flex-col gap-1.5">
         {group.members.map((member) => (
           <li key={member.id} className="flex items-center gap-3">
-            <MuseAvatar agent={member.id} simulated={simulatedFriend && member.id === "lisa"} name={member.name} size={28} />
+            <MuseAvatar agent={member.id} name={member.name} size={28} />
             <p className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-5">
               {member.name}
               {member.you ? <span className="font-normal text-muted"> ({copy.groupYou})</span> : null}
@@ -56,7 +55,7 @@ function WhoIsIn({ group, simulatedFriend }: { group: GroupView; simulatedFriend
 }
 
 /** The one approval card per plan, in the checkout-card pattern: a title, a grey reason, grouped rows, two pills. */
-export function RecommendationCard({ plan, role, view, simulatedFriend, pending, onDecide, onReplan, error }: Props) {
+export function RecommendationCard({ plan, role, view, pending, onDecide, onReplan, error }: Props) {
   const reelOwner = role === "a" ? `${view.friendHumanName}'s` : "your";
   const group = view.group;
   const title = !group
@@ -81,10 +80,10 @@ export function RecommendationCard({ plan, role, view, simulatedFriend, pending,
           <Row icon={<Clock className="size-5" strokeWidth={1.75} aria-hidden="true" />} title={formatWindowFull(plan.window)} />
         ) : null}
         {group ? (
-          <WhoIsIn group={group} simulatedFriend={simulatedFriend} />
+          <WhoIsIn group={group} />
         ) : (
           <div className="flex items-center gap-3 py-2">
-            <MuseAvatar agent={view.friend} simulated={simulatedFriend && view.friend === "lisa"} name={view.friendMuseName} size={36} />
+            <MuseAvatar agent={view.friend} name={view.friendMuseName} size={36} />
             <p className="text-[15px] leading-5">{copy.friendIsIn(view.friendMuseName)}</p>
           </div>
         )}

@@ -2,7 +2,8 @@ import { copy } from "./copy";
 import { googleCalendarUrl } from "./gcal";
 import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, listOf, namesFor } from "./format";
 import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib/seed/past-signals";
-import type { AgentId, AvatarMood, Decision, MemberId, Role, UiPlan, UiSnapshot } from "./types";
+import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
+import type { AgentId, AvatarMood, Decision, MemberId, Role, UiPayment, UiPlan, UiSnapshot } from "./types";
 
 /*
  * What one phone's chat shows, derived from the snapshot. Pure, so it can be
@@ -17,6 +18,8 @@ export type ChatItem =
   | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; names: string[]; count: number }
   | { kind: "member-card"; id: string; planId: string; member: MemberId; name: string }
+  | { kind: "payment-card"; id: string; payment: UiPayment; side: "payer" | "payee"; friendName: string; friendMuse: string }
+  | { kind: "settle-card"; id: string; planId: string; offer: Extract<SettleOffer, { kind: "turn_on" | "ready" }>; friendName: string; friendMuse: string }
   | { kind: "outcome-replies"; id: string; planId: string }
   | { kind: "collapsed"; id: string; text: string }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
@@ -227,6 +230,15 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     }
     default:
       break;
+  }
+
+  // Money after a confirmed plan: each payment as a card, then, when it is on offer, the way to settle up.
+  for (const payment of paymentsForPlan(snapshot, plan)) {
+    items.push({ kind: "payment-card", id: `payment-${payment.id}`, payment, side: sideOfPayment(payment, agent), friendName: theirs.human, friendMuse: theirs.muse });
+  }
+  const offer = settleOffer(snapshot, plan, agent);
+  if (offer.kind === "turn_on" || offer.kind === "ready") {
+    items.push({ kind: "settle-card", id: "settle-card", planId: plan.id, offer, friendName: theirs.human, friendMuse: theirs.muse });
   }
 
   if (snapshot.inFlight?.agents.includes(agent)) mood = "thinking";

@@ -11,7 +11,10 @@
     "demo:run": "vitest run --config vitest.live.config.mts tests/live/demo.live.ts --reporter=verbose",
     "demo:record": "vitest run --config vitest.live.config.mts tests/live/record.live.ts --reporter=verbose",
     "demo:http": "node scripts/demo-http.mjs",
-    "gate:c5": "node scripts/gate-c5.mjs"
+    "demo:payments": "node scripts/demo-payments.mjs",
+    "nessie:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/nessie-check.mjs",
+    "gate:c5": "node scripts/gate-c5.mjs",
+    "laptop:check": "node scripts/laptop-check.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.4.0",

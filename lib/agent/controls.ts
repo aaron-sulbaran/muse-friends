@@ -1,6 +1,8 @@
 import {
   AgentMessage,
   CATEGORIES,
+  PAYMENT_MAX_DOLLARS,
+  isPaymentType,
   SharePolicy,
   type AgentId,
   type MemberId,
@@ -16,6 +18,7 @@ import type { Store } from "@/lib/store";
 import type { LifecycleResult } from "./lifecycle";
 import { newId, seatOf } from "./ids";
 import { PLAN_LOCK, withLock } from "./lock";
+import { PAYMENTS_OFF_TEXT, carryWallets, ensureWallets, paymentsEnabled } from "./wallets";
 import { describeWindow, toCentralIso, toMs } from "./windows";
 
 // What the demo controls do to the engine. Lane B's routes call these; they hold the rules.
@@ -71,6 +74,8 @@ async function setSharePolicyLocked(
   for (const record of await store.listMessages()) {
     const { message } = record;
     if (message.from !== input.owner || message.to !== input.friend) continue;
+    // Money already moved is history; a sharing switch does not rewrite a payment.
+    if (isPaymentType(message.type)) continue;
     const outcome = enforceSharePolicy({ message, policy, sender: getPersona(input.owner), windowsDropped: record.stamp.windowsDropped });
     if (outcome.removed.length === 0) continue;
 
@@ -137,14 +142,55 @@ export async function addBusyBlock(
   return { ok: true, value: block };
 }
 
+// Lets one person's Muse send money to a friend, up to a cap per plan, or switches that off. Off is the default; a
+// cap of 0 is off. This is the whole of what a person controls about payments: the amounts are the Muse's call.
+export async function setPayments(
+  store: Store,
+  input: { owner: AgentId; friend: AgentId; enabled: boolean; capPerPlan?: number },
+  options: Options = {},
+): Promise<LifecycleResult<{ policy: SharePolicy }>> {
+  if (input.owner === input.friend) return { ok: false, status: 422, error: "a person cannot pay themselves" };
+  if (!paymentsEnabled()) return { ok: false, status: 409, error: PAYMENTS_OFF_TEXT };
+  const existing = (await store.getPolicy(input.owner, input.friend)) ?? { owner: input.owner, friend: input.friend, tier: "off" as const, categories: {} };
+  const capPerPlan = input.enabled ? (input.capPerPlan ?? existing.payments?.capPerPlan ?? 20) : (existing.payments?.capPerPlan ?? 0);
+  const parsed = SharePolicy.safeParse({ ...existing, payments: { enabled: input.enabled && capPerPlan > 0, capPerPlan } });
+  if (!parsed.success) return { ok: false, status: 422, error: `the cap must be a whole number of dollars from 0 to ${PAYMENT_MAX_DOLLARS}` };
+  await store.putPolicy(parsed.data);
+  const scope = parsed.data.payments!;
+  const plans = await store.listPlans();
+  const plan = plans.find((candidate) => candidate.participants.includes(input.owner) && candidate.participants.includes(input.friend) && candidate.state !== "dropped") ?? plans.at(-1);
+  await store.appendEvent({
+    id: newId("evt"),
+    at: nowIso(options),
+    kind: "policy_changed",
+    actor: "human",
+    agent: input.owner,
+    contextId: plan?.contextId,
+    planId: plan?.id,
+    text: scope.enabled
+      ? `${displayName(input.owner)} lets their Muse settle up with ${displayName(input.friend)}: up to $${scope.capPerPlan} per plan`
+      : `${displayName(input.owner)} turned payments off for ${displayName(input.friend)}`,
+  });
+  return { ok: true, value: { policy: parsed.data } };
+}
+
 // Wipes live state back to the seed (policies, clock, empty threads). Saved recorded runs survive.
 export async function resetDemo(store: Store, input: { simulatedFriend?: boolean } = {}, options: Options = {}): Promise<{ resetCount: number }> {
   const room = await store.getRoom();
   const at = nowIso(options);
   const resetCount = room.resetCount + 1;
   const fresh = seedSnapshot();
-  await store.replaceAll({ ...fresh, room: { id: "demo", simulatedFriend: input.simulatedFriend ?? room.simulatedFriend, resetCount, updatedAt: at } });
+  await store.replaceAll({ ...fresh, room: { id: "demo", simulatedFriend: input.simulatedFriend ?? room.simulatedFriend, resetCount, ...(paymentsEnabled() ? carryWallets(room) : {}), updatedAt: at } });
   await store.appendEvent({ id: newId("evt"), at, kind: "room_reset", actor: "system", text: "Demo reset" });
+  // The wallets are put back to their starting balance. A ledger error never fails the Reset.
+  if (paymentsEnabled()) {
+    try {
+      const { errors } = await ensureWallets(store, options.wallNow);
+      for (const error of errors) await store.appendEvent({ id: newId("evt"), at, kind: "payment_failed", actor: "system", text: `Wallet setup failed, sandbox error: ${error}`.slice(0, 240) });
+    } catch (error) {
+      console.error("wallet setup failed", error instanceof Error ? error.message : "unknown error");
+    }
+  }
   return { resetCount };
 }
 

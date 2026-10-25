@@ -1,11 +1,12 @@
 import { runAgentTurn, type TurnResult } from "@/lib/model";
-import { type ActivityEvent, type AgentId, type MemberId, type Plan, type PlanGroup, type Signal } from "@/lib/protocol";
+import { type ActivityEvent, type AgentId, type MemberId, type Plan, type PlanGroup, type Signal, isPaymentType } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
 import { fallbackGroupConfirm, fallbackGroupOpening, fallbackOpening, fallbackReply, type FallbackOutcome } from "./fallback";
 import { failThread } from "./inbound";
-import { newId } from "./ids";
+import { runPaymentTurn } from "./payment-runtime";
+import { newId, seatOf } from "./ids";
 import { ownFreeBlocks } from "./calendar";
 import { groupCandidates, groupReplies, memberContexts, planForContext } from "./group";
 import { agentInstructions, groupOpeningInput, groupTurnInput, inboxTurnInput, signalTurnInput } from "./prompts";
@@ -121,6 +122,10 @@ export async function runInboxTurn(options: RuntimeOptions & { agent: MemberId; 
   if (plan?.group && agent === plan.group.coordinator) return runGroupTurn({ ...options, plan });
 
   const thread = (await store.listMessages(contextId)).map((record) => record.message);
+  // A payment arrived: the payments channel has its own turn and its own tools.
+  const lastMessage = thread.at(-1);
+  const seat = seatOf(agent);
+  if (lastMessage && isPaymentType(lastMessage.type)) return seat ? runPaymentTurn({ store, agent: seat, contextId, wallNow: options.wallNow, deliver: options.deliver }) : { status: "completed", finalText: "", nudged: false, toolCalls: [], calls: [], totalMs: 0 };
   const friendLast = [...thread].reverse().find((message) => message.from !== agent);
   const friend = friendLast?.from ?? (agent === "aaron" ? "lisa" : "aaron");
   const nowMs = options.wallNow?.() ?? Date.now();
