@@ -15,6 +15,9 @@ export const DEFAULT_MODEL = "muse-spark-1.3";
 export const MAX_TOOL_CALLS_PER_TURN = 6;
 
 const CHAIN_RETRY_DELAYS_MS = [400, 800, 1600];
+// The Meta API answers a fraction of calls with 404 model_not_found while the model is perfectly available
+// (about one in four during the C5 rehearsal). It is a routing flap on their side; the next call goes through.
+const MODEL_NOT_FOUND_RETRY_DELAYS_MS = [150, 400, 900, 1800];
 
 let cachedClient: OpenAI | undefined;
 
@@ -143,16 +146,27 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// A just-finished response can briefly answer a chain call with 400 or 404; retry after a pause.
+function isModelNotFound(error: unknown): boolean {
+  return error instanceof OpenAI.APIError && error.status === 404 && (error.code === "model_not_found" || /requested model was not found/i.test(error.message));
+}
+
+// A just-finished response can briefly answer a chain call with 400 or 404; retry after a pause. A 404
+// model_not_found is retried on any call, chained or not, because the model is there on the next try.
 async function createResponse(
   params: ResponseCreateParamsNonStreaming,
 ): Promise<{ response: Response; chainRetries: number }> {
   const client = getClient();
   let chainRetries = 0;
+  let notFoundRetries = 0;
   for (;;) {
     try {
       return { response: await client.responses.create(params), chainRetries };
     } catch (error) {
+      if (isModelNotFound(error) && notFoundRetries < MODEL_NOT_FOUND_RETRY_DELAYS_MS.length) {
+        await sleep(MODEL_NOT_FOUND_RETRY_DELAYS_MS[notFoundRetries]);
+        notFoundRetries += 1;
+        continue;
+      }
       const status = statusOf(error);
       const retriable = params.previous_response_id && (status === 400 || status === 404);
       if (!retriable || chainRetries >= CHAIN_RETRY_DELAYS_MS.length) throw error;

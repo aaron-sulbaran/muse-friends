@@ -160,6 +160,29 @@ describe("runAgentTurn (stateless, the default)", () => {
   });
 });
 
+describe("a model_not_found flap on the Meta API", () => {
+  it("retries a 404 model_not_found on a stateless call and carries on", async () => {
+    const fake = installFakeModel([{ error: 404, code: "model_not_found" }, { error: 404, code: "model_not_found" }, { text: "done" }]);
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.status).toBe("completed");
+    expect(fake.calls).toHaveLength(3);
+  });
+
+  it("gives up after the retries and reports the API error", async () => {
+    installFakeModel(Array.from({ length: 6 }, () => ({ error: 404, code: "model_not_found" })));
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.status).toBe("failed");
+    expect(result.failure).toMatchObject({ detail: "api_error", message: expect.stringContaining("model was not found") });
+  });
+
+  it("does not retry a plain 404 that is not model_not_found", async () => {
+    const fake = installFakeModel([{ error: 404 }, { text: "unused" }]);
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.status).toBe("failed");
+    expect(fake.calls).toHaveLength(1);
+  });
+});
+
 describe("runAgentTurn (chain mode, the TECH_SPEC fallback)", () => {
   it("sends only new items with previous_response_id and still resends instructions, tools, and effort", async () => {
     const fake = installFakeModel([{ calls: [{ name: "get_my_calendar", args: {} }] }, { text: "done" }]);
