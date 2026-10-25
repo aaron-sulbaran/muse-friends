@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { withRoom, withoutRoom } from "@/app/api/_lib/room";
 import { refundChat, reserveChat } from "@/lib/agent/caps";
 import { runChatTurn } from "@/lib/agent/chat";
 import { CHAT_QUESTION_MAX } from "@/lib/protocol";
 import { ROLE_TO_AGENT } from "@/lib/seed/fixtures";
-import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,22 +26,24 @@ function refuse(message: string, status: number) {
  * answers 200 with the question and the answer, 429 past the cap, or 503 with the honest reason when the model is down.
  */
 export async function POST(request: Request) {
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const raw = await request.json().catch(() => null);
+  const parsed = bodySchema.safeParse(withoutRoom(raw));
   if (!parsed.success) return refuse(`Expected { text: 1 to ${CHAT_QUESTION_MAX} characters, role?: "a" }`, 400);
   if (parsed.data.role !== "a") return refuse("Only the first phone chats with its Muse; the friend's side has no chat.", 403);
-  const store = await getStore();
-
-  const reserved = reserveChat();
-  if (!reserved.ok) {
-    return NextResponse.json(
-      { paused: true, reason: reserved.reason, text: reserved.text, budget: reserved.budget },
-      { status: 429, headers: { "Retry-After": String(reserved.budget.retryAfterSeconds ?? 60) } },
-    );
-  }
-  const outcome = await runChatTurn({ store, agent: ROLE_TO_AGENT[parsed.data.role], text: parsed.data.text });
-  if (!outcome.ok) {
-    refundChat();
-    return refuse(outcome.error, outcome.status);
-  }
-  return NextResponse.json({ data: { question: outcome.question, answer: outcome.answer, budget: reserved.budget }, error: null });
+  // The chat reads and writes the room the call names (?room=), the demo room when there is none.
+  return withRoom(request, raw, {}, async (room) => {
+    const reserved = reserveChat(room.id);
+    if (!reserved.ok) {
+      return NextResponse.json(
+        { paused: true, reason: reserved.reason, text: reserved.text, budget: reserved.budget },
+        { status: 429, headers: { "Retry-After": String(reserved.budget.retryAfterSeconds ?? 60) } },
+      );
+    }
+    const outcome = await runChatTurn({ store: room.store, agent: ROLE_TO_AGENT[parsed.data.role], text: parsed.data.text });
+    if (!outcome.ok) {
+      refundChat(room.id);
+      return refuse(outcome.error, outcome.status);
+    }
+    return NextResponse.json({ data: { question: outcome.question, answer: outcome.answer, budget: reserved.budget }, error: null });
+  });
 }

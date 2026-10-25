@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { withRoom, withoutRoom } from "@/app/api/_lib/room";
 import { categoriesForTier, resetDemo, setPayments, setSharePolicy } from "@/lib/agent/controls";
 import { otherAgent } from "@/lib/agent/ids";
 import { Category, PAYMENT_MAX_DOLLARS, ShareTier } from "@/lib/protocol";
 import { ROLE_TO_AGENT } from "@/lib/seed/fixtures";
-import { getStore } from "@/lib/store";
+import { toUiSnapshot } from "@/lib/ui/snapshot";
 import { readSnapshot } from "@/lib/ui/source";
 
 export const dynamic = "force-dynamic";
@@ -55,42 +56,46 @@ function badBodyMessage(raw: unknown): string {
   return "Expected a privacy change, a payments change (side, enabled, cap), a reset, or the simulated friend switch";
 }
 
-/** The controls: a sharing switch on either side, Reset for the one demo room, and the simulated friend for a judge playing alone. */
+/** The controls: a sharing switch on either side, payments, Reset for the one demo room, and the simulated friend for a judge playing alone. */
 export async function POST(request: Request) {
   const raw = await request.json().catch(() => null);
-  const parsed = bodySchema.safeParse(raw);
-  if (!parsed.success) return refuse(badBodyMessage(raw), 400);
+  const parsed = bodySchema.safeParse(withoutRoom(raw));
+  if (!parsed.success) return refuse(badBodyMessage(withoutRoom(raw)), 400);
   const body = parsed.data;
-  const store = await getStore();
+  // Reset and the simulated friend switch act on the room the call names (?room=) and on no other.
+  return withRoom(request, raw, { mint: true }, async (room) => {
+    const store = room.store;
 
-  if (body.type === "reset") {
-    const { resetCount } = await resetDemo(store);
-    return NextResponse.json({ data: { reset: true, resetCount }, error: null });
-  }
-  if (body.type === "simulated_friend") {
-    // Switching who plays side b starts the room over, so the judge begins from the empty stage.
-    const { resetCount } = await resetDemo(store, { simulatedFriend: body.on });
-    return NextResponse.json({ data: { simulatedFriend: body.on, resetCount }, error: null });
-  }
-  if (body.type === "payments") {
+    if (body.type === "reset") {
+      const { resetCount } = await resetDemo(store);
+      return NextResponse.json({ data: { reset: true, resetCount }, error: null });
+    }
+    if (body.type === "simulated_friend") {
+      // Switching who plays side b starts the room over, so the judge begins from the empty stage.
+      const { resetCount } = await resetDemo(store, { simulatedFriend: body.on });
+      return NextResponse.json({ data: { simulatedFriend: body.on, resetCount }, error: null });
+    }
+    if (body.type === "payments") {
+      const owner = ROLE_TO_AGENT[body.side];
+      const result = await setPayments(store, { owner, friend: otherAgent(owner), enabled: body.enabled, capPerPlan: body.cap });
+      if (!result.ok) return refuse(result.error, result.status);
+      return NextResponse.json({ data: { payments: result.value.policy.payments }, error: null });
+    }
+    if (body.tier === "off") return refuse("Turning sharing off ends the plan, so it stays on in this demo", 409);
+    if (body.category === "availability" && body.on === false) {
+      return refuse("Free times are how the Muses find a day, so they stay on in this demo", 409);
+    }
     const owner = ROLE_TO_AGENT[body.side];
-    const result = await setPayments(store, { owner, friend: otherAgent(owner), enabled: body.enabled, capPerPlan: body.cap });
+    const friend = otherAgent(owner);
+    const result = await setSharePolicy(store, {
+      owner,
+      friend,
+      tier: body.tier,
+      // Picking a tier refills every switch from it; flipping one switch changes that category alone.
+      categories: body.category !== undefined && body.on !== undefined ? { [body.category]: body.on } : body.tier !== undefined ? categoriesForTier(body.tier) : undefined,
+    });
     if (!result.ok) return refuse(result.error, result.status);
-    return NextResponse.json({ data: { payments: result.value.policy.payments }, error: null });
-  }
-  if (body.tier === "off") return refuse("Turning sharing off ends the plan, so it stays on in this demo", 409);
-  if (body.category === "availability" && body.on === false) {
-    return refuse("Free times are how the Muses find a day, so they stay on in this demo", 409);
-  }
-  const owner = ROLE_TO_AGENT[body.side];
-  const friend = otherAgent(owner);
-  const result = await setSharePolicy(store, {
-    owner,
-    friend,
-    tier: body.tier,
-    // Picking a tier refills every switch from it; flipping one switch changes that category alone.
-    categories: body.category !== undefined && body.on !== undefined ? { [body.category]: body.on } : body.tier !== undefined ? categoriesForTier(body.tier) : undefined,
+    const sharing = room.isDemo ? (await readSnapshot()).sharing[owner] : toUiSnapshot(await store.snapshot(), { mode: "live" }).sharing[owner];
+    return NextResponse.json({ data: { sharing, replayed: result.value.replayed.length }, error: null });
   });
-  if (!result.ok) return refuse(result.error, result.status);
-  return NextResponse.json({ data: { sharing: (await readSnapshot()).sharing[owner], replayed: result.value.replayed.length }, error: null });
 }
