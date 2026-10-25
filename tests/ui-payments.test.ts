@@ -28,6 +28,14 @@ function payment(over: Partial<UiPayment> = {}): UiPayment {
   };
 }
 
+const wentOutcome = { result: "went" as const, at: "2026-10-28T09:00:00-05:00", nextIdeaId: null, chosenBy: null };
+
+/** The plan after the event, once the person has said they went: the only time the friend's Muse asks for her half. */
+function afterWent(over: Partial<UiSnapshot> = {}): UiSnapshot {
+  const base = at("followed_up", over);
+  return { ...base, plan: { ...base.plan!, outcome: wentOutcome } };
+}
+
 function at(state: PlanState, over: Partial<UiSnapshot> = {}): UiSnapshot {
   const base = toUiSnapshot(snapshotAtPlanState(state), live);
   return {
@@ -62,28 +70,36 @@ describe("the wallet chip", () => {
 });
 
 describe("whether a phone offers Settle up", () => {
-  it("waits for a confirmed plan", () => {
-    for (const state of ["detected", "negotiating", "awaiting_humans", "dropped"] as const) {
+  it("waits for the event: hidden until the plan is followed up and the person said they went", () => {
+    for (const state of ["detected", "negotiating", "awaiting_humans", "dropped", "confirmed", "scheduled", "reminded", "happened"] as const) {
       expect(settleOffer(at(state), snapshotPlan(state), "aaron")).toEqual({ kind: "hidden" });
     }
-    for (const state of ["confirmed", "scheduled", "reminded", "happened", "followed_up"] as const) {
-      expect(settleOffer(at(state), snapshotPlan(state), "aaron")).toMatchObject({ kind: "ready", cap: 30 });
-    }
+    const followed = at("followed_up");
+    expect(settleOffer(followed, { ...followed.plan!, outcome: null }, "aaron")).toEqual({ kind: "hidden" });
+    expect(settleOffer(followed, { ...followed.plan!, outcome: { ...wentOutcome, result: "didnt" } }, "aaron")).toEqual({ kind: "hidden" });
+    const went = afterWent();
+    expect(settleOffer(went, went.plan, "aaron")).toMatchObject({ kind: "ready", cap: 30, place: went.plan!.activityTitle });
   });
 
   it("offers to turn payments on when this seat has not, and says nothing when the room has payments off", () => {
-    expect(settleOffer(at("scheduled"), snapshotPlan("scheduled"), "lisa")).toMatchObject({ kind: "turn_on" });
-    expect(settleOffer(at("scheduled", { sandbox: { enabled: false, connected: false, text: "Payments are switched off" } }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "hidden" });
+    const went = afterWent();
+    expect(settleOffer(went, went.plan, "lisa")).toMatchObject({ kind: "turn_on" });
+    const switchedOff = afterWent({ sandbox: { enabled: false, connected: false, text: "Payments are switched off" } });
+    expect(settleOffer(switchedOff, switchedOff.plan, "aaron")).toEqual({ kind: "hidden" });
   });
 
   it("treats a cap of 0 as off, as the server does", () => {
-    expect(settleOffer(at("scheduled", { paymentsScope: { aaron: { enabled: true, cap: 0 }, lisa: off } }), snapshotPlan("scheduled"), "aaron")).toMatchObject({ kind: "turn_on" });
+    const zero = afterWent({ paymentsScope: { aaron: { enabled: true, cap: 0 }, lisa: off } });
+    expect(settleOffer(zero, zero.plan, "aaron")).toMatchObject({ kind: "turn_on" });
   });
 
   it("holds a second ask while one payment is still waiting, calls the plan settled once the friend kept it, and offers again if it came back", () => {
-    expect(settleOffer(at("scheduled", { payments: [payment({ status: "sent" })] }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "waiting" });
-    expect(settleOffer(at("scheduled", { payments: [payment({ status: "received" })] }), snapshotPlan("scheduled"), "aaron")).toEqual({ kind: "settled", amount: 15 });
-    expect(settleOffer(at("scheduled", { payments: [payment({ status: "refunded" })] }), snapshotPlan("scheduled"), "aaron")).toMatchObject({ kind: "ready", cap: 30 });
+    const sentOne = afterWent({ payments: [payment({ status: "sent" })] });
+    const keptOne = afterWent({ payments: [payment({ status: "received" })] });
+    const backOne = afterWent({ payments: [payment({ status: "refunded" })] });
+    expect(settleOffer(sentOne, sentOne.plan, "aaron")).toEqual({ kind: "waiting" });
+    expect(settleOffer(keptOne, keptOne.plan, "aaron")).toEqual({ kind: "settled", amount: 15 });
+    expect(settleOffer(backOne, backOne.plan, "aaron")).toMatchObject({ kind: "ready", cap: 30 });
   });
 });
 
@@ -105,11 +121,22 @@ describe("money in the chat", () => {
     expect(sideOfPayment(payment(), "lisa")).toBe("payee");
   });
 
-  it("offers Settle up after a confirmed plan, and not while a payment waits", () => {
-    expect(kinds(viewForRole(at("scheduled"), "a").items)).toContain("settle-card");
-    expect(kinds(viewForRole(at("scheduled"), "b").items)).toContain("settle-card");
-    expect(kinds(viewForRole(at("scheduled", { payments: [payment()] }), "a").items)).not.toContain("settle-card");
-    expect(kinds(viewForRole(at("awaiting_humans"), "a").items)).not.toContain("settle-card");
+  it("asks for the other half only after the event, as the last card, and never while a payment waits", () => {
+    for (const state of ["awaiting_humans", "confirmed", "scheduled", "reminded"] as const) {
+      expect(kinds(viewForRole(at(state), "a").items)).not.toContain("settle-card");
+    }
+    // Followed up, but the person has not answered "How did it go?" yet: still nothing owed.
+    const asked = at("followed_up");
+    expect(kinds(viewForRole({ ...asked, plan: { ...asked.plan!, outcome: null } }, "a").items)).not.toContain("settle-card");
+    const view = viewForRole(afterWent(), "a").items;
+    expect(kinds(view)).toContain("settle-card");
+    expect(kinds(viewForRole(afterWent(), "b").items)).toContain("settle-card");
+    // After the outcome reply and the next idea, never before them, and nothing with buttons below it.
+    const settle = view.findIndex((item) => item.kind === "settle-card");
+    expect(view.findIndex((item) => item.kind === "bubble" && item.id === "outcome-reply")).toBeLessThan(settle);
+    expect(view.slice(settle + 1).filter((item) => ["plan-card", "draft-card", "hold-row", "outcome-replies", "payment-card"].includes(item.kind))).toEqual([]);
+    expect(view[settle]).toMatchObject({ museName: "Sprout" });
+    expect(kinds(viewForRole(afterWent({ payments: [payment()] }), "a").items)).not.toContain("settle-card");
   });
 
   it("leaves the chat exactly as it was when payments are off for the room", () => {

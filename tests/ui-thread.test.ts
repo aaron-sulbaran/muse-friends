@@ -3,7 +3,7 @@ import { snapshotAtPlanState } from "@/lib/seed/states";
 import { copy } from "@/lib/ui/copy";
 import { messageTitle } from "@/lib/ui/format";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
-import { endsRun, startsRun, threadLines, type ThreadLine } from "@/lib/ui/thread";
+import { FRIEND_REPLY_DELAY_MS, endsRun, handoffAt, startsRun, threadLines, type ThreadLine } from "@/lib/ui/thread";
 import type { Decision, UiMessage, UiSnapshot } from "@/lib/ui/types";
 
 const live = { mode: "live" } as const;
@@ -11,6 +11,11 @@ const live = { mode: "live" } as const;
 /** The agreed run from the fixtures: intent, propose, counter, counter, accept, accept. */
 function agreed(): UiSnapshot {
   return toUiSnapshot(snapshotAtPlanState("awaiting_humans"), live);
+}
+
+/** The same plan after the person handed the message off: the plan is scheduled, so the friend has something to reply to. */
+function handedOff(): UiSnapshot {
+  return toUiSnapshot(snapshotAtPlanState("scheduled"), live);
 }
 
 /** The snapshot with only the messages named, in the order given. */
@@ -86,26 +91,32 @@ describe("what is not part of the conversation", () => {
 });
 
 describe("the simulated friend's own lines", () => {
-  it("appear only once her decision is in, and carry simulated: true", () => {
-    expect(threadLines(withMichelle(agreed(), "pending"), "a").some((line) => line.sender.kind === "friend")).toBe(false);
-    const accepted = threadLines(withMichelle(agreed(), "accepted"), "a");
-    const hers = accepted.filter((line) => line.sender.kind === "friend");
-    expect(hers).toEqual([expect.objectContaining({ text: copy.threadFriendYes, sender: { kind: "friend", name: "Michelle", simulated: true } })]);
-    expect(accepted.at(-1)).toBe(hers[0]);
+  it("her yes comes only once the message was handed off, a few seconds on, as a reply, and carries simulated: true", () => {
+    expect(threadLines(withMichelle(handedOff(), "pending"), "a").some((line) => line.sender.kind === "friend")).toBe(false);
+    // Her decision can be in before the person has sent anything; nothing is drawn until there is a message to answer.
+    expect(threadLines(withMichelle(agreed(), "accepted"), "a").some((line) => line.sender.kind === "friend")).toBe(false);
+    const snapshot = withMichelle(handedOff(), "accepted");
+    const hers = threadLines(snapshot, "a").filter((line) => line.sender.kind === "friend");
+    expect(hers).toEqual([expect.objectContaining({ text: copy.threadFriendYes, phase: "reply", sender: { kind: "friend", name: "Michelle", simulated: true } })]);
+    expect(Date.parse(hers[0].at!) - Date.parse(handoffAt(snapshot.plan)!)).toBe(FRIEND_REPLY_DELAY_MS);
   });
 
-  it("says no when she declines", () => {
+  it("waits for the phone's timer: with the reply not yet due, there is no line", () => {
+    expect(threadLines(withMichelle(handedOff(), "accepted"), "a", { friendReplied: false }).some((line) => line.sender.kind === "friend")).toBe(false);
+  });
+
+  it("says no when she declines, where the plan dropped", () => {
     const declined = threadLines(withMichelle(agreed(), "declined"), "a");
-    expect(declined.at(-1)?.text).toBe(copy.threadFriendNo);
+    expect(declined.at(-1)).toMatchObject({ text: copy.threadFriendNo, phase: "after" });
   });
 
   it("is her phone's own voice on side b, so it is you there", () => {
-    const line = threadLines(withMichelle(agreed(), "accepted"), "b").at(-1);
+    const line = threadLines(withMichelle(handedOff(), "accepted"), "b").at(-1);
     expect(line?.sender).toEqual({ kind: "you", name: "Michelle", simulated: true });
   });
 
   it("is never scripted for a real friend, whose lines are their own", () => {
-    const real = { ...agreed(), simulatedFriend: false, plan: { ...agreed().plan!, decisions: { a: "pending" as const, b: "accepted" as const } } };
+    const real = { ...handedOff(), simulatedFriend: false, plan: { ...handedOff().plan!, decisions: { a: "pending" as const, b: "accepted" as const } } };
     expect(threadLines(real, "a").some((line) => line.sender.kind === "friend" || line.sender.kind === "you")).toBe(false);
   });
 });
@@ -163,15 +174,15 @@ describe("your private conversation with your Muse", () => {
   });
 
   it("sits after the friend's answer when you asked once she had answered, and before it when you asked first", () => {
-    const settled = "2026-10-25T14:00:50-05:00";
-    const plan = { ...agreed().plan!, decisions: { a: "accepted" as const, b: "accepted" as const }, history: [...agreed().plan!.history, { state: "confirmed" as const, at: settled }] };
-    const base = { ...withMichelle(agreed(), "accepted"), plan };
-    const late = threadLines({ ...base, chat }, "a").map((line) => line.id);
-    expect(late.at(-3)).toBe("thread-friend-accepted");
-    expect(late.slice(-2)).toEqual(["thread-chat-chat_1", "thread-chat-chat_2"]);
-    const early = chat.map((entry) => ({ ...entry, at: entry.at.replace("14:01:0", "14:00:4") }));
-    const ids = threadLines({ ...base, chat: early }, "a").map((line) => line.id);
-    expect(ids.indexOf("thread-chat-chat_2")).toBeLessThan(ids.indexOf("thread-friend-accepted"));
+    const base = withMichelle(handedOff(), "accepted");
+    const repliedAt = Date.parse(handoffAt(base.plan)!) + FRIEND_REPLY_DELAY_MS;
+    const at = (offsetMs: number) => new Date(repliedAt + offsetMs).toISOString();
+    const lateChat = chat.map((entry, index) => ({ ...entry, at: at(30_000 + index * 1000) }));
+    const late = threadLines({ ...base, chat: lateChat }, "a").map((line) => line.id);
+    expect(late.indexOf("thread-friend-accepted")).toBeLessThan(late.indexOf("thread-chat-chat_1"));
+    const earlyChat = chat.map((entry, index) => ({ ...entry, at: at(-3000 + index * 1000) }));
+    const early = threadLines({ ...base, chat: earlyChat }, "a").map((line) => line.id);
+    expect(early.indexOf("thread-chat-chat_2")).toBeLessThan(early.indexOf("thread-friend-accepted"));
   });
 
   it("needs no plan: you can ask before anything has started", () => {

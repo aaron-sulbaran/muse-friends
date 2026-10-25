@@ -12,6 +12,7 @@ import { runInProgress } from "@/lib/ui/entry";
 import { friendsIndicator, pickerMode, ROOM_FRIEND, roomFriendTier, shareFriend, startRequest } from "@/lib/ui/onboarding-flow";
 import { getRoom } from "@/lib/ui/room";
 import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
+import { useFriendReplied } from "@/lib/ui/use-friend-reply";
 import { useOnboarding } from "@/lib/ui/use-onboarding";
 import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
 import { DaySeparator, TypingDots } from "./ChatBubble";
@@ -96,7 +97,8 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem, lineOf: (
 
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
 export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, onOpenPayment, standalone, onboarding = false }: Props) {
-  const view = viewForRole(snapshot, role);
+  const friendReplied = useFriendReplied(snapshot.plan);
+  const view = viewForRole(snapshot, role, { friendReplied });
   const [pending, setPending] = useState(false);
   const [replanError, setReplanError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -298,6 +300,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             offer={item.offer}
             friendName={item.friendName}
             friendMuse={item.friendMuse}
+            museName={item.museName}
             paymentCount={snapshot.payments.length}
             readOnly={readOnly}
             onChanged={onChanged}

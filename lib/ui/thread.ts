@@ -1,6 +1,6 @@
 import { copy } from "./copy";
 import { messageTitle, namesFor, policyStampFor } from "./format";
-import type { AgentId, MemberId, MessageType, Role, UiSnapshot } from "./types";
+import type { AgentId, MemberId, MessageType, Role, UiPlan, UiSnapshot } from "./types";
 
 /*
  * The phone thread as people read it (D32): the person and their friend still talking, with both Muses in the same
@@ -29,9 +29,25 @@ export type ThreadLine = {
   /** For your own private question: the Muse it went to, named above the bubble. */
   to?: string;
   at?: string;
-  /** Where in the chat it belongs: "talk" with the Muses' turns before the offer, "after" once the person has decided. */
-  phase?: "talk" | "after";
+  /**
+   * Where in the chat it belongs: "talk" with the Muses' turns before the offer, "after" once the person has decided, and
+   * "reply" for the friend's answer to the message the person sent her, which sits right after the draft and its handoff.
+   */
+  phase?: "talk" | "after" | "reply";
 };
+
+/** The wait between the person's handoff and the simulated friend's answer, so it reads as a reply and not an echo. */
+export const FRIEND_REPLY_DELAY_MS = 6000;
+
+export type ThreadOptions = {
+  /** False while the friend's answer to the handoff is still being "typed": the line is left out until the phone's own timer says so. */
+  friendReplied?: boolean;
+};
+
+/** When the person handed the message off (the plan was scheduled): the moment the friend's answer is a reply to. */
+export function handoffAt(plan: Pick<UiPlan, "history"> | null | undefined): string | undefined {
+  return plan?.history.find((entry) => entry.state === "scheduled")?.at;
+}
 
 const roleAgent: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
 
@@ -41,7 +57,7 @@ const PLAN_CHANGING: ReadonlySet<MessageType> = new Set(["propose", "counter", "
 /** A friend who is played by a model says one thing, once she has decided; a real friend's lines are their own. */
 const decisionLine = { accepted: copy.threadFriendYes, declined: copy.threadFriendNo } as const;
 
-export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
+export function threadLines(snapshot: UiSnapshot, role: Role, options: ThreadOptions = {}): ThreadLine[] {
   const plan = snapshot.plan;
   const names = namesFor(snapshot);
   const me = roleAgent[role];
@@ -62,13 +78,20 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
     }
   }
 
-  // The simulated friend always sits in the second seat. She answers when the plan settles, so that is when her line belongs;
-  // a plan whose history does not show it yet puts her after the last turn.
+  // The simulated friend always sits in the second seat. Her yes is a reply to the message the person just sent her, so it
+  // comes only after the handoff, a few seconds on (the phone's timer lifts `friendReplied`); her no is where the plan dropped.
   const decision = plan?.decisions.b ?? "pending";
   if (snapshot.simulatedFriend && decision !== "pending") {
     const sender: Sender = { kind: role === "a" ? "friend" : "you", name: names.human.lisa, simulated: true };
-    const settled = plan?.history.find((entry) => entry.state === (decision === "accepted" ? "confirmed" : "dropped"))?.at;
-    lines.push({ id: `thread-friend-${decision}`, sender, text: decisionLine[decision], at: settled ?? lines.at(-1)?.at, phase: "after" });
+    if (decision === "accepted") {
+      const handoff = handoffAt(plan);
+      if (handoff && options.friendReplied !== false) {
+        lines.push({ id: "thread-friend-accepted", sender, text: decisionLine.accepted, at: new Date(Date.parse(handoff) + FRIEND_REPLY_DELAY_MS).toISOString(), phase: "reply" });
+      }
+    } else {
+      const settled = plan?.history.find((entry) => entry.state === "dropped")?.at;
+      lines.push({ id: "thread-friend-declined", sender, text: decisionLine.declined, at: settled ?? lines.at(-1)?.at, phase: "after" });
+    }
   }
 
   // Your own private conversation with your Muse (D31): your question, and its answer as an aside. Only side a has one.

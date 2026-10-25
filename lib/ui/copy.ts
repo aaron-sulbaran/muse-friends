@@ -156,8 +156,6 @@ export const copy = {
   settleNoteLabel: "Optional note for your Muse about how to settle up",
   settleAction: "Settle up",
   settleWorking: "Your Muse is settling up...",
-  settleOffTitle: "Settle up is off",
-  settleOffDetail: "Your Muse can prepare a payment for this plan and show you where every dollar comes from; you confirm each one.",
   settleOffAction: "Turn on payments",
   paymentsSection: "Payments",
   paymentsTabSettings: "Settings",
