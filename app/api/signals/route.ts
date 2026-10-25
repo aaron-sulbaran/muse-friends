@@ -1,13 +1,11 @@
-import { after } from "next/server";
 import { z } from "zod";
+import { converse, withRoom, withoutRoom } from "@/app/api/_lib/room";
 import { reserveRun, runBudget } from "@/lib/agent/caps";
 import { injectSignal, runSignalTurn } from "@/lib/agent/runtime";
 import { newId } from "@/lib/agent/ids";
-import { httpDeliver } from "@/lib/agent/wire";
 import { getLiveReel } from "@/lib/instagram";
 import type { Signal } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
-import { getStore } from "@/lib/store";
 
 // "Lisa sent Aaron a reel": injects the signal and starts the receiving agent's turn after responding.
 // The reel is read live from its owner's Instagram (lib/instagram.ts) when a token is set, else the seeded,
@@ -25,45 +23,48 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = Body.safeParse(await request.json().catch(() => ({})));
+  const raw = await request.json().catch(() => ({}));
+  const body = Body.safeParse(withoutRoom(raw));
   if (!body.success) return Response.json({ error: z.prettifyError(body.error) }, { status: 400 });
-
-  // The public URL spends model credits on every live run. Take a slot first; nothing is started without one.
-  const reserved = reserveRun();
-  if (!reserved.ok) {
-    return Response.json(
-      { paused: true, reason: reserved.reason, text: reserved.text, budget: reserved.budget },
-      { status: 429, headers: { "Retry-After": String(reserved.budget.retryAfterSeconds ?? 60) } },
-    );
-  }
-  const budget = reserved.budget;
-  const store = await getStore();
-
-  const seeded = rawShawarmaSignal();
-  const live = await getLiveReel();
-  const signal: Signal = live
-    ? {
-        ...seeded,
-        id: newId("sig"),
-        media: live,
-        provenance: {
-          source: "instagram_graph_api",
-          shapedLike: "Instagram Graph API media fields",
-          fictional: false,
-          note: "Read live through the Instagram Graph API from the reel owner's own account, with their consent.",
-        },
-      }
-    : { ...seeded, id: newId("sig") };
-  const { contextId, planId } = await injectSignal(store, signal);
-
-  const origin = new URL(request.url).origin;
-  after(async () => {
-    try {
-      await runSignalTurn({ store, agent: signal.to, signalId: signal.id, contextId, deliver: httpDeliver(origin, signal.to) });
-    } catch (error) {
-      console.error("signal turn failed", error);
+  // A phone's room (?room=) gets its own store; no room, or "demo", is the demo room exactly as before.
+  return withRoom(request, raw, { mint: true }, async (room) => {
+    // The public URL spends model credits on every live run. Take a slot first; nothing is started without one.
+    const reserved = reserveRun(room.id);
+    if (!reserved.ok) {
+      return Response.json(
+        { paused: true, reason: reserved.reason, text: reserved.text, budget: reserved.budget },
+        { status: 429, headers: { "Retry-After": String(reserved.budget.retryAfterSeconds ?? 60) } },
+      );
     }
-  });
+    const budget = reserved.budget;
+    const store = room.store;
 
-  return Response.json({ signalId: signal.id, contextId, planId, status: { state: "working" }, budget }, { status: 202 });
+    const seeded = rawShawarmaSignal();
+    const live = await getLiveReel();
+    const signal: Signal = live
+      ? {
+          ...seeded,
+          id: newId("sig"),
+          media: live,
+          provenance: {
+            source: "instagram_graph_api",
+            shapedLike: "Instagram Graph API media fields",
+            fictional: false,
+            note: "Read live through the Instagram Graph API from the reel owner's own account, with their consent.",
+          },
+        }
+      : { ...seeded, id: newId("sig") };
+    const { contextId, planId } = await injectSignal(store, signal);
+
+    const origin = new URL(request.url).origin;
+    room.background(async (scope) => {
+      try {
+        await converse(scope, contextId, () => runSignalTurn({ store: scope.store, agent: signal.to, signalId: signal.id, contextId, deliver: scope.deliver(origin, signal.to) }));
+      } catch (error) {
+        console.error("signal turn failed", error);
+      }
+    });
+
+    return Response.json({ signalId: signal.id, contextId, planId, status: { state: "working" }, budget }, { status: 202 });
+  });
 }

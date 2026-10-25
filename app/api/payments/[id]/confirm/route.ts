@@ -1,9 +1,8 @@
+import { converse, withRoom, withoutRoom } from "@/app/api/_lib/room";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { confirmProposal } from "@/lib/agent/proposals";
-import { httpDeliver } from "@/lib/agent/wire";
 import { ROLE_TO_AGENT } from "@/lib/seed/fixtures";
-import { getStore } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -18,11 +17,21 @@ const bodySchema = z.strictObject({ role: z.enum(["a", "b"]) });
  */
 export async function POST(request: Request, ctx: RouteContext<"/api/payments/[id]/confirm">) {
   const { id } = await ctx.params;
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  const raw = await request.json().catch(() => null);
+  const parsed = bodySchema.safeParse(withoutRoom(raw));
   if (!parsed.success) return NextResponse.json({ data: null, error: { message: "Expected { role: a or b }" } }, { status: 400 });
   const agent = ROLE_TO_AGENT[parsed.data.role];
   const origin = new URL(request.url).origin;
-  const result = await confirmProposal({ store: await getStore(), deliver: httpDeliver(origin, agent) }, id, agent);
-  if (!result.ok) return NextResponse.json({ data: null, error: { message: result.error } }, { status: result.status });
-  return NextResponse.json({ data: { payment: { id: result.proposal.paymentId, status: result.proposal.status, amount: result.proposal.amount }, already: result.already }, error: null });
+  return withRoom(request, raw, {}, async (room) => {
+    const contextId = (await room.store.listPlans()).at(-1)?.contextId ?? "";
+    let outcome: Awaited<ReturnType<typeof confirmProposal>> | null = null;
+    // In a room the friend's Muse answers in this process, right after the message is sent.
+    await converse(room, contextId, async () => {
+      outcome = await confirmProposal({ store: room.store, deliver: room.deliver(origin, agent) }, id, agent);
+    });
+    const result = outcome as Awaited<ReturnType<typeof confirmProposal>> | null;
+    if (!result) return NextResponse.json({ data: null, error: { message: "Could not complete that" } }, { status: 500 });
+    if (!result.ok) return NextResponse.json({ data: null, error: { message: result.error } }, { status: result.status });
+    return NextResponse.json({ data: { payment: { id: result.proposal.paymentId, status: result.proposal.status, amount: result.proposal.amount }, already: result.already }, error: null }, { status: 200 });
+  });
 }

@@ -6,7 +6,7 @@
 
 export const DEMO_ROOM = "demo";
 
-const ROOM_PATTERN = /^[a-z0-9]{4,24}$/;
+export const ROOM_PATTERN = /^[a-z0-9]{4,24}$/;
 
 /** The room an address names, or "demo". Anything that is not a short lowercase id counts as no room. */
 export function roomFromSearch(search: string): string {
