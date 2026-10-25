@@ -15,7 +15,7 @@ import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLin
 import { useFriendReplied } from "@/lib/ui/use-friend-reply";
 import { useOnboarding } from "@/lib/ui/use-onboarding";
 import { AFTER_SKIP_IDS, SKIP_AFTER_MS, SKIP_SEPARATOR_IDS, skipTarget } from "@/lib/ui/time-skip";
-import { useTimeSkip } from "@/lib/ui/use-time-skip";
+import { useSkipReveal, useTimeSkip } from "@/lib/ui/use-time-skip";
 import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
 import { DaySeparator, TypingDots } from "./ChatBubble";
 import { AgreedLine } from "./AgreedLine";
@@ -137,9 +137,11 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const onboardingOn = onboarding && role === "a" && !readOnly;
   const onboardingActive = onboardingOn && onboardingState.step !== "done";
   const friendsOff = onboardingOn && onboardingState.step === "done" && !onboardingState.friendsOn;
-  const chatItems: ChatItem[] = onboardingOn
+  const allItems: ChatItem[] = onboardingOn
     ? [...onboardingItems(onboardingState, view.friendHumanName), ...(onboardingActive ? [] : friendsOff ? view.items.filter((item) => item.kind !== "start-card" && item.kind !== "contact-entry") : view.items)]
     : view.items;
+  // Skips land one at a time, even on a phone that hears of two at once.
+  const chatItems = useSkipReveal(allItems);
   const composerOn = role === "a" && !readOnly && !onboardingActive;
   // Adding the hold to a calendar skips ahead to the reminder; from there the clock moves to the next morning by itself.
   // Side a moves it first; side b waits a little longer, so it moves the clock only when no side a phone is open.

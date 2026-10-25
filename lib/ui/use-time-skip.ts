@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { postClockAdvance } from "./actions";
 import type { ChatItem } from "./chat";
-import { SKIP_AFTER_MS, SKIP_BEAT_MS, skipDue, skipsByItself, type SkipFrom } from "./time-skip";
+import { SKIP_AFTER_MS, SKIP_BEAT_MS, SKIP_SEPARATOR_FOR, SKIP_SPACING_MS, skipCount, skipDue, skipsByItself, throughSkips, type SkipFrom } from "./time-skip";
 import type { UiPlan } from "./types";
 
 /**
@@ -16,7 +16,7 @@ export function useTimeSkip(input: { plan: UiPlan | null; items: ChatItem[]; ena
   const { plan, items, enabled, delayMs = SKIP_AFTER_MS, onChanged } = input;
   const due = enabled ? skipDue(plan, items) : null;
   const key = due && plan ? `${plan.id}:${due}` : null;
-  const [showing, setShowing] = useState<string | null>(null);
+  const [showing, setShowing] = useState<{ planId: string; from: SkipFrom } | null>(null);
   const fired = useRef<string | null>(null);
   const latest = useRef({ due, key, onChanged });
   useEffect(() => {
@@ -27,7 +27,7 @@ export function useTimeSkip(input: { plan: UiPlan | null; items: ChatItem[]; ena
     const { due: from, key: firing } = latest.current;
     if (!from || !firing || fired.current === firing) return;
     fired.current = firing;
-    setShowing(firing);
+    setShowing({ planId: firing.slice(0, firing.lastIndexOf(":")), from });
     // The card first, then the clock: the reminder lands under a card that has already been read.
     setTimeout(async () => {
       const result = await postClockAdvance(from);
@@ -46,6 +46,33 @@ export function useTimeSkip(input: { plan: UiPlan | null; items: ChatItem[]; ena
     return () => clearTimeout(timer);
   }, [key, due, delayMs, skipNow]);
 
-  const pending: SkipFrom | null = showing && showing === key ? due : null;
+  // The card this phone put up stays until the real one for the same skip is on screen, so it never blinks out between.
+  const pending: SkipFrom | null =
+    showing && plan?.id === showing.planId && !items.some((item) => item.id === SKIP_SEPARATOR_FOR[showing.from]) ? showing.from : null;
   return { pending, skipNow };
+}
+
+/**
+ * Shows the skips one at a time. A phone that learns of both at once (it polled past the reminder, or its tab slept)
+ * shows the first with its reminder, and the second only `SKIP_SPACING_MS` later. What was already there when the
+ * phone opened shows at once. Returns the chat as the phone shows it now.
+ */
+export function useSkipReveal(items: ChatItem[]): ChatItem[] {
+  const count = skipCount(items);
+  const [revealed, setRevealed] = useState(count);
+  const lastReveal = useRef(0);
+  // A reset (or a new plan) takes the skips away: start over from what is there.
+  if (count < revealed) setRevealed(count);
+
+  useEffect(() => {
+    if (count <= revealed) return;
+    const wait = Math.max(0, lastReveal.current + SKIP_SPACING_MS - Date.now());
+    const timer = setTimeout(() => {
+      lastReveal.current = Date.now();
+      setRevealed((shown) => Math.min(shown + 1, count));
+    }, wait);
+    return () => clearTimeout(timer);
+  }, [count, revealed]);
+
+  return revealed >= count ? items : throughSkips(items, revealed);
 }
