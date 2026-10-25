@@ -86,16 +86,19 @@ export function describePayment(reason: string, plan: Pick<UiPlan, "activityTitl
   return `${eventLabel(plan)}, ${afterComma(what)}`;
 }
 
+/** How an amount was worked out, as plain facts: the receipt's total and how many ways it was split. */
+export type SplitFacts = { receiptTotal: number; ways: number };
+
 const WAYS = ["", "", "two", "three", "four", "five"];
 
 /** "receipt $30, split two ways", or a pointer to Details when the agent recorded no breakdown. */
-function splitText(breakdown: UiPayment["breakdown"]): string {
-  if (!breakdown) return "the split is in Details";
-  return `receipt ${formatDollars(breakdown.receiptTotal)}, split ${WAYS[breakdown.ways] || breakdown.ways} ways`;
+function splitText(split: SplitFacts | undefined): string {
+  if (!split) return "the split is in Details";
+  return `receipt ${formatDollars(split.receiptTotal)}, split ${WAYS[split.ways] || split.ways} ways`;
 }
 
 /** The settle card's sentence for a payment that has an amount: who is asking, how much, why, and what the cap allows. */
-export function proposalSentence(input: { friend: string; amount: number; reason: string; cap: number; breakdown?: UiPayment["breakdown"] }): string {
+export function proposalSentence(input: { friend: string; amount: number; reason: string; cap: number; breakdown?: SplitFacts }): string {
   return `${input.friend}'s Muse is asking for ${formatDollars(input.amount)}, ${input.reason} (${splitText(input.breakdown)}). Your Muse can send up to ${formatDollars(input.cap)} without asking again.`;
 }
 
@@ -106,11 +109,11 @@ export function settleDetailFor(input: { cap: number; event: string | null | und
 }
 
 /** The line that sits above the ledger's JSON in the payment drawer: who paid whom, how much, what for, where it stands. */
-export function paymentSummary(payment: UiPayment, names: Record<AgentId, string>): string {
+export function paymentSummary(payment: UiPayment, names: Record<AgentId, string>, split?: SplitFacts): string {
   const payee = names[payment.to];
   const standing = payment.status === "sent" ? `Waiting on ${payee}.` : payment.status === "received" ? `${payee} kept it.` : `${payee} sent it back.`;
-  const split = payment.breakdown ? ` ${splitText(payment.breakdown).replace(/^./, (first) => first.toUpperCase())}.` : "";
-  return `${names[payment.from]} sent ${payee} ${formatDollars(payment.amount)} for ${payment.description ?? payment.reason}. ${standing}${split}`;
+  const how = split ? ` ${splitText(split).replace(/^./, (first) => first.toUpperCase())}.` : "";
+  return `${names[payment.from]} sent ${payee} ${formatDollars(payment.amount)} for ${payment.description ?? payment.reason}. ${standing}${how}`;
 }
 
 /**

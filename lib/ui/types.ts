@@ -129,8 +129,6 @@ export type UiPayment = {
   reason: string;
   /** The reason with the plan's event and day in front ("Shawarma Point, Tue Oct 27, dinner share"); the cards show this when set. */
   description?: string;
-  /** How the amount was worked out, when the agent recorded it: the receipt's total and how many ways it was split. */
-  breakdown?: { receiptTotal: number; ways: number };
   note?: string;
   status: "sent" | "received" | "refunded";
   source: "nessie" | "local";

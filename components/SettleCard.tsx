@@ -4,8 +4,8 @@ import { HandCoins } from "lucide-react";
 import { useEffect, useState } from "react";
 import { postSettle } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import { proposalSentence, settleDetailFor, type SettleOffer } from "@/lib/ui/payments";
-import type { Role, UiPayment } from "@/lib/ui/types";
+import { proposalSentence, settleDetailFor, type SettleOffer, type SplitFacts } from "@/lib/ui/payments";
+import type { Role } from "@/lib/ui/types";
 
 type Props = {
   planId: string;
@@ -23,7 +23,7 @@ type Props = {
   /** Opens this seat's payments settings, for the off state. */
   onOpenSettings: () => void;
   /** An amount the friend's Muse is asking for, once the agents propose one: the card then names it, the reason and the split. */
-  proposal?: { amount: number; reason: string; breakdown?: UiPayment["breakdown"] };
+  proposal?: { amount: number; reason: string; breakdown?: SplitFacts };
 };
 
 /**

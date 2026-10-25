@@ -98,7 +98,7 @@ describe("the drawer's plain line", () => {
   });
 
   it("adds the receipt and the split when the agent recorded them, and the plain reason when no description was built", () => {
-    expect(paymentSummary({ ...payment, breakdown: { receiptTotal: 30, ways: 2 } }, names)).toBe(
+    expect(paymentSummary(payment, names, { receiptTotal: 30, ways: 2 })).toBe(
       "Sprout sent Mochi $15 for Shawarma Point, Tue Oct 27, dinner share. Mochi kept it. Receipt $30, split two ways.",
     );
     expect(paymentSummary({ ...payment, description: undefined }, names)).toContain("for Dinner share.");
