@@ -52,8 +52,23 @@ describe("the three moments", () => {
 describe("the stage header", () => {
   const html = renderToStaticMarkup(createElement(TopBar, { snapshot: at("scheduled") }));
 
-  it("is the text lockup, with the subline a proposal for Muse by and the Meta lockup after it (D33)", () => {
-    expect(text(html)).toContain("Muse Friends");
+  it("is Meta's blue script Muse and Friends in sans, read aloud as Muse Friends", () => {
+    const heading = /<h1 [^>]*>.*?<\/h1>/.exec(html)?.[0] ?? "";
+    expect(heading).toContain('aria-label="Muse Friends"');
+    for (const part of ["inline-flex", "items-baseline", "whitespace-nowrap", "text-[22px]", "font-semibold", "leading-none", "tracking-[-0.01em]"]) expect(heading).toContain(part);
+    const script = /<img [^>]*muse-script-blue[^>]*>/.exec(heading)?.[0] ?? "";
+    expect(script).toContain('src="/brand/muse-script-blue.svg"');
+    expect(script).toContain('alt=""');
+    expect(script).toContain('height="26"');
+    expect(script).toContain('width="68"');
+    for (const part of ["mb-[-2.6px]", "mr-[4.5px]", "h-[26px]", "w-auto"]) expect(script).toContain(part);
+    // The word after the script is plain text, not the old two-color text lockup.
+    expect(heading.replace(/<[^>]+>/g, "").trim()).toBe("Friends");
+    expect(heading).not.toContain("text-accent-dot");
+    expect(heading).not.toContain("font-bold");
+  });
+
+  it("is the subline a proposal for Muse by and the Meta lockup after it (D33), unchanged", () => {
     expect(copy.tagline).toBe("a proposal for Muse");
     expect(copy.taglineBy).toBe("a proposal for Muse by");
     expect(text(html)).toContain("a proposal for Muse by");
@@ -61,7 +76,7 @@ describe("the stage header", () => {
   });
 
   it("shows the primary lockup sized by its letters to the subtitle, 4 pixels after by, with Meta as its alt text", () => {
-    const image = /<img [^>]*>/.exec(html)?.[0] ?? "";
+    const image = /<img [^>]*alt="Meta"[^>]*>/.exec(html)?.[0] ?? "";
     expect(image).toContain('alt="Meta"');
     expect(image).toContain('src="/brand/meta-lockup-primary-12px@3x.png"');
     expect(image).toContain('srcSet="/brand/meta-lockup-primary-12px@2x.png 2x, /brand/meta-lockup-primary-12px@3x.png 3x"');
@@ -70,7 +85,16 @@ describe("the stage header", () => {
     expect(image).toContain('width="44"');
     expect(image).toContain('class="mb-px"');
     expect(html).toMatch(/<span class="[^"]*\bgap-1\b[^"]*\bitems-end\b|<span class="[^"]*\bitems-end\b[^"]*\bgap-1\b/);
-    expect(html).not.toMatch(/<img [^>]*>[^<]*<(?!\/span)/);
+    expect(html).toMatch(/alt="Meta"[^>]*\/><\/span>/);
+  });
+
+  it("ships the script as the traced brand file, in its own blue gradient, never recolored", () => {
+    const svg = readFileSync("public/brand/muse-script-blue.svg", "utf8");
+    expect(svg).toContain('viewBox="0 0 353 134"');
+    for (const stop of ["#0040DC", "#0064E0", "#0082FB"]) expect(svg).toContain(stop);
+    expect(svg).toContain('fill="url(#muse-blue)"');
+    // 26 pixels tall keeps the traced aspect: 353 by 134 is 68 by 26.
+    expect(Math.round((353 / 134) * 26)).toBe(68);
   });
 
   it("keeps the files the lockup points at, rasterized at 2x and 3x of the 12 pixel original", () => {
