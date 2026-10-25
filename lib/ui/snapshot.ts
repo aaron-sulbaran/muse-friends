@@ -5,7 +5,7 @@ import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, 
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -160,7 +160,7 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<UiNote["kind"]>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed"]);
+const noteKinds = new Set<UiNote["kind"]>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed", "chat_asked"]);
 
 /**
  * An inbox that refuses a message for what it carries (422) or who sent it (403) is the code saying no, which is
@@ -185,10 +185,27 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
   }));
 }
 
-function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
+function toNotes(events: StateSnapshot["events"], rename: (text: string) => string, chat: StateSnapshot["room"]["chat"] = []): UiNote[] {
   return events
     .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]) && isWorthARow(event))
-    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(event.text) }));
+    .map((event) => {
+      const base = { id: event.id, kind: event.kind, at: event.at, text: rename(event.text) };
+      if (event.kind !== "chat_asked" || !event.messageId) return base;
+      // A "You asked" row carries the tools the Muse used, read from the proof on its answer.
+      const toolCalls = toolCallsOf(chat.find((entry) => entry.id === event.messageId)?.proof);
+      return { ...base, answerId: event.messageId, ...(toolCalls ? { toolCalls } : {}) };
+    });
+}
+
+function toChat(state: StateSnapshot, rename: (text: string) => string): UiChatMessage[] {
+  return (state.room.chat ?? []).map((entry) => ({
+    id: entry.id,
+    from: entry.from,
+    text: rename(entry.text),
+    at: entry.at,
+    ...(entry.replyTo ? { replyTo: entry.replyTo } : {}),
+    ...(entry.proof ? { proof: withToolCalls(entry.proof) } : {}),
+  }));
 }
 
 /** The message's proof, with its recorded tool calls tidied for display when there are any. */
@@ -278,7 +295,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state))].sort((first, second) => first.at.localeCompare(second.at)),
+    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state), state.room.chat)].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events, renameFor(state)),
@@ -292,6 +309,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
     wallets: { aaron: walletFor("aaron", state), lisa: walletFor("lisa", state) },
     payments: paymentsOf(state),
+    chat: toChat(state, renameFor(state)),
     paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
     sandbox: sandboxFor(state),
   };
