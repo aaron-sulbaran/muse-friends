@@ -173,8 +173,32 @@ async function runTrip(label) {
   check(now.plan?.trip?.pot?.balance === 3 * trip.pot.perPerson, `the pot holds $${now.plan?.trip?.pot?.balance}, the target $${trip.pot.target}`);
   const replies = now.messages.filter((m) => m.type === "trip_reply");
   check(replies.length === 2 && replies.every((m) => m.trip?.choice === "in" && m.trip?.ledgerRef), "Mochi and Pebble each told Sprout they are in, with the pot ledger reference");
-  console.log(`  total ${seconds(Date.now() - t0)} from the group chat to a confirmed trip; nothing is booked`);
-  return { last: now };
+  console.log(`  total ${seconds(Date.now() - t0)} from the group chat to a confirmed trip`);
+
+  // Booking with each person's yes: the dates are held on their own, the model-played people book their own seats, the judge
+  // books theirs (once, even if tapped twice), all three say yes to the hotel, then the days and the wrap-up.
+  const held = await waitFor("the dates are held", (snap) => snap.plan?.id === planId && snap.plan.trip?.booking?.datesHeld === true);
+  check(held?.plan?.trip?.booking?.datesHeld === true && held.plan.trip.booking.seats.length === 0, "the dates are held on their own, and no money has moved for a seat yet");
+  const seated = await waitFor("the others book their seats", (snap) => (snap.plan?.trip?.booking?.seats ?? []).length >= 2);
+  const theirSeats = seated?.plan?.trip?.booking?.seats ?? [];
+  check(theirSeats.length === 2 && theirSeats.every((seat) => seat.by === "person_model" || seat.by === "seed"), `Michelle and Kai booked their own seats (${theirSeats.map((seat) => `${seat.member} ${seat.flightId} ${seat.by}`).join(", ")})`);
+  const seat = await call("POST", "/api/trip/seat", { planId, member: "aaron", flight: "FL-1" });
+  check(seat.status === 200, `the judge booked their own seat (${seat.status})`);
+  const twice = await call("POST", "/api/trip/seat", { planId, member: "aaron", flight: "FL-1" });
+  check(twice.status === 409, `a second tap books nothing more (${twice.status})`);
+  const opened = await waitFor("the hotel is on the table", (snap) => snap.plan?.trip?.booking?.hotel?.approvals?.length >= 2);
+  const hotel = opened?.plan?.trip?.booking?.hotel;
+  check(hotel?.state === "proposed" && hotel.approvals.every((a) => a.answer === "yes"), `the hotel is on the table (${hotel?.option?.label}); Michelle and Kai answered yes before the judge`);
+  const yes = await call("POST", "/api/trip/hotel", { planId, member: "aaron", choice: "yes" });
+  check(yes.status === 200, `the judge said yes to the hotel (${yes.status})`);
+  const done = await waitFor("the booking is done", (snap) => snap.plan?.trip?.booking?.done === true);
+  const booked = done?.plan?.trip?.booking;
+  check(booked?.done === true && booked.hotel?.state === "booked", `the trip is booked: hotel ${booked?.hotel?.state}, days held ${booked?.daysHeld}`);
+  const balances = booked?.wallets?.map((wallet) => wallet.balance) ?? [];
+  check(balances.length === 3 && balances.every((balance) => balance === 1020), `each trip wallet ends at $1,020 (${balances.join(", ")})`);
+  check(done?.plan?.trip?.pot?.balance === 0 && booked?.vendor === 3 * 860 + 3 * 620, `the pot is spent and the simulated vendor holds $${booked?.vendor} (${3 * 860 + 3 * 620} expected)`);
+  console.log(`  total ${seconds(Date.now() - t0)} from the group chat to a booked trip; simulated bookings, seeded prices`);
+  return { last: done };
 }
 
 const initial = await state();

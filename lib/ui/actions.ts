@@ -61,6 +61,16 @@ export function postTripJoin(planId: string, member: MemberId, choice: "in" | "o
   return post("/api/trip/join", { planId, member, choice });
 }
 
+/** A person books their own seat on a seeded flight, from their share of the pot and then their trip wallet. */
+export function postTripSeat(planId: string, member: MemberId, flight: string) {
+  return post("/api/trip/seat", { planId, member, flight });
+}
+
+/** A person answers yes or no for the stay on the table; it books only when all three say yes. */
+export function postTripHotel(planId: string, member: MemberId, choice: "yes" | "no") {
+  return post("/api/trip/hotel", { planId, member, choice });
+}
+
 /** Pebble has no phone, so the coordinator's phone answers for them. Any member can be named; the server refuses a second answer. */
 export function postMemberDecision(planId: string, member: MemberId, choice: "accept" | "decline") {
   return post(`/api/plans/${planId}/member-decision`, { member, choice });

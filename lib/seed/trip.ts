@@ -62,15 +62,17 @@ export type CatalogItem = {
   serves: string[];
   /** How much walking and stairs it asks for. A group with a low-mobility person only takes "low". */
   effort: "low" | "medium" | "high";
+  /** Where it is, for the stays: a stay in the city the flight lands in ranks ahead of one elsewhere. */
+  city?: "Tokyo" | "Osaka";
 };
 
 export const CATALOG: CatalogItem[] = [
   { id: "FL-1", kind: "flight", label: "Austin to Tokyo Haneda, one stop, economy", cost: 860, serves: [], effort: "low" },
   { id: "FL-2", kind: "flight", label: "Austin to Osaka Kansai, one stop, economy", cost: 940, serves: [], effort: "low" },
   { id: "FL-3", kind: "flight", label: "Austin to Tokyo Narita, premium economy", cost: 1180, serves: [], effort: "low" },
-  { id: "ST-1", kind: "stay", label: "Shinjuku business hotel, 6 nights, elevator and step-free rooms", cost: 620, serves: ["low mobility"], effort: "low" },
-  { id: "ST-2", kind: "stay", label: "Osaka guesthouse, 6 nights, fourth-floor walk-up", cost: 380, serves: [], effort: "high" },
-  { id: "ST-3", kind: "stay", label: "Asakusa inn, 6 nights, floor beds and shared stairs", cost: 540, serves: [], effort: "high" },
+  { id: "ST-1", kind: "stay", label: "Shinjuku business hotel, 6 nights, elevator and step-free rooms", cost: 620, serves: ["low mobility"], effort: "low", city: "Tokyo" },
+  { id: "ST-2", kind: "stay", label: "Osaka guesthouse, 6 nights, fourth-floor walk-up", cost: 380, serves: [], effort: "high", city: "Osaka" },
+  { id: "ST-3", kind: "stay", label: "Asakusa inn, 6 nights, floor beds and shared stairs", cost: 540, serves: [], effort: "high", city: "Tokyo" },
   { id: "EX-1", kind: "excursion", label: "Akihabara anime day with a seated cafe route", cost: 90, serves: ["anime", "low mobility"], effort: "low" },
   { id: "EX-2", kind: "excursion", label: "Nakano Broadway and a studio museum, many stairs", cost: 75, serves: ["anime"], effort: "high" },
   { id: "EX-3", kind: "excursion", label: "Dotonbori street food crawl, all on foot", cost: 85, serves: ["food"], effort: "high" },
