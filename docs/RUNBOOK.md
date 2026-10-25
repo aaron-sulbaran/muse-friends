@@ -61,14 +61,20 @@ Dashboard fallback if the script fails: https://vercel.com/aaron-sulbaran-projec
 
 DNS records Vercel showed for this project: _not added yet; filled in after step 2._
 
-### H3. Supabase project for the production store (Aaron, 5 minutes)
+### H3. Supabase: apply the schema and hand over the server key (Aaron, 5 minutes)
 
-Needed for the production store, which has to survive across stateless function calls. Local development keeps using the JSON file.
+The production store has to survive across stateless function calls; local development keeps the JSON file. The project exists: `muse-friends`, ref `egzeidhihiimurkinzyb`, us-east-1 (next to Vercel's `iad1`). The ref and the URL are not secrets.
 
-1. Open https://supabase.com/dashboard, **New project**. Name: `muse-friends`. Region: the closest to Austin (US East or US Central, whichever the list offers). Plan: Free. Set a database password and store it in your password manager; nobody else needs it. Click **Create new project**; it takes about two minutes.
-2. Send the **project ref** (the part of the dashboard URL after `/project/`) to the orchestrator. The ref is not a secret.
-3. Open **Project Settings**, **API Keys**. Copy the **service role** key. Do not put it in chat or in git. Paste it as `SUPABASE_SERVICE_ROLE_KEY` in Vercel (same screen and steps as H1, Production and Preview, **Sensitive** on) and in `code/.env`. Also add `SUPABASE_URL` (Project Settings, **Data API**, the project URL) the same way; that one is not sensitive.
-4. Expect the platform lane to apply the schema through the Supabase tooling once it has the ref, then report round trip latency.
+1. Apply the schema, either way:
+   - **Through the platform lane's session.** In that session's own chat, say `target egzeidhihiimurkinzyb`, and approve its migration prompt. The session then runs `supabase/migrations/20261025010000_store.sql` through the Supabase tooling.
+   - **By hand.** Open https://supabase.com/dashboard/project/egzeidhihiimurkinzyb/sql/new, paste the whole of `supabase/migrations/20261025010000_store.sql`, click **Run**. Expect `Success. No rows returned`, and **Table Editor** listing 14 tables (`threads`, `messages`, `plans`, `cards`, `policies`, `redactions`, `rejected_windows`, `signals`, `events`, `busy`, `room`, `clock`, `recorded_runs`, `cursor`), each marked RLS enabled.
+2. Hand over the server key. Open https://supabase.com/dashboard/project/egzeidhihiimurkinzyb/settings/api-keys and copy the **secret** key (starts `sb_secret_`; the legacy **service_role** key works the same). Never paste it into chat, a doc, or git. Add these three lines to `code/.env`:
+   ```
+   SUPABASE_URL=https://egzeidhihiimurkinzyb.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=<the secret key>
+   ```
+3. Push them to Vercel with H1's script (`./scripts/push-env-to-vercel.sh`); when both Supabase lines are present it also sets `STORE=supabase` in Vercel, and only there. Then redeploy as in H1 step 4. Do not put `STORE` in `.env`: local development leaves it unset and uses the JSON file.
+4. Check the real project from your machine: `SUPABASE_LIVE_TEST=1 pnpm test tests/supabase-store.live.test.ts`. It round trips a thread, messages, a plan, cards, events, the rejected-window ledger, signals and a recorded run under throwaway ids, deletes them, and prints the latency of each call. It never touches live demo rows.
 
 ### H4. Connect Muse to the endpoint (Lisa, 30 minutes)
 
