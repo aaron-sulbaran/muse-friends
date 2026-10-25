@@ -1,4 +1,4 @@
-import type { AgentId, CalendarEvent, Persona, Window } from "@/lib/protocol";
+import type { AgentId, CalendarEvent, Persona, Role, Window } from "@/lib/protocol";
 
 // Everything here is fictional demo data. The calendars are the only source of availability:
 // agents see them through get_my_calendar and nothing else.
@@ -56,7 +56,8 @@ const lisaCalendar: CalendarEvent[] = [
 export const PERSONAS: Record<AgentId, Persona> = {
   aaron: {
     id: "aaron",
-    name: "Aaron",
+    role: "a",
+    displayName: "Sprout",
     calendar: aaronCalendar,
     interests: {
       food: ["shawarma", "ramen", "breakfast tacos"],
@@ -72,7 +73,8 @@ export const PERSONAS: Record<AgentId, Persona> = {
   },
   lisa: {
     id: "lisa",
-    name: "Lisa",
+    role: "b",
+    displayName: "Mochi",
     calendar: lisaCalendar,
     interests: {
       food: ["shawarma", "dumplings", "matcha"],
@@ -91,6 +93,14 @@ export const PERSONAS: Record<AgentId, Persona> = {
 export function getPersona(id: AgentId): Persona {
   return PERSONAS[id];
 }
+
+// What people see: the Muse characters Sprout and Mochi, not the internal ids.
+export function displayName(id: AgentId): string {
+  return PERSONAS[id].displayName;
+}
+
+export const ROLE_TO_AGENT: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
+export const AGENT_TO_ROLE: Record<AgentId, Role> = { aaron: "a", lisa: "b" };
 
 // Strings that must never appear in any delivered message. Used by the leak tests (smoke test 5).
 export const PRIVATE_STRINGS: Record<AgentId, string[]> = {

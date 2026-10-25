@@ -1,12 +1,14 @@
 import type {
   ActivityEvent,
   AgentId,
+  BusyBlock,
   DemoClock,
   MessageRecord,
   Plan,
   RecordedRun,
   Recommendation,
   Redaction,
+  Room,
   SharePolicy,
   Signal,
   StateSnapshot,
@@ -63,6 +65,14 @@ export interface Store {
   appendEvent(event: ActivityEvent): Promise<void>;
   listEvents(filter?: { contextId?: string; planId?: string }): Promise<ActivityEvent[]>;
 
+  // The single demo room (id "demo"). Judges come one pair at a time; reset wipes live state.
+  getRoom(): Promise<Room>;
+  putRoom(room: Room): Promise<void>;
+
+  // Busy blocks added from the controls, merged into the persona's calendar by get_my_calendar.
+  addBusy(block: BusyBlock): Promise<void>;
+  listBusy(agent?: AgentId): Promise<BusyBlock[]>;
+
   // The demo clock the plan lifecycle runs on.
   getClock(): Promise<DemoClock>;
   setClock(clock: DemoClock): Promise<void>;
@@ -71,6 +81,10 @@ export interface Store {
   saveRecordedRun(run: RecordedRun): Promise<void>;
   getRecordedRun(id: string): Promise<RecordedRun | null>;
   listRecordedRuns(): Promise<RecordedRun[]>;
+
+  // An opaque string that changes whenever any state changes, so /api/state can answer a
+  // poll with 304 (ETag) without reading the whole snapshot.
+  cursor(): Promise<string>;
 
   // Everything in one read, for /api/state and for recording a run.
   snapshot(): Promise<StateSnapshot>;
