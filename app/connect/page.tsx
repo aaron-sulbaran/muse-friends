@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { describePresets } from "@/app/api/connector/_lib/presets";
 import { CopyButton } from "./CopyButton";
 
 // An opt-in table station: a person connects their own Muse to a room of its own on this server. The key
@@ -8,7 +9,7 @@ import { CopyButton } from "./CopyButton";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Bring your own Muse",
-  description: "An optional, unofficial way to try Muse Friends from your own Muse.",
+  description: "Optional and unofficial: connect your own Muse to a student prototype that uses fixed, fictional time slots.",
   robots: { index: false, follow: false },
 };
 
@@ -42,36 +43,67 @@ function Message({ label, text }: { label: string; text: string }) {
   );
 }
 
-const tools: Array<{ name: string; rest: string; kind: string; input: string; output: string }> = [
-  { name: "get_status", rest: "GET /api/connector/status", kind: "Read", input: "none", output: "{ ok, service, deploy, account, store: counts, at }. Changes nothing." },
+type ToolDoc = {
+  name: string;
+  rest: string;
+  kind: "Read" | "Write";
+  input: string;
+  returns: string;
+  sideEffects: string;
+  errors: string;
+  limits: string;
+};
+
+// What Muse can read here as a docs page: for each tool, the inputs, the outputs, whether it is a Read or a
+// Write, what it changes, how it can fail, and its limits.
+const tools: ToolDoc[] = [
+  {
+    name: "get_status",
+    rest: "GET /api/connector/status",
+    kind: "Read",
+    input: "none",
+    returns: "{ ok, service, deploy, account, store, at }: whether the service and its store answer, the account label of the key you used, and counts of stored threads, messages, plans, cards and activity rows. Never their content.",
+    sideEffects: "None. It changes nothing.",
+    errors: "401 when the key is missing or wrong.",
+    limits: "None of its own.",
+  },
   {
     name: "start_plan",
     rest: "POST /api/connector/start_plan",
-    kind: "Write (starts a plan in a room of its own)",
-    input: 'free_windows: 1 to 3 of { day: "2026-10-29", start: "19:00", end: "21:00" } (whole hours, 09:00 to 22:00 US Central, inside the next 7 days and Oct 25 to Oct 31); reel_hint (optional): one line, at most 140 characters',
-    output: "202 { planId, contextId, state, how_to_check, expires_in_minutes }",
+    kind: "Write",
+    input: 'slots: "evenings", "lunches" or "weekend". That is the only input. Free text and windows of your own are refused (400).',
+    returns: "202 { planId, contextId, state: \"negotiating\", you: \"Sprout\", friend, slots, free_windows, expires_in_minutes: 120, how_to_check }.",
+    sideEffects: "Creates one plan room, a fictional copy of the demo (never the real demo room), and starts Sprout and Mochi talking. It spends a few model calls on our side. The room is no longer served after 2 hours and is deleted when the expo ends.",
+    errors: "400 bad_input, 401, 403 (a key that is not the judge key), 422 slots_expired, 429 room_cap or runs_paused (with Retry-After), 503 rooms_unavailable.",
+    limits: "10 new plans an hour across everyone; the app-wide hourly limit on model calls can also pause it.",
   },
   {
     name: "check_plan",
     rest: "GET /api/connector/check_plan?planId=...",
-    kind: "Read",
-    input: "planId",
-    output: "{ state: negotiating | awaiting_you | waiting_for_mochi | confirmed | dropped | stalled, messages so far with what the sharing policy let through or withheld, agreed_window, whatsapp_draft, next }",
+    kind: "Write",
+    input: "planId (from start_plan)",
+    returns: "{ planId, state: negotiating | awaiting_you | waiting_for_mochi | confirmed | dropped | stalled, messages so far with what the sharing policy let through or withheld, agreed_window, decisions, whatsapp_draft, whatsapp_link, next }.",
+    sideEffects: "Inside that plan's room only. When the person has already said yes and the fictional friend has not answered yet, this call lets her answer (one model call) and saves it. Nothing is sent to anyone.",
+    errors: "400 bad_input, 401, 403, 404 no_such_plan (unknown or expired), 503.",
+    limits: "None of its own. About every 10 seconds is plenty.",
   },
   {
     name: "respond",
     rest: "POST /api/connector/respond",
-    kind: "Write (records your own decision in that room)",
+    kind: "Write",
     input: 'planId, decision: "accept" or "decline"',
-    output: "the plan as check_plan shows it, plus you_answered. Nothing is sent to anyone: the drafted message is yours to send.",
+    returns: "The plan as check_plan shows it, plus you_answered.",
+    sideEffects: "Records the person's own decision in that plan's room. After an accept the fictional friend answers. Nothing is sent to anyone: the drafted message is for the person to send themselves, and no calendar entry is made.",
+    errors: "400 bad_input, 401, 403, 404 no_such_plan, 409 not_waiting_for_you (the agents have not agreed yet, or it is already answered), 503.",
+    limits: "None of its own.",
   },
 ];
 
 export default async function ConnectPage() {
   const key = process.env.MCP_TOKEN_JUDGE;
   const open = Boolean(key) && (key as string).length >= MIN_KEY_LENGTH;
-  const hintAllowed = process.env.BYOM_ALLOW_HINT !== "0";
   const origin = await originOf();
+  const presets = describePresets();
 
   const mcpMessage = `Connect my Muse Friends tool: remote MCP server, streamable HTTP, ${origin}/api/mcp . Auth is an Authorization: Bearer header; ask for the token in your secure credential prompt. Test get_status, then save it as a skill.`;
   const restMessage = `Connect Muse Friends. Base URL ${origin} , every request needs an Authorization: Bearer header; ask me for the token in your secure credential prompt. Read ${origin}/connect , then test GET /api/connector/status.`;
@@ -79,22 +111,24 @@ export default async function ConnectPage() {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 py-8 text-ink">
       <header>
-        <p className="text-sm font-semibold text-accent">Optional and unofficial</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Bring your own Muse</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Bring your own Muse</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-muted">
-          Connect your own Muse to a student prototype from HackTX, and let it plan a dinner with a fictional friend while you watch. It takes about 1 to 4 minutes.
+          Optional and unofficial: this connects your own Muse to a student prototype built at HackTX that Meta has not reviewed or endorsed, and it is not a shipped Muse feature. It only exchanges fixed, fictional time slots that we supply, never your calendar or contacts, and we store no names or account details beyond a demo room we delete when the expo ends.
         </p>
       </header>
 
-      <Card title="What this is, and what it is not">
+      <Card title="Before you connect">
         <p>
-          Muse Friends is a proposal for Muse, built at HackTX 2026. It is not a shipped Muse feature, Meta has not reviewed or endorsed it, and this connector is a private custom connector that Meta does not review. Connect only if you are comfortable with that.
+          <strong>What we receive:</strong> the label of the key you connect with (it says &ldquo;judge&rdquo; and nothing about you), the name of one preset (evenings, lunches or weekend), a plan id, and your yes or no. No calendar, contacts, messages or location are read, and nothing you type is accepted: the only inputs are those listed below.
         </p>
         <p>
-          <strong>What we receive:</strong> only the free time windows your Muse sends (made-up times are fine){hintAllowed ? ", an optional one-line hint about what you would like to do," : ""} and a plan id. We never read your calendar, contacts, messages, or location, and we ask for no name or account details. Muse calls us from Meta&apos;s cloud, so our host&apos;s ordinary request logs exist.
+          <strong>What we keep:</strong> each plan is a room of its own, made of fictional times, a fictional friend (Mochi, played by a model) and a made-up reel. A room is no longer served after 2 hours, and we delete all of them when the expo ends. Everything in it is fictional.
         </p>
         <p>
-          <strong>What we keep:</strong> each plan lives in a room of its own for 2 hours and is then no longer served; we delete the rooms after the event. The friend, Mochi, is fictional and played by a model. You can disconnect any time in Muse under Settings, then Connectors.
+          <strong>What we cannot promise:</strong> Muse calls us from Meta&apos;s cloud, and our hosting provider keeps ordinary request logs that we do not control. The connector&apos;s own log lines say only whether a key was accepted, never the key. This is a private custom connector, not a listed one. Meta&apos;s own help asks people to grant access with caution and to review a provider&apos;s privacy policies; please do, and connect only if this is fine with you.
+        </p>
+        <p>
+          <strong>Taking it back:</strong> in Muse, open Settings, then Connectors, and remove Muse Friends. The key is a shared demo key for this table only.
         </p>
       </Card>
 
@@ -119,27 +153,48 @@ export default async function ConnectPage() {
                   <CopyButton text={key as string} label="Copy key" />
                 </div>
               </li>
-              <li>Approve what Muse asks to do. Choosing &ldquo;Allow once&rdquo; each time is fine.</li>
+              <li>Muse asks before it acts, in its own prompts (for example allow once, for this task, always, or deny). Those prompts are Muse&apos;s, not ours; choosing &ldquo;Allow once&rdquo; each time is fine.</li>
               <li>
-                Then ask, in your own words: <em>&ldquo;Use Muse Friends to start a plan with Mochi where I&apos;m free one evening this week from 7 to 9pm, check on it until Sprout and Mochi agree, show me the plan and the drafted message, and only answer after I say yes.&rdquo;</em>
+                Then ask, in your own words: <em>&ldquo;Use Muse Friends to start a plan for evenings, check on it until Sprout and Mochi agree, show me the plan and the drafted message, and only answer after I say yes.&rdquo;</em>
               </li>
             </ol>
             <p className="text-sm text-muted">
-              The wording of the two messages is a best guess from how Muse is documented to connect; nobody has confirmed it end to end yet. If Muse asks something else, answer it plainly, and tell the person at the table what it said.
+              We do not rely on, or promise, anything your Muse does on a schedule or on its own: each step happens when you ask for it in the chat. The wording of the two messages is a best guess from how Muse is documented to connect; nobody has confirmed it end to end yet. If Muse asks something else, answer it plainly, and tell the person at the table what it said.
             </p>
           </Card>
 
+          <Card title="The time slots">
+            <p className="text-sm text-muted">These are the only choices for start_plan. They are made up, US Central, and the same for everyone. Sprout is your side; Mochi is the fictional friend. Each preset has at least an hour both are free.</p>
+            <div className="space-y-3">
+              {presets.map((preset) => (
+                <div key={preset.name} className="rounded-group bg-group p-4 text-[14px] leading-relaxed">
+                  <div className="font-mono text-[13px] font-semibold">slots: &quot;{preset.name}&quot;</div>
+                  <div className="text-muted">{preset.description}</div>
+                  <dl className="mt-2 space-y-1">
+                    <div><dt className="inline font-semibold">Sprout is free: </dt><dd className="inline">{preset.sprout.join("; ")}</dd></div>
+                    <div><dt className="inline font-semibold">Mochi is free: </dt><dd className="inline">{preset.mochi.join("; ")}</dd></div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+          </Card>
+
           <Card title="What your Muse can call">
-            <p className="text-sm text-muted">Read means it changes nothing. Plans are limited to 10 new ones an hour across everyone, and a plan expires after 2 hours. Errors come back as plain messages (a bad window, no time Mochi could also do, a plan that has expired).</p>
+            <p className="text-sm text-muted">
+              Four tools, the same over MCP ({origin}/api/mcp) and as plain web calls under {origin}/api/connector/. Every request needs an Authorization header with the key, as &ldquo;Bearer &lt;key&gt;&rdquo;. Replies are JSON; the web calls wrap them as {"{ data, error }"}. Read means it changes nothing; Write means it changes something, here only inside a plan&apos;s own fictional room.
+            </p>
             <div className="space-y-3">
               {tools.map((tool) => (
                 <div key={tool.name} className="rounded-group bg-group p-4 text-[14px] leading-relaxed">
                   <div className="font-mono text-[13px] font-semibold">{tool.name}</div>
-                  <div className="font-mono text-[12px] text-muted">{tool.rest}</div>
+                  <div className="break-words font-mono text-[12px] text-muted">{tool.rest}</div>
                   <dl className="mt-2 space-y-1">
-                    <div><dt className="inline font-semibold">Kind: </dt><dd className="inline">{tool.kind}</dd></div>
+                    <div><dt className="inline font-semibold">Class: </dt><dd className="inline">{tool.kind}</dd></div>
                     <div><dt className="inline font-semibold">Input: </dt><dd className="inline">{tool.input}</dd></div>
-                    <div><dt className="inline font-semibold">Returns: </dt><dd className="inline">{tool.output}</dd></div>
+                    <div><dt className="inline font-semibold">Returns: </dt><dd className="inline">{tool.returns}</dd></div>
+                    <div><dt className="inline font-semibold">Side effects: </dt><dd className="inline">{tool.sideEffects}</dd></div>
+                    <div><dt className="inline font-semibold">Errors: </dt><dd className="inline">{tool.errors}</dd></div>
+                    <div><dt className="inline font-semibold">Limits: </dt><dd className="inline">{tool.limits}</dd></div>
                   </dl>
                 </div>
               ))}
