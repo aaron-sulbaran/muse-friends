@@ -17,6 +17,7 @@ import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
 import { MuseAvatar } from "./MuseAvatar";
 import { OutcomeReplies } from "./OutcomeReplies";
+import { SimulatedFriendDisc } from "./PersonDisc";
 import { ReelCard } from "./ReelCard";
 import { RecommendationCard } from "./RecommendationCard";
 import { ReplayBadge } from "./ReplayBadge";
@@ -156,7 +157,6 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             plan={item.plan}
             role={role}
             view={view}
-            simulatedFriend={simulated}
             pending={pending || readOnly}
             onDecide={(choice) => decide(item.plan.id, choice)}
             onReplan={() => replan(item.plan.id)}
@@ -183,7 +183,10 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     <div className="relative flex h-full flex-col bg-screen">
       {framed ? <StatusBar time={formatStatusBarTime(snapshot.now)} /> : <div className="h-[env(safe-area-inset-top)] shrink-0" />}
       {simulated && role === "b" ? (
-        <p className="shrink-0 bg-group px-4 py-2 text-center text-[13px] font-semibold">{copy.simulatedFriendBanner}</p>
+        <p className="flex shrink-0 items-center justify-center gap-2 bg-group px-4 py-2 text-center text-[13px] font-semibold">
+          <SimulatedFriendDisc size={20} />
+          {copy.simulatedFriendBanner}
+        </p>
       ) : null}
       {tab === "chat" ? (
         <>
@@ -195,7 +198,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={`Open ${view.museName} settings`}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
+                <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
               </button>
             ) : standalone && !readOnly ? (
               // Muse opens Activity from the avatar; Sprout's phone has no settings sheet to compete with.
@@ -205,10 +208,10 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={copy.activityOpen}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
+                <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
               </button>
             ) : (
-              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={56} mood={view.mood} />
+              <MuseAvatar agent={view.agent} name={view.museName} size={56} mood={view.mood} />
             )}
             <StatusPill name={view.museName} status={view.status} />
             {standalone && snapshot.mode === "replay" ? (
@@ -294,7 +297,6 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       ) : null}
       {sheetOpen && role === "b" ? (
         <AvatarSheet
-          simulated={simulated}
           museName={view.museName}
           friendMuseName={view.friendMuseName}
           sharing={snapshot.sharing.lisa}
