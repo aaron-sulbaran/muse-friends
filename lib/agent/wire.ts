@@ -6,6 +6,7 @@ import { getPersona, displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
 import { ownFreeBlocks } from "./calendar";
+import { claimCoordinatorTurn, planForContext } from "./group";
 import { commitMessageCore } from "./inbound";
 import { withLock } from "./lock";
 import { newId, seatOf } from "./ids";
@@ -112,11 +113,17 @@ export async function receiveMessage(
       { message: check.message, stamp: envelope.data.stamp, proof: envelope.data.proof, delivery: "delivered", httpStatus: 202 },
       envelope.data.redaction,
     );
+    // In a group the coordinator waits for every friend to answer, then runs once.
+    let runTurn = committed.threadState === "working";
+    if (runTurn && thread?.groupId) {
+      const plan = await planForContext(store, check.message.contextId);
+      if (plan?.group && input.recipient === plan.group.coordinator) runTurn = await claimCoordinatorTurn(store, plan.id);
+    }
     return {
       ok: true,
       status: 202,
       body: { contextId: check.message.contextId, seq: check.message.seq, state: committed.threadState },
-      runTurn: committed.threadState === "working",
+      runTurn,
       finish: committed.finish,
     } as const;
   });

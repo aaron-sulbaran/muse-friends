@@ -1,12 +1,13 @@
 import { runAgentTurn, type TurnResult } from "@/lib/model";
-import { type ActivityEvent, type AgentId, type MemberId, type Plan, type Signal } from "@/lib/protocol";
+import { type ActivityEvent, type AgentId, type MemberId, type Plan, type PlanGroup, type Signal } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
 import { failThread } from "./inbound";
 import { newId } from "./ids";
 import { ownFreeBlocks } from "./calendar";
-import { agentInstructions, inboxTurnInput, signalTurnInput } from "./prompts";
+import { claimCoordinatorTurn, groupCandidates, groupReplies, memberContexts, planForContext } from "./group";
+import { agentInstructions, groupOpeningInput, groupTurnInput, inboxTurnInput, signalTurnInput } from "./prompts";
 import { buildTools } from "./tools";
 import { describeWindow, intersectWindows, toCentralIso, windowHash } from "./windows";
 
@@ -56,8 +57,10 @@ function logFailure(agent: AgentId, result: TurnResult): void {
 
 // The initiator's turn: read the reel, extract the place from the caption, check the calendar,
 // and open the conversation. A turn that cannot produce a message ends the thread as failed.
-export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; signalId: string; contextId: string }): Promise<TurnResult> {
-  const { store, agent, signalId, contextId } = options;
+export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; signalId: string; contextId: string; group?: PlanGroup }): Promise<TurnResult> {
+  const { store, agent, signalId, contextId, group } = options;
+  // For a group the coordinator opens one pair thread per friend, in the same turn.
+  const friends = group ? group.members.filter((member) => member !== group.coordinator) : undefined;
   const ctx: AgentRuntimeContext = {
     agent,
     store,
@@ -66,13 +69,64 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
     contextId,
     deliver: options.deliver,
     windowRepairs: { used: 0 },
+    ...(group && friends ? { group, counterparts: friends, contexts: group.contexts } : {}),
   };
   const { tools, handlers } = buildTools(ctx);
   const nowMs = options.wallNow?.() ?? Date.now();
   const result = await runAgentTurn({
-    instructions: agentInstructions(agent),
-    input: signalTurnInput(agent, signalId, nowMs),
+    instructions: agentInstructions(agent, friends),
+    input: friends ? groupOpeningInput(agent, signalId, nowMs, friends) : signalTurnInput(agent, signalId, nowMs),
     tools,
+    handlers,
+    requiredTools: ["send_to_friend_agent"],
+    requiredSuccesses: friends?.length ?? 1,
+  });
+  if (result.status === "failed") {
+    logFailure(agent, result);
+    await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+  }
+  return result;
+}
+
+// The receiving agent's turn after a message lands in its inbox: read the thread, see which of the
+// friend's windows are also free (computed here), and answer through send_to_friend_agent. In a group plan
+// a member answers its pair thread with the windows that are free for it, and the coordinator's turn is the
+// group turn below.
+export async function runInboxTurn(options: RuntimeOptions & { agent: MemberId; contextId: string }): Promise<TurnResult> {
+  const { store, agent, contextId } = options;
+  // A thread that ended (agreed, declined, or hit the cap) gets no further turn and no model call.
+  const current = await store.getThread(contextId);
+  if (current && current.state !== "working") return { status: "completed", finalText: "", nudged: false, toolCalls: [], calls: [], totalMs: 0 };
+
+  const plan = current?.groupId ? await planForContext(store, contextId) : null;
+  if (plan?.group && agent === plan.group.coordinator) return runGroupTurn({ ...options, plan });
+
+  const thread = (await store.listMessages(contextId)).map((record) => record.message);
+  const friendLast = [...thread].reverse().find((message) => message.from !== agent);
+  const friend = friendLast?.from ?? (agent === "aaron" ? "lisa" : "aaron");
+  const nowMs = options.wallNow?.() ?? Date.now();
+
+  const ledger = new Set(await store.listRejectedWindows(contextId));
+  const allOffered = thread.flatMap((message) => message.windows ?? []);
+  const passedOver = allOffered.filter((window) => ledger.has(windowHash(window))).map((window) => `${describeWindowForLedger(window)}`);
+  const ownFree = await ownFreeBlocks(store, agent);
+  const mutualWindows = intersectWindows(friendLast?.windows ?? [], ownFree).filter((window) => !ledger.has(windowHash(window)));
+
+  const ctx: AgentRuntimeContext = {
+    agent,
+    store,
+    wallNow: options.wallNow,
+    contextId,
+    deliver: options.deliver,
+    windowRepairs: { used: 0 },
+    counterparts: [friend],
+    ...(plan?.group ? { group: plan.group } : {}),
+  };
+  const { tools, handlers } = buildTools(ctx);
+  const result = await runAgentTurn({
+    instructions: agentInstructions(agent, [friend]),
+    input: inboxTurnInput({ agent, thread, mutualWindows, passedOver, nowMs, friend, group: plan?.group ? { coordinator: plan.group.coordinator } : undefined }),
+    tools: tools.filter((tool) => ["get_my_calendar", "get_interests", "send_to_friend_agent"].includes(tool.name)),
     handlers,
     requiredTools: ["send_to_friend_agent"],
   });
@@ -83,35 +137,37 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
   return result;
 }
 
-// The receiving agent's turn after a message lands in its inbox: read the thread, see which of the
-// friend's windows are also free (computed here), and answer through send_to_friend_agent.
-export async function runInboxTurn(options: RuntimeOptions & { agent: MemberId; contextId: string }): Promise<TurnResult> {
-  const { store, agent, contextId } = options;
-  // A thread that ended (agreed, declined, or hit the cap) gets no further turn and no model call.
-  const current = await store.getThread(contextId);
-  if (current && current.state !== "working") return { status: "completed", finalText: "", nudged: false, toolCalls: [], calls: [], totalMs: 0 };
-  const thread = (await store.listMessages(contextId)).map((record) => record.message);
-  const friendLast = [...thread].reverse().find((message) => message.from !== agent);
+// The coordinator's second round, once every friend has answered. The windows that work for everyone were
+// worked out in code; the model confirms one with each friend (two sends), or ends it if there is none.
+// A failed turn ends every pair thread of the group as failed, so the plan is dropped with the reason on the timeline.
+export async function runGroupTurn(options: RuntimeOptions & { agent: MemberId; contextId: string; plan: Plan }): Promise<TurnResult> {
+  const { store, agent, plan } = options;
+  const group = plan.group!;
   const nowMs = options.wallNow?.() ?? Date.now();
-
-  const ledger = new Set(await store.listRejectedWindows(contextId));
-  const allOffered = thread.flatMap((message) => message.windows ?? []);
-  const passedOver = allOffered.filter((window) => ledger.has(windowHash(window))).map((window) => `${describeWindowForLedger(window)}`);
-  const ownFree = await ownFreeBlocks(store, agent);
-  const mutualWindows = intersectWindows(friendLast?.windows ?? [], ownFree).filter((window) => !ledger.has(windowHash(window)));
-
-  const ctx: AgentRuntimeContext = { agent, store, wallNow: options.wallNow, contextId, deliver: options.deliver, windowRepairs: { used: 0 } };
+  const [candidates, replies] = await Promise.all([groupCandidates(store, plan), groupReplies(store, plan)]);
+  const friends = memberContexts(group).map(({ member }) => member);
+  const ctx: AgentRuntimeContext = {
+    agent,
+    store,
+    wallNow: options.wallNow,
+    contextId: options.contextId,
+    deliver: options.deliver,
+    windowRepairs: { used: 0 },
+    group,
+    counterparts: friends,
+    contexts: group.contexts,
+  };
   const { tools, handlers } = buildTools(ctx);
   const result = await runAgentTurn({
-    instructions: agentInstructions(agent),
-    input: inboxTurnInput({ agent, thread, mutualWindows, passedOver, nowMs }),
+    instructions: agentInstructions(agent, friends),
+    input: groupTurnInput({ coordinator: agent, replies, candidates, nowMs }),
     tools: tools.filter((tool) => ["get_my_calendar", "get_interests", "send_to_friend_agent"].includes(tool.name)),
     handlers,
     requiredTools: ["send_to_friend_agent"],
+    requiredSuccesses: friends.length,
   });
   if (result.status === "failed") {
-    logFailure(agent, result);
-    await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
+    for (const { contextId } of memberContexts(group)) await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
   }
   return result;
 }

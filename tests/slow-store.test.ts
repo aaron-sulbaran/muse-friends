@@ -15,7 +15,7 @@ vi.mock("next/server", async (original) => ({ ...(await original<typeof import("
 const DELAY = 10;
 const TUE = { start: "2026-10-27T18:00:00-05:00", end: "2026-10-27T20:00:00-05:00" };
 const stamp = { passed: ["availability"], removed: [], windowsDropped: 0 };
-const bearer = (agent: "aaron" | "lisa") => ({ authorization: `Bearer ${agentToken(agent)}`, "content-type": "application/json" });
+const bearer = (agent: "aaron" | "lisa" | "kai") => ({ authorization: `Bearer ${agentToken(agent)}`, "content-type": "application/json" });
 
 let uninstallWire: (() => void) | undefined;
 afterEach(() => {

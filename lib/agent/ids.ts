@@ -12,6 +12,7 @@ export function seatOf(member: MemberId): AgentId | undefined {
   return seat.success ? seat.data : undefined;
 }
 
-export function otherAgent(agent: AgentId): AgentId {
+// The other seat of a pair. The third friend of a group is always paired with the coordinator, "aaron".
+export function otherAgent(agent: MemberId): AgentId {
   return agent === "aaron" ? "lisa" : "aaron";
 }
