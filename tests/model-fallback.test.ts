@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { injectSignal, runSignalTurn } from "@/lib/agent/runtime";
+import { describeFailure, injectSignal, runSignalTurn } from "@/lib/agent/runtime";
 import { runAgentTurn, type ToolDefinition } from "@/lib/model";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { JsonStore } from "@/lib/store/json";
@@ -63,6 +63,17 @@ describe("the model fallback chain", () => {
     expect(result.failure).toMatchObject({ detail: "api_error", message: expect.stringContaining("not found") });
     // 1 + 3 retries on the configured model, then 1 + 5 retries on the fallback: the 8 pauses of the ladder, not 16.
     expect(modelsCalled(fake.calls)).toEqual([...Array(4).fill("muse-spark-1.3"), ...Array(6).fill("muse-spark-1.2")]);
+  });
+
+  it("reports a model_error with the API's own words when every model in the chain answers 404, never a cap", async () => {
+    // Enough steps for both models to use their whole share, so the failure is the 404 and not a fake that ran dry.
+    installFakeModel(Array.from({ length: 12 }, () => notFound));
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    expect(result.status).toBe("failed");
+    expect(result.failure).toMatchObject({ reason: "model_error", detail: "api_error", message: expect.stringContaining("not found") });
+    expect(result.failure?.message).not.toContain("ran out of steps");
+    expect(describeFailure(result.failure)).toMatch(/^the model did not answer \(.*not found/);
+    expect(describeFailure(result.failure)).not.toMatch(/cap/);
   });
 
   it("does not switch models for a 429 or a 5xx", async () => {
