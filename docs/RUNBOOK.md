@@ -90,6 +90,32 @@ The last line is `C5 GATE: PASS` or `C5 GATE: FAIL (k of n steps failed)`. Exit 
 
 **Verified (Sun Oct 25, about 1:15am):** against a local server on the JSON store with live Muse Spark, `pnpm gate:c5 --base http://localhost:3003` passed all 9 steps in 42 seconds (agreement in 3 messages at 19.9 and 14.3 seconds, location redacted on both runs, Replay of 17 frames and 6 messages, room left reset). Exit codes checked: 0 on a pass, 1 for an unreachable server, 2 for a room with an agent turn running; `--force` waited for that turn and then passed. A fake app and fake `demo:http` scripts cover the failure paths in `tests/gate-c5.test.ts`. **Not run against production yet:** its first production run is the real C5.
 
+## Laptop check
+
+One command that verifies each of Aaron's manual laptop steps (`kb/laptop-checklist.md` in the hub) the moment it lands, with one PASS, FAIL or SKIP line per step. Run it from the `code` folder (it reads `.env` there):
+
+```bash
+pnpm laptop:check --base https://www.musefriends.tech
+pnpm laptop:check --base https://www.musefriends.tech --expect-sha 43d3bab
+```
+
+| Step | What it checks | PASS | FAIL | SKIP |
+|---|---|---|---|---|
+| 1 nessie (checklist 1) | `NESSIE_KEY` is among Vercel's Production variables, and the key in `.env` lists accounts in the Nessie sandbox | both | not in Vercel (step 1.4), or the sandbox rejects the key | key not in `.env`, or the Vercel list is unavailable |
+| 2 instagram (checklist 2) | `/api/state` carries the real reel | the real reel, with its `@username` | `/api/state` does not answer | "seeded reel in use" (no token yet, not redeployed, or Instagram refuses it; the line says which it can tell) |
+| 3 cron (checklist 3) | `/api/cron/sweep` with no secret | 401 (the secret is set) | 503 (unset), 200, or no answer | never |
+| 4 mcp (checklist 3) | no key gets 401, and `get_status` over REST answers `ok: true` for each of `MCP_TOKEN_A` and `MCP_TOKEN_B` in `.env` | all keys present | a key the deployment does not accept, or an open connector | neither key in `.env` |
+| 5 rooms (checklist 4) | `check_plan` on an id that cannot exist, with `MCP_TOKEN_JUDGE` from `.env`: 404 means the `byom_rooms` table answered | 404 | 503 (table missing, paste the migration), or a team key | no judge key in `.env`, or 401 (the deployment does not have the key, so the station is closed) |
+| 6 sha (checklist 6) | `/api/health` shows the deployed commit | matches `--expect-sha`, or any commit when none is given | a different commit, or no answer | never |
+
+The last line is `LAPTOP CHECK: n PASS, n FAIL, n SKIP`. Exit code **0** when nothing fails (SKIP is not a failure), **1** when any step fails, **2** for a bad command line. A FAIL line names the checklist step to do; a SKIP line names what is missing. Before any step is done, expect FAIL on 3 and SKIP on most of the rest; after a clean pass of the checklist, six PASS lines.
+
+**It changes nothing.** Every request is a GET, so there is no data to clean up: the Nessie call only lists accounts (unlike `pnpm nessie:check`, which creates two customers, two accounts and three transactions in the shared sandbox), the rooms probe reads one table row that does not exist, and the cron sweep is only ever asked without its secret, so it answers 401 or 503 and never runs. Vercel's variable list is read with `vercel api /v10/projects/muse-friends/env --scope aaron-sulbaran-projects` (names only; nothing from the response but the names and the production target is kept), so it needs the Vercel CLI logged in; without it steps 1 and 2 say so and carry on. Keys are read from `.env`, held in memory, sent only to the service they belong to, and every printed line is scrubbed of any value from a `KEY`, `TOKEN`, `SECRET` or `PASSWORD` variable.
+
+Things to know when reading it: step 5 needs `MCP_TOKEN_JUDGE` in `.env`, so do checklist step 5 (or generate the key) before expecting more than a SKIP there. Step 2 can only see the reel the server has cached (up to 10 minutes after a good read, 1 minute after a failed one), and when a run is in the demo room it reads that run's reel. Step 4 run from a different checkout than the one holding the real keys will FAIL on a key the deployment does not know; run it where the real `.env` is. The tests (`tests/laptop-check.test.ts`) drive every verdict with a fake app and a fake Nessie, and check that no secret reaches a printed line and that nothing but a GET is ever sent.
+
+**Verified (Sun Oct 25, about 2:50am, against production on `dedef15` from the platform worktree, whose `.env` holds throwaway local keys):** the run printed step 1 SKIP (the variable is in Vercel; no key in that `.env`), step 2 SKIP (seeded reel in use), step 3 FAIL (503, `CRON_SECRET` not set), step 4 FAIL (the throwaway local `MCP_TOKEN_A` is not accepted by production, as it should not be), step 5 SKIP (401, the station is closed), step 6 PASS (`dedef15`); `--expect-sha dedef15` passed and a wrong sha fails; a bad option exits 2. **Not verified:** a run with Aaron's real `.env`, the Nessie account list against the live sandbox (the fake is tested; the real call is the same `GET /accounts?key=` that `nessie:check` uses for its reads), and the real reel on step 2 (no token exists yet).
+
 ## Regenerating the QR code
 
 Run this whenever the production address changes, then commit `public/qr.svg`. It last changed on Sat Oct 24 evening, when `musefriends.tech` went live; before that it encoded the vercel.app address.
