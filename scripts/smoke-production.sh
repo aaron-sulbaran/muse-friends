@@ -3,11 +3,12 @@
 # serves what a judge's phone needs. Run it from any network (venue Wi-Fi, a phone hotspot).
 # The negotiation itself is run by hand on a phone; see "Smoke test 7" in docs/RUNBOOK.md.
 #
-#   ./scripts/smoke-production.sh                          https://muse-friends.vercel.app
+#   ./scripts/smoke-production.sh                          https://musefriends.tech (redirects to www)
+#   ./scripts/smoke-production.sh https://muse-friends.vercel.app    the fallback address
 #   ./scripts/smoke-production.sh http://localhost:3003    a local dev server
 set -uo pipefail
 
-base_url="${1:-https://muse-friends.vercel.app}"
+base_url="${1:-https://musefriends.tech}"
 slow_seconds=3
 
 failures=0
@@ -39,7 +40,7 @@ expect_page() {
 
 fetch /api/health
 if [ "$status" = "200" ] && [[ "$final_url" != *vercel.com* ]] && grep -q '"ok":true' "$body_file"; then
-  pass "health answers ok, commit $(sed -n 's/.*"sha":"\([^"]*\)".*/\1/p' "$body_file") (${seconds}s)"
+  pass "health answers ok, commit $(sed -n 's/.*"sha":"\([^"]*\)".*/\1/p' "$body_file"), served from $(printf '%s' "$final_url" | sed -E 's#^(https?://[^/]+).*#\1#') (${seconds}s)"
 else
   fail "health answers ok" "HTTP $status, $final_url"
 fi
