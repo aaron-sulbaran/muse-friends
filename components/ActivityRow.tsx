@@ -6,9 +6,11 @@ import {
   policyStampFor,
   type Names,
 } from "@/lib/ui/format";
+import { whyLine, type ToolLineContext } from "@/lib/ui/tools";
 import type { MemberId, UiMessage } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
 import { PolicyStamp } from "./PolicyStamp";
+import { ToolLines } from "./ToolLines";
 
 type Props = {
   message: UiMessage;
@@ -17,20 +19,29 @@ type Props = {
   onOpen: (message: UiMessage) => void;
 };
 
-/** One line per agent message: who talked to whom, what it did, what privacy allowed, and the proof it was a real model call. */
+/**
+ * One entry per agent message: who talked to whom, what it did, what privacy allowed, and the proof it was a real model
+ * call. Under it, one plain line for each tool the agent used and the why of a scheduling decision. The lines are
+ * outside the button so a source chip can be a link.
+ */
 export function ActivityRow({ message, initials, names, onOpen }: Props) {
   const from = names.muse[message.from];
   const to = names.muse[message.to];
   const blocked = message.blockedRule !== undefined;
   const stamp = policyStampFor(message);
+  const lineContext: ToolLineContext = {
+    to,
+    owner: names.human[message.from],
+    person: (agentId) => (Object.hasOwn(names.human, agentId) ? names.human[agentId as MemberId] : names.human[message.to]),
+  };
 
   return (
-    <li className="animate-row-in">
+    <li className="animate-row-in rounded-group transition-colors hover:bg-group">
       <button
         type="button"
         onClick={() => onOpen(message)}
         aria-label={messageAccessibleName(message, names)}
-        className="flex w-full items-start gap-3 rounded-group px-3 py-2.5 text-left transition-colors hover:bg-group"
+        className="flex w-full items-start gap-3 rounded-group px-3 py-2.5 text-left"
       >
         <MuseAvatar agent={message.from} initial={initials[message.from]} name={from} size={36} />
         <span className="min-w-0 flex-1">
@@ -61,6 +72,7 @@ export function ActivityRow({ message, initials, names, onOpen }: Props) {
           ) : null}
         </span>
       </button>
+      <ToolLines calls={message.proof?.toolCalls} why={whyLine(message)} context={lineContext} />
     </li>
   );
 }

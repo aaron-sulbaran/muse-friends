@@ -14,8 +14,9 @@ type Props = {
  * The line under the wordmark: "a proposal for Muse by" and the Meta lockup (D33), or just "a proposal for Muse" when
  * the image does not load. The lockup is the primary one, unaltered, sized by its letters: the "Meta" capitals (about
  * 8.5px) match the subtitle's, so it is 9 by 44, below Meta's 12px minimum symbol height (Aaron's call, so the subtitle
- * reads as a subtitle first). It sits 4 pixels after "by" on the baseline, with nothing after it on the line. It names who Muse belongs to, and says the idea is
- * a proposal for it; it never says Meta built or endorsed this.
+ * reads as a subtitle first). It sits 4 pixels after "by", its ink centered on the middle of the words' capitals (a 0.27px
+ * `top` on a baseline-aligned row; a margin cannot move an image there), with nothing after it on the line. It names who
+ * Muse belongs to, and says the idea is a proposal for it; it never says Meta built or endorsed this.
  */
 export function Subline({ imageFailed = false }: Props) {
   const [failed, setFailed] = useState(imageFailed);
@@ -29,7 +30,7 @@ export function Subline({ imageFailed = false }: Props) {
 
   if (failed) return <span className="text-[12px] font-medium leading-[16px] text-muted">{copy.tagline}</span>;
   return (
-    <span className="flex items-end gap-1 text-[12px] font-medium leading-[16px] text-muted">
+    <span className="inline-flex items-baseline gap-1 text-[12px] font-medium leading-[16px] text-muted">
       {copy.taglineBy}
       {/* The brand's own raster, cut to its ink at 2x and 3x; the official SVG embeds a 370 KB image. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -41,7 +42,7 @@ export function Subline({ imageFailed = false }: Props) {
         height={9}
         width={44}
         onError={() => setFailed(true)}
-        className="mb-px"
+        className="relative top-[0.27px]"
       />
     </span>
   );
