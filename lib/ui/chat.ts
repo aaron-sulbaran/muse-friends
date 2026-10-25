@@ -5,6 +5,7 @@ import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib
 import { paymentsForPlan, settleOffer, sideOfPayment, type SettleOffer } from "./payments";
 import { tripThread, type GroupLine } from "./group";
 import { capital } from "./tokens";
+import { threadLines, type ThreadLine } from "./thread";
 import type { AgentId, AvatarMood, Decision, MemberId, PlanState, Role, UiPayment, UiPlan, UiSnapshot, UiTrip } from "./types";
 
 /*
@@ -16,6 +17,7 @@ import type { AgentId, AvatarMood, Decision, MemberId, PlanState, Role, UiPaymen
 export type ChatItem =
   | { kind: "separator"; id: string; day: string; time: string }
   | { kind: "bubble"; id: string; from: "muse" | "user"; text: string }
+  | { kind: "thread-line"; id: string; line: ThreadLine }
   | { kind: "plan-card"; id: string; plan: UiPlan; role: Role; state: "live" | "sent" }
   | { kind: "reel-card"; id: string; poster: string; caption: string; place: string; image?: string; permalink?: string; live?: boolean; align: "left" | "right" }
   | { kind: "agreed-line"; id: string; names: string[]; count: number }
@@ -75,11 +77,14 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   const names = namesFor(snapshot);
   const agent = roleAgent[role];
   const friend = roleAgent[role === "a" ? "b" : "a"];
-  const mine = { muse: names.muse[agent], human: names.human[agent] };
+  // Michelle's own phone calls her Muse by its name, Mochi; the other phone still says "Michelle's Muse".
+  const mine = { muse: role === "b" && snapshot.simulatedFriend ? snapshot.sides.lisa : names.muse[agent], human: names.human[agent] };
   const theirs = { muse: names.muse[friend], human: names.human[friend] };
 
   const items: ChatItem[] = [];
   const plan = snapshot.plan;
+  // A plan for three has its own group thread (the trip's lines); only your private chat with your Muse joins it here.
+  const thread = threadLines(snapshot, role).filter((line) => !snapshot.plan?.group || line.id.startsWith("thread-chat-"));
   const planGroup = plan?.group ?? null;
   const groupView: GroupView | null = planGroup
     ? {
@@ -114,6 +119,8 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
     } else if (role === "a") {
       items.push({ kind: "start-card", id: "start-simulated", variant: "simulated-friend", friendName: theirs.muse });
     }
+    // Your own private conversation with your Muse needs no plan.
+    for (const line of thread) items.push({ kind: "thread-line", id: line.id, line });
     return { role, agent, friend, museName: mine.muse, humanName: mine.human, friendMuseName: theirs.muse, friendHumanName: theirs.human, status: null, mood: "idle", group: null, items };
   }
 
@@ -126,6 +133,8 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   } else {
     items.push({ kind: "bubble", id: "pickup", from: "muse", text: SHAWARMA_REEL.nextIdea(theirs.human) });
   }
+  // The Muses' turns that moved the plan, and each one's private word to its own person, land in the thread as they happen.
+  for (const line of thread) if (line.phase !== "after") items.push({ kind: "thread-line", id: line.id, line });
   const planContextIds = new Set(plan.group?.contextIds ?? [plan.contextId]);
   const agreedCount = snapshot.messages.filter((message) => planContextIds.has(message.contextId)).length;
   const agreedLine: ChatItem = {
@@ -257,6 +266,9 @@ export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
   if (offer.kind === "turn_on" || offer.kind === "ready") {
     items.push({ kind: "settle-card", id: "settle-card", planId: plan.id, offer, friendName: theirs.human, friendMuse: theirs.muse });
   }
+
+  // What comes after the person decides: the friend's scripted answer, and the person's own private questions to their Muse.
+  for (const line of thread) if (line.phase === "after") items.push({ kind: "thread-line", id: line.id, line });
 
   if (snapshot.inFlight?.agents.includes(agent)) mood = "thinking";
   // While negotiating, the glyph follows the header loop: thinking while this Muse's own call runs, talking while it waits.

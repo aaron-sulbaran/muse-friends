@@ -1,8 +1,10 @@
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   checkHealth,
@@ -35,6 +37,26 @@ describe("parseArgs", () => {
 
   it("falls back to sane numbers when they are not numbers", () => {
     expect(parseArgs(["--runs", "zero", "--timeout", "soon"])).toMatchObject({ runs: 2, timeout: 120 });
+  });
+
+  it("collects what it does not know, so the command line can refuse it instead of ignoring it", () => {
+    expect(parseArgs(["--", "--force", "--group", "--payments"]).unknown).toEqual([]);
+    expect(parseArgs(["--force", "--grup", "stray"]).unknown).toEqual(["--grup", "stray"]);
+    const missing = parseArgs(["--runs", "--force"]);
+    expect(missing.unknown).toEqual(["--runs (needs a value)"]);
+    expect(missing).toMatchObject({ runs: 2, force: true });
+    expect(parseArgs(["--base"])).toMatchObject({ base: "https://www.musefriends.tech", unknown: ["--base (needs a value)"] });
+  });
+});
+
+describe("the command line", () => {
+  const script = fileURLToPath(new URL("../scripts/gate-c5.mjs", import.meta.url));
+
+  it("exits 64 on an option it does not know, before touching anything", () => {
+    const run = spawnSync(process.execPath, [script, "--base", "http://127.0.0.1:9", "--force", "--grup"], { encoding: "utf8" });
+    expect(run.status).toBe(64);
+    expect(run.stderr).toContain("refused its command line (--grup)");
+    expect(run.stdout).toBe("");
   });
 });
 
@@ -438,6 +460,13 @@ process.exit(${exit});
       expect(scriptRuns).toEqual([{ name: "group", decline: false }]);
       expect(lines.find((entry) => entry.includes("group of three"))).toMatch(/^PASS {2}group of three, three decisions and a confirmed plan \(three decisions accepted \(aaron:accepted lisa:accepted kai:accepted\), plan confirmed, 41\.2s from the reel, /);
       expect(text).toContain("C5 GATE: PASS (8 steps) against");
+    });
+
+    it("the first line names the opt-in steps that were asked for, so a missing step line cannot be a missing flag", async () => {
+      const both = await gate(["--payments", "--group", "--runs", "1"], fakeDemo(), { paymentsScript: fakePayments(), groupScript: fakeGroup() });
+      expect(both.lines[0]).toMatch(/^C5 gate against http:\/\/127\.0\.0\.1:\d+ \(with --payments, --group\)$/);
+      const none = await gate(["--runs", "1"], fakeDemo());
+      expect(none.lines[0]).toMatch(/^C5 gate against http:\/\/127\.0\.0\.1:\d+$/);
     });
 
     it("--group fails when the plan did not confirm (a model declined), fewer than three accepted, or the script failed", async () => {
