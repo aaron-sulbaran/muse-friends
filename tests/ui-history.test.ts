@@ -50,7 +50,7 @@ describe("the wallet history", () => {
 
   it("reads from the other seat's side too", () => {
     const [group] = paymentHistory(withPayments([payment()]), "lisa");
-    expect(group.rows[0].who).toBe("Sprout sent you $15");
+    expect(group.rows[0].who).toBe("Your friend sent you $15");
   });
 
   it("says a refunded payment was sent back", () => {
