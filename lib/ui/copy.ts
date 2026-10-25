@@ -85,6 +85,8 @@ export const copy = {
   outcomeDidntReply: (activity: string) => `No worries, plans slip. I'll keep ${activity} in mind for another time.`,
   closingLine: "✓ Done. It's in Goals.",
   nudgeSent: (friend: string) => `Can you check with ${friend} about the shawarma reel?`,
+  /** `asker` is "Alex's Muse", or the Muse's own name when the person has not given theirs. */
+  friendMuseAsking: (asker: string) => `${asker} is asking about this reel.`,
   reelLabel: "Sample reel",
   reelLiveLabel: "Lisa's own reel, live from Instagram",
   reelLivePlace: "Instagram reel",

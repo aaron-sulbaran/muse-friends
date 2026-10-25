@@ -202,6 +202,8 @@ export type UiNote = {
   toolCalls?: UiToolCall[];
   /** On a "You asked" row: the id of the answer in `chat`, so a screen can pair the row with the answer and its proof. */
   answerId?: string;
+  /** The raw technical text behind a reworded row, shown only on hover. */
+  detail?: string;
 };
 
 export type InFlight = {

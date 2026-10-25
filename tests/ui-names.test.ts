@@ -46,6 +46,11 @@ describe("Michelle's phone, while the judge is unnamed", () => {
   const texts = bubbles(confirmed, "b");
   const view = viewForRole(confirmed, "b");
 
+  it("hears about it from her own Muse first: the other side's Muse is asking, so she never seems to have asked", () => {
+    expect(texts).toContain("Sprout is asking about this reel.");
+    expect(texts.some((text) => /^Can you check with/.test(text))).toBe(false);
+  });
+
   it("says the reel was sent without naming a Muse as a person", () => {
     expect(texts).toContain("You sent this a week ago. I'm checking if you two can make it happen.");
   });
@@ -74,6 +79,7 @@ describe("when the judge has a name, it flows through on Michelle's phone", () =
   const texts = bubbles(named, "b");
 
   it("uses the person's name, never their Muse's, in every sentence", () => {
+    expect(texts).toContain("Jordan's Muse is asking about this reel.");
     expect(texts).toContain("You sent Jordan this a week ago. I'm checking if you two can make it happen.");
     expect(texts.some((text) => /^You and Jordan both want to try .+, and you're both free .+\.$/.test(text))).toBe(true);
     expect(texts).toContain("Jordan is sending you a message on WhatsApp.");

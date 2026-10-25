@@ -1,4 +1,4 @@
-import { CalendarX, Film, MessageCircle, Receipt, Shield, ShieldAlert, TriangleAlert, Undo2, UserMinus, Users, Wallet, type LucideIcon } from "lucide-react";
+import { CalendarX, Film, MessageCircle, Receipt, Shield, ShieldCheck, TriangleAlert, Undo2, UserMinus, Users, Wallet, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
 import { ToolsCalled } from "./ToolsCalled";
@@ -10,7 +10,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
   contact_chosen: { icon: Users, title: "Asked to follow up" },
   contact_refused: { icon: UserMinus, title: "Did not reach out", plain: true },
   busy_added: { icon: CalendarX, title: "Marked a time busy" },
-  message_rejected: { icon: ShieldAlert, title: "Inbox rejected a message" },
+  message_rejected: { icon: ShieldCheck, title: "Privacy check" },
   reel_source: { icon: Film, title: "Where the reel came from" },
   payment_sent: { icon: Wallet, title: "Sent money" },
   payment_received: { icon: Wallet, title: "Money received" },
@@ -27,7 +27,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
 export function ActivityNote({ note }: { note: UiNote }) {
   const { icon: Icon, title, plain } = kinds[note.kind];
   return (
-    <li className="animate-row-in">
+    <li className="animate-row-in" title={note.detail}>
       <div className="flex items-start gap-3 rounded-group px-3 py-2.5">
         <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-group">
           <Icon className="size-5" strokeWidth={1.75} aria-hidden="true" />

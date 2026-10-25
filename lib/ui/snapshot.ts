@@ -266,7 +266,25 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
   }));
 }
 
-function toNotes(state: StateSnapshot, rename: (text: string) => string, payments: UiPayment[]): UiNote[] {
+/**
+ * A rejection as privacy proof: one plain sentence per reason, naming the Muses (the server does not know the
+ * people's names). The raw technical text stays as the row's hover detail.
+ */
+function privacySentence(text: string, recipient: AgentId, muse: (agent: AgentId) => string): string {
+  const sender: AgentId = recipient === "aaron" ? "lisa" : "aaron";
+  const from = muse(sender);
+  const to = muse(recipient);
+  const status = /\((\d{3})\)/.exec(text)?.[1];
+  const reason = /\(\d{3}\):\s*(.*)$/.exec(text)?.[1] ?? "";
+  const categories = /sharing policy does not allow \(([^)]*)\)/.exec(reason)?.[1];
+  if (categories) return `Blocked: ${from} tried to share ${categories} with ${to}; the sharing settings don't allow it`;
+  if (/outside the sender's free blocks/.test(reason)) return `Blocked: ${from} offered a time that isn't really free; only real free times go out`;
+  if (/already passed over/.test(reason)) return `Blocked: ${from} offered a time that was already turned down`;
+  if (status === "403") return `Blocked: a message that didn't come from ${from} was refused`;
+  return `Held back: an out-of-turn message from ${from} was stopped before it reached ${to}`;
+}
+
+function toNotes(state: StateSnapshot, rename: (text: string) => string, payments: UiPayment[], muse: (agent: AgentId) => string = displayName): UiNote[] {
   const chat = state.room.chat ?? [];
   const followUps = new Map(state.plans.filter((plan) => plan.target !== undefined).map((plan) => [plan.id, plan]));
   return state.events.flatMap((event): UiNote[] => {
@@ -275,6 +293,9 @@ function toNotes(state: StateSnapshot, rename: (text: string) => string, payment
     if (followUp && event.kind === "signal_received") return [{ id: event.id, kind: "contact_chosen", at: event.at, text }];
     if (followUp && isRefused(followUp) && event.kind === "plan_state") return [{ id: event.id, kind: "contact_refused", at: event.at, text }];
     if (!noteKinds.has(event.kind) || !isWorthARow(event)) return [];
+    if (event.kind === "message_rejected") {
+      return [{ id: event.id, kind: "message_rejected", at: event.at, text: privacySentence(event.text, event.agent ?? "lisa", muse), detail: text }];
+    }
     const base = { id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text };
     if (event.kind !== "chat_asked" || !event.messageId) return [base];
     // A "You asked" row carries the tools the Muse used, read from the proof on its answer.
@@ -434,7 +455,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     standIn,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa"), kai: displayName("kai") },
     messages,
-    notes: [...reelSourceNotes(state), ...toNotes(state, rename, payments)].sort((first, second) => first.at.localeCompare(second.at)),
+    notes: [...reelSourceNotes(state), ...toNotes(state, rename, payments, (agent) => (agent === "lisa" && standIn ? standIn.muse : displayName(agent)))].sort((first, second) => first.at.localeCompare(second.at)),
     contacts: CONTACTS.map((contact) => ({
       id: contact.id,
       name: contact.displayName,
