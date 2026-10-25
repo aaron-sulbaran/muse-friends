@@ -144,9 +144,10 @@ export class NessieHttp implements NessieClient {
     return this.create(`/accounts/${encodeURIComponent(accountId)}/deposits`, { medium: "balance", transaction_date: today(), status: input.status ?? TRANSACTION_STATUS, amount: input.amount, description: input.description.slice(0, 120) });
   }
 
-  // The transaction records, read back by id: what the sandbox actually stored.
+  // The transaction records, read back by id: what the sandbox actually stored. The sandbox spells the withdrawal route
+  // in the singular (GET /withdrawal/{id}); the plural form is answered with 403 "Missing Authentication Token" (checked live).
   getWithdrawal(id: string): Promise<NessieResult<NessieTransaction>> {
-    return this.readTransaction(`/withdrawals/${encodeURIComponent(id)}`);
+    return this.readTransaction(`/withdrawal/${encodeURIComponent(id)}`);
   }
 
   getDeposit(id: string): Promise<NessieResult<NessieTransaction>> {

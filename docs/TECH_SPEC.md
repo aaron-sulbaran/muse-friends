@@ -9,7 +9,7 @@ Status: v2.1, Sat Oct 24, 2026. Smoke tests 1 to 3 passed on live Muse Spark at 
 | App | Next.js (App Router), TypeScript strict, Tailwind |
 | Agents | OpenAI SDK with `baseURL: "https://api.meta.ai/v1"` and `apiKey: process.env.MODEL_API_KEY` (passed explicitly; the SDK does not read that variable), model `muse-spark-1.3`, Responses API (`client.responses.create`) with function tools. The message schema is the parameters of the `send_to_friend_agent` tool, zod-parsed on receipt |
 | Validation | zod (the same schemas, converted to JSON schema, are the tool parameters) |
-| State | `Store` interface; in-memory implementation persisted to `data/store.json` |
+| State | `Store` interface with two implementations: Supabase (Postgres) in production, and an in-memory store persisted to `data/store.json` for local development |
 | Live UI | Polling `/api/state` every second |
 | Handoff | `https://wa.me/?text=<encodeURIComponent(draft)>` click-to-chat with no phone number, plus a copy-draft fallback button; `.ics` file for the calendar hold, served by `GET /api/plans/[id]/hold.ics` |
 | Package manager | pnpm |
@@ -145,24 +145,38 @@ detected -> negotiating -> awaiting_humans -> confirmed -> scheduled -> reminded
 - `reminded` and `happened`: driven by the demo clock (`/api/clock`). Crossing the reminder time triggers each agent's reminder turn; crossing the end time marks it happened.
 - `followed_up`: the next-day agent turn asks its human whether to repeat it.
 
-## Payments (D22)
+## Payments (D22, D28)
 
-Friend-to-friend money, on Capital One's Nessie sandbox (paper dollars, whole numbers only). The agents hold the tools; the code holds the limits. Behind `PAYMENTS=off` the whole feature disappears (no wallets, tools, or routes).
+Friend-to-friend money, on Capital One's Nessie sandbox (paper dollars, whole numbers only). The agents hold the tools; the code holds the limits; since D28 the person holds the last step: **the agent prepares and explains a payment, the person confirms it, and nothing moves without that confirm, even under the cap.** Behind `PAYMENTS=off` the whole feature disappears (no wallets, tools, or routes).
 
-**Wallets.** Each seat gets a Nessie customer and one checking account, created at Reset and kept on the room (jsonb, no migration): Sprout starts with $120, Mochi with $80 (the simulated friend uses Mochi's). A Reset puts the same accounts back to their starting balance instead of creating new ones. `NESSIE_KEY` (sent as `?key=`, never logged) selects the real sandbox at `https://api.nessieisreal.com`. Its writes land as real records (withdrawals and deposits with ids you can read back), but the sandbox never moves an account's `balance` field (checked live), so the balance is ours: `NessieWithLedger` writes the Nessie transaction first, then moves the balance in the room's ledger, and the wallet chip and the payment cards read that ledger, never the sandbox balance. Without a key a local ledger with the same shapes stands in, backed by the room so every instance agrees, and the snapshot says `sandbox: { connected: false, text: "Sandbox not connected, using a local ledger" }`. A wallet keeps the ledger it was created on until the next Reset. Everything written to the real sandbox is readable by every team: fictional names and addresses only.
+**Wallets.** Each seat gets a Nessie customer and one checking account, created at Reset and kept on the room (jsonb, no migration): Sprout starts with $120, Mochi with $80 (the simulated friend uses Mochi's). A Reset puts the same accounts back to their starting balance instead of creating new ones. `NESSIE_KEY` (sent as `?key=`, never logged) selects the real sandbox at `https://api.nessieisreal.com`. Its writes land as real records (withdrawals and deposits with ids you can read back), but the sandbox never moves an account's `balance` field (checked live), so the balance is ours: `NessieWithLedger` writes the Nessie transaction first, then moves the balance in the room's ledger, and the wallet chip and the payment cards read that ledger, never the sandbox balance. Without a key a local ledger with the same shapes stands in, backed by the room so every instance agrees, and the snapshot says `sandbox: { connected: false, text: "Sandbox not connected, local ledger" }` (shown, never hidden). A wallet keeps the ledger it was created on until the next Reset. Everything written to the real sandbox is readable by every team: fictional names and addresses only.
+
+**The proposal (D28).** `send_money` creates a payment in state `proposed`: `{ paymentId, planId, payer, payee, amount, reason, note?, breakdown, calls, receipt?, proof, status }`, kept on the room (`Room.proposals`, jsonb, cleared by Reset). No withdrawal, no thread, no message to the friend. The `breakdown` is 1 to 8 lines `{ label, amount, source }`; the lines **add up to the amount** (zod refine, and the tool refuses with the two sums) and a deduction is a negative line. A `source` is the id of a tool call this turn has finished (`read_receipt` returns its own `callId` so the model can cite it), the word `note` (only when the person said something), or the word `estimate` (the Muse's own number, labeled so); anything else is refused with a list of the lines at fault. The proposal runs the same checks as always (scope, cap, balance, a confirmed plan), holds at most one open proposal per plan and payer, and scans its reason and line labels like a note (proposals are readable by both phones).
+
+Statuses: `proposed` (waiting on the person), `confirming` (mid-send), `confirmed` (sent; the payment message and the ledger are the record from here), `declined`, `failed` (a confirm that did not go through; retryable, with the reason).
+
+**Confirm and decline** (the person, side `a` or `b`, only for their own payment; both idempotent):
+
+| Route | What it does |
+|---|---|
+| `POST /api/payments/[id]/confirm { role }` | re-checks the plan, the cap (counting what is already out) and the balance; withdraws from the payer's account; sends the `payment` message (with the breakdown and the proposing turn's `proof.toolCalls`) to the friend's inbox, whose Muse accepts or sends it back; the ledger moves. A failed delivery puts the money back and leaves the proposal `failed`. A second confirm answers `already: true` and moves nothing. 403 for the other side, 404 unknown, 409 declined or mid-send |
+| `POST /api/payments/[id]/decline { role }` | records the decision, writes `payment_cancelled`, and tells the friend's Muse with a `payment_cancelled` message; nothing moves. A second decline answers `already: true`. 409 once confirmed (the friend's Muse decides that one) |
+
+The friend's inbox refuses a `payment` that has no confirmed or confirming proposal behind it, so the confirm cannot be skipped by sending the message.
 
 **Tools** (offered only in payment turns, never in the negotiation turns):
 
 | Tool | Who | What the runtime does |
 |---|---|---|
-| `get_wallet` | either | reads the balance back from the ledger; shows the cap and what is already sent for the plan |
-| `send_money({ to, amount, reason, note? })` | payer | checks the payments scope and cap, the balance and that the plan is confirmed; withdraws from the payer's account; sends a `payment` message; refunds on a failed delivery |
+| `get_wallet` | either | reads the balance from the ledger; shows the cap and what is already sent for the plan |
+| `read_receipt({ receipt? })` | payer | returns the seeded receipt for the plan's place (`lib/seed/receipts.ts`: Shawarma Point, two plates, tax, tip, who paid), labeled seeded and fictional in its data and in the `receipt_read` Activity row, with its own `callId` |
+| `send_money({ to, amount, reason, note?, breakdown })` | payer | prepares a proposal as above; nothing moves |
 | `accept_payment({ paymentId })` | receiver | deposits into the receiver's account, reads the balance back, sends `payment_received` with the balance delta |
 | `decline_payment({ paymentId, reason? })` | receiver | the withdrawal already happened, so it deposits the amount back into the payer's account (a refund) and sends `payment_received` with outcome `declined` |
 
-The amount and the reason are the model's, from the plan, the place, the party, the person's note, and who offered what; nothing in the code names one. A settle turn starts when a person taps (`POST /api/plans/[id]/settle { role, note? }`, which takes a run slot from the hourly caps); a payment arriving in an inbox starts the receiver's payment turn. A model that cannot answer a payment is replaced by a code `accept` marked as a fallback; a model that is down decides to send nothing.
+The amount, the reason and the breakdown are the model's, from the plan, the receipt, the person's note, and who offered what; nothing in the code names one. A settle turn starts when a person taps (`POST /api/plans/[id]/settle { role, note? }`, which takes a run slot from the hourly caps); a payment arriving in an inbox starts the receiver's payment turn. A model that cannot answer a payment is replaced by a code `accept` marked as a fallback; a model that is down prepares nothing.
 
-**Messages.** Two more types, `payment` and `payment_received`, on a payment thread of their own (`contextId` `pay_<paymentId>`, linked to the plan by `planId`, two messages, ending `completed`). They carry a `payment` object, and only they do:
+**Messages.** Three payment types, `payment`, `payment_received` and `payment_cancelled`, on a payment thread of their own (`contextId` `pay_<paymentId>`, linked to the plan by `planId`; `payment` then `payment_received` ends `completed`; a lone `payment_cancelled` ends `rejected`). They carry a `payment` object, and only they do:
 
 ```ts
 type Payment = {
@@ -172,21 +186,44 @@ type Payment = {
   payerAccountId: string; withdrawalId?: string;                     // payment
   outcome?: "accepted" | "declined"; payeeAccountId?: string; depositId?: string;   // payment_received (depositId is the refund id when declined)
   balanceBefore?: number; balanceAfter?: number;                     // the receiver's, when accepted
+  breakdown?: Array<{ label: string; amount: number; source: string }>;   // lines add up to the amount
 };
 ```
 
 `reason` is `settle_up`. A payment never changes a plan: no transition, no card, no windows ledger. `send_to_friend_agent` cannot author these types.
 
-**Privacy and limits.** `SharePolicy.payments?: { enabled: boolean; capPerPlan: number }` is the payments scope: off by default, no tier turns it on, set by the owner (`POST /api/controls { type: "payments", side, enabled, cap }`). The cap counts dollars sent for a plan and still held by the friend; a refunded payment frees it. It is enforced at send (`paymentsCheck`) and again in the receiver's inbox, which also checks that the plan exists and is confirmed or later, that the payer account is the sender's own wallet, that the payment id is new, that an answer comes from the person paid, and that the amount matches. Only account ids this app created are ever acted on. `enforceSharePolicy` scans `payment.reason` and `note` like any text, and the inbox rejects a message that would have been rewritten.
+**Privacy and limits.** `SharePolicy.payments?: { enabled: boolean; capPerPlan: number }` is the payments scope: off by default, no tier turns it on, set by the owner (`POST /api/controls { type: "payments", side, enabled, cap }`). The cap counts dollars sent for a plan and still held by the friend; a refunded payment frees it; it is the upper limit, and it is enforced when the payment is prepared, again when the person confirms, and again in the receiver's inbox, which also checks that the plan exists and is confirmed or later, that the payer account is the sender's own wallet, that the payment id is new and has a confirmed proposal, that an answer comes from the person paid, and that the amount matches. Only account ids this app created are ever acted on. `enforceSharePolicy` scans `payment.reason` and `note` like any text, and the inbox rejects a message that would have been rewritten.
 
-**Timeline and snapshot.** Activity rows `payment_sent`, `payment_received`, `payment_declined`, `payment_failed` carry the ledger and the Nessie ids; a ledger error reads "Payment failed, sandbox error: ..." and never drops a plan or fails a Reset. The UI snapshot adds `wallets`, `payments`, `paymentsScope` and `sandbox` (payments are not in `messages`).
+**Timeline and snapshot.** Activity rows `payment_proposed`, `payment_sent`, `payment_received`, `payment_declined`, `payment_cancelled`, `payment_failed` and `receipt_read` carry the ledger and the Nessie ids; a ledger error reads "Payment failed, sandbox error: ..." and never drops a plan or fails a Reset. The UI snapshot adds `wallets`, `payments`, `paymentsScope` and `sandbox` (payments are not in `messages`). Each `payments` entry has `status` (`proposed`, `declined`, `failed`, `sent`, `received`, `refunded`), `breakdown` (label, amount, `source`, `sourceKind` of `tool`, `note` or `estimate`, and the `tool` name a tool source points at), `explanation` (the lines as a sentence, for "Why $16?"), `receipt` (`{ seeded: true, place, total }`), `confirmUrl` and `declineUrl` while it waits on the person, `error` after a failed confirm, the Nessie ids (`withdrawalId`, `depositId`) after sending, and `toolCalls` (the payer's tools from the proof on the `payment` message, then the friend's from the `payment_received` proof once it answers, so the drawer can show `get_wallet`, `send_money` and `accept_payment`). `sandbox.balanceNote` is present on the real sandbox only: it records each payment but never moves an account's own balance field (checked live), so Muse keeps the balances and the line says so. A wallet's `nickname` and the settle refusal name the friend the way the Activity feed does ("Michelle's wallet", "Michelle's Muse" when the simulated friend plays side b).
+
+## Chat with your Muse (D31)
+
+The person on side a can talk to their own Muse. `POST /api/chat { text, role? }` (role `a`, the default; side b gets a 403, because Michelle is scripted and the friend's side has no chat) runs **one model turn** with the existing loop (`runAgentTurn`, same retry rules, prose is the answer, at most 5 lookups) over **read-only tools only**, so the answers come from the same data the cards show:
+
+| Tool | Reads |
+|---|---|
+| `get_plan` | state, what and where, the agreed window, who has said yes, recent history (or "no plan yet") |
+| `get_reel` | the reel the friend sent: their message, the caption (labeled as someone else's words), what the Muse read from it, and whether it is the seeded one |
+| `get_wallet_and_history` | the balance and ledger, the per-plan allowance, and every payment this person is in with reason, amount, status and date |
+| `get_sharing` | what each side shares by category, what was removed from a message and why |
+| `explain_payment({ paymentId })` | the breakdown lines of one payment and where each number came from (the sample receipt, "what you told me", "my own estimate") |
+| `get_my_calendar`, `get_interests` | the product's own read tools; a private event's title is replaced by "a private event" before the model sees it, since an answer is kept on the room |
+| `where_to_do_that({ action })` | no data: the line that points a request the chat cannot do (pay, message the friend, decide the plan, change a setting) at the card where it happens |
+
+There is **no tool that sends a protocol message, moves money, decides a plan or changes a setting**; a model that asks for one gets an error, and those stay with the plan flow and the D28 confirm. The last six lines of the chat go into the next turn's input, so a follow-up ("and the tax?") has something to follow.
+
+**What it leaves.** The question and the answer on the room (`Room.chat`, `ChatEntry { id, from: user | muse, text, at, replyTo?, proof? }`, the last 40 lines, cleared by Reset), and one Activity row `chat_asked`, "You asked: ...", whose `messageId` is the answer's id. The answer's `proof` is the model call plus `toolCalls` (one line each, counts and states only, never the caption, the balance or a payment's reason). When the model is down nothing is stored: the route answers 503 with the honest reason, a `turn_failed` row is written, and the chat slot is given back; a chat answer is never faked.
+
+**Caps.** 20 chat turns per room per hour (`MAX_CHAT_TURNS_PER_ROOM_PER_HOUR`), counted in memory like the run caps, and each turn also spends from the app-wide hourly total. Past either: 429 `{ paused, reason, text, budget }` with `Retry-After`. A bad body (empty, over 500 characters) is a 400 and spends nothing.
+
+**Snapshot.** `UiSnapshot.chat: UiChatMessage[]` (`{ id, from: "user" | "muse", text, at, replyTo?, proof? }`, in order; text is renamed like the rest of the screen, so the Muse shows as "Michelle's Muse" when the simulated friend plays side b) and `UiNote` kind `chat_asked` with `answerId` and `toolCalls`. The snapshot is the same for both roles, so a real second phone could read these lines in the JSON; the screen draws them on side a only.
 
 ## Demo controls
 
 - **Inject signal:** loads the seeded "Lisa sent Aaron a reel" event.
 - **Fast-forward:** jumps the demo clock to the reminder, then to the next day.
 - **Privacy toggle:** on Lisa's phone settings, flip location for Aaron off.
-- **Replay:** plays back a recorded run from `data/` for a no-network fallback.
+- **Replay:** plays back the committed recording of a real run (`lib/seed/live-run.json`, written by `pnpm demo:record` from a run on the live model, with each message's model proof and tool calls) for a no-network fallback, labeled with the date it was recorded. A hand-written script plays only if that file cannot be read or any of its messages lacks model proof, and it says it is scripted.
 - **Payments:** a cap per plan for each person's Muse (off by default), and a settle-up tap on a confirmed plan.
 
 ## Testing

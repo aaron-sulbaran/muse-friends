@@ -3,7 +3,7 @@
 // (lib/nessie.ts, NessieWithLedger): two fictional customers with a checking account each, a withdrawal from one,
 // the matching deposit into the other, and a refund back. It asserts on what the app relies on:
 //
-//   the Nessie RECORDS   every write is read back by id (GET /withdrawals/{id}, GET /deposits/{id}) and must carry
+//   the Nessie RECORDS   every write is read back by id (GET /withdrawal/{id}, singular, and GET /deposits/{id}) and must carry
 //                        the amount we sent; its status is compared with the one we sent
 //   OUR ledger           the balances the app shows (wallet chip, payment cards): 50, 43 and 57, then 50 again
 //

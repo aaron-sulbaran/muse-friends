@@ -1,7 +1,27 @@
 /* Every user-facing string that is not derived from data, in one place. */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Oct 25": the month and day of a recording, read from its ISO time as written (our recordings carry the Central offset). */
+export function recordingDate(iso: string): string {
+  const month = Number(iso.slice(5, 7));
+  const day = Number(iso.slice(8, 10));
+  return MONTHS[month - 1] && day > 0 ? `${MONTHS[month - 1]} ${day}` : "an earlier date";
+}
+
 export const copy = {
   brand: "Muse Friends",
-  tagline: "A proposal for Muse",
+  // One string, so swapping in the Meta lockup later (once Meta clears it) is this line and nothing else.
+  tagline: "a proposal for Muse",
+  howItWorks: "How it works",
+  // The stage header's three moments, in the order they happen. The lines are the CDO's (header-activity README).
+  momentSaidYes: "Said yes",
+  momentSaidYesLine: "Both people tapped Set it up on the plan.",
+  momentMessageSent: "Message sent",
+  momentMessageSentLine: "The plan went out to both people's chats.",
+  momentTheyWent: "They went",
+  momentTheyWentLine: "Both people tapped We went after the plan. This is the number we measure: plans that happened, not messages sent.",
+  momentNotYet: "Not yet",
+  momentShow: "Show in conversation",
   activityTitle: "Activity",
   activityEmpty: (first: string, second: string) => `Nothing yet. When ${first} and ${second} talk, every message shows up here.`,
   reconnecting: "Reconnecting...",
@@ -36,10 +56,16 @@ export const copy = {
   draftCopy: "Copy",
   draftCopied: "Copied",
   draftOpenWhatsApp: "Open WhatsApp",
+  draftHandedOff: "Continue this conversation in WhatsApp",
+  draftOpenAgain: "Open again",
   holdBubble: (when: string) => `I added a hold for ${when}.`,
   holdTitle: (activity: string, friend: string) => `${activity} with ${friend}`,
   holdAction: "Add to calendar",
   holdGoogle: "Add to Google Calendar",
+  holdAdded: "Added to your calendar",
+  holdChangePlans: "Change plans",
+  /** A person's own words to the friend; the Muse never sends it. */
+  changePlansDraft: "Hey, can we change our plans?",
   holdDetails: (first: string, second: string) => `${first} and ${second} planned this in Muse Friends.`,
   reminder: (activity: string, friend: string, time: string) => `${activity} with ${friend} at ${time}.`,
   followUp: "Did you two make it?",
@@ -75,15 +101,24 @@ export const copy = {
   paymentRefundedPayee: "You sent it back",
   paymentDetails: "Details",
   paymentDrawerTitle: "Payment",
+  paymentDrawerRecord: "The ledger's record, as stored",
   settleTitle: (friend: string) => `Settle up with ${friend}?`,
-  settleDetail: (cap: string, friendMuse: string) => `Your Muse decides what is fair, up to ${cap}. ${friendMuse} accepts it or sends it back.`,
-  settleNotePlaceholder: "Optional: tell your Muse how, like I'll cover the plate",
+  settleNotePlaceholder: "Add a note, like I'll cover the plate",
+  settleNoteLabel: "Optional note for your Muse about how to settle up",
   settleAction: "Settle up",
   settleWorking: "Your Muse is settling up...",
   settleOffTitle: "Settle up is off",
   settleOffDetail: "Let your Muse send money for this plan. You set the most per plan.",
   settleOffAction: "Turn on payments",
   paymentsSection: "Payments",
+  paymentsTabSettings: "Settings",
+  paymentsTabHistory: "History",
+  historyWith: (friend: string) => `History with ${friend}`,
+  historyEmpty: "No payments yet. When your Muse settles up for a plan, it shows here.",
+  historyLoading: "Loading...",
+  historyStandingWaiting: "Waiting",
+  historyStandingKept: "Kept",
+  historyStandingBack: "Sent back",
   paymentsSwitch: "Let my Muse send money",
   paymentsSwitchHint: (cap: string) => `Up to ${cap} per plan. The limit is enforced in code on both ends.`,
   paymentsCap: "Most per plan, in dollars",
@@ -109,17 +144,42 @@ export const copy = {
   modelErrorSecond: (muse: string) => `Still no answer from ${muse}. Use Replay to keep going.`,
   failedPlan: (muse: string) => `${muse} didn't answer, so this plan stopped.`,
 
-  followThrough: "Follow-through",
-  agentMessagesNotCounted: (count: number) => `Agent messages: ${count} (not counted)`,
-  humanTapsNotCounted: (count: number) => `Taps and sends: ${count} (not counted)`,
-  followThroughEmpty: "Nothing has happened yet. This counts plans that actually took place.",
 
   liveLabel: "Live",
   replayLabel: "Replay of a recorded run",
   replayShort: "Replay",
+  /** The badge text for a replay, saying what is playing: a real run with the date it was recorded, or the scripted fallback. */
+  replayBadge: (recording: { source: "live" | "scripted"; recordedAt: string } | undefined, compact: boolean) => {
+    if (!recording) return compact ? "Replay" : "Replay of a recorded run";
+    if (recording.source === "scripted") return compact ? "Replay, scripted" : "Replay of a scripted run";
+    const date = recordingDate(recording.recordedAt);
+    return compact ? `Replay, recorded ${date}` : `Replay of a real run, recorded ${date}`;
+  },
   replayStart: "Watch a recorded run",
   simulatedClock: "Simulated clock",
   simulatedFriendBanner: "Simulated friend, fictional, played by a model",
+
+  // The thread with the friend (D32): who said what, and which Muse belongs to which person.
+  threadMuseOf: (owner: string) => `${owner}'s Muse`,
+  threadYourMuse: "your Muse",
+  threadSimulated: "Simulated",
+  threadSimulatedCard: (name: string) => `${name} is played by a model for this demo.`,
+  threadOnlyYou: "Only you see this",
+  /** Above your own private question to your Muse. */
+  threadToMuse: (muse: string) => `To ${muse}, only you see this`,
+  /** A Muse's note to its own person when policy kept something out of a message. `withheld` is already a list: "location and interests". */
+  threadKeptOut: (withheld: string, friendMuse: string) => `I kept ${withheld} out of what I sent ${friendMuse}.`,
+  /** What the simulated friend says once she has decided, scripted to the plan's state. */
+  threadFriendYes: "Yes, I'm in.",
+  threadFriendNo: "Not this time, sorry.",
+
+  // The composer at the bottom of Sprout's phone (D31, D32): talk to the friend, or ask your own Muse in private.
+  composerMessage: (friend: string) => `Message ${friend}`,
+  composerAskPill: (muse: string) => `Ask ${muse}`,
+  composerAskPlaceholder: (muse: string) => `Ask ${muse} privately`,
+  composerAskUnavailable: (muse: string) => `Asking ${muse} is not available yet`,
+  composerSend: "Send",
+  composerSending: "Sending",
 
   drawerClose: "Close",
   drawerCopy: "Copy JSON",

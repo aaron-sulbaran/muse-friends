@@ -96,9 +96,13 @@ export type FollowThroughEvent = {
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source" | "payment_sent" | "payment_received" | "payment_declined" | "payment_failed";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source" | "payment_sent" | "payment_received" | "payment_declined" | "payment_failed" | "payment_proposed" | "payment_cancelled" | "receipt_read" | "chat_asked";
   at: string;
   text: string;
+  /** On a "You asked" row (chat_asked): the read tools the Muse used to answer, from the proof on its answer. */
+  toolCalls?: UiToolCall[];
+  /** On a "You asked" row: the id of the answer in `chat`, so a screen can pair the row with the answer and its proof. */
+  answerId?: string;
 };
 
 export type InFlight = {
@@ -119,7 +123,35 @@ export type UiWallet = {
   accountId: string;
 };
 
-/** One payment between the two Muses, newest state: sent (waiting on the friend), received (kept), or refunded (declined). */
+/** One line of the chat with a person's own Muse. A Muse line carries the proof of the model call that wrote it and the tools it used. */
+export type UiChatMessage = {
+  id: string;
+  from: "user" | "muse";
+  text: string;
+  at: string;
+  /** On a Muse line: the id of the question it answers. */
+  replyTo?: string;
+  proof?: ModelProof;
+};
+
+/** One line of a payment's breakdown. The lines add up to the payment's amount; a deduction is negative. */
+export type UiBreakdownLine = {
+  label: string;
+  amount: number;
+  /** The raw source: a tool call id from the turn that prepared it, "note", or "estimate". */
+  source: string;
+  /** "tool" lines cite a call (the seeded receipt read, for example), "note" the person's words, "estimate" the Muse's own. */
+  sourceKind: "tool" | "note" | "estimate";
+  /** The name of the tool a "tool" source points at, when it is one of the tool calls on the payment. */
+  tool?: string;
+};
+
+/**
+ * One payment between the two Muses. proposed: the Muse prepared it and explained it, and nothing has moved until the
+ * person confirms (D28); declined: the person said no; failed: the confirm did not go through and nothing moved (or it
+ * was refunded); sent: confirmed, waiting on the friend's Muse; received: the friend's Muse kept it; refunded: the
+ * friend's Muse sent it back.
+ */
 export type UiPayment = {
   id: string;
   planId: string;
@@ -127,15 +159,32 @@ export type UiPayment = {
   to: AgentId;
   amount: number;
   reason: string;
+  /** The reason with the plan's event and day in front ("Shawarma Point, Tue Oct 27, dinner share"); the cards show this when set. */
+  description?: string;
+  /** The plan it belonged to, named by its event and day ("Shawarma Point, Tue Oct 27"); unset when the plan is not known. */
+  planLabel?: string;
   note?: string;
-  status: "sent" | "received" | "refunded";
+  status: "proposed" | "declined" | "failed" | "sent" | "received" | "refunded";
   source: "nessie" | "local";
+  /** The sourced breakdown behind the amount, shown in the provenance drawer. */
+  breakdown?: UiBreakdownLine[];
+  /** The breakdown as a plain sentence built from the same lines, for "Why $16?". */
+  explanation?: string;
+  /** Set when the Muse read the seeded receipt: it is a labeled fixture, never a real receipt. */
+  receipt?: { seeded: true; place: string; total: number };
+  /** While proposed (or failed and retryable): POST { role } here to confirm or decline. */
+  confirmUrl?: string;
+  declineUrl?: string;
+  /** Why a confirm did not go through, in words. */
+  error?: string;
   withdrawalId?: string;
   /** The deposit into the receiver, or the refund deposit into the payer. */
   depositId?: string;
   /** The receiver's balance around the deposit, when it was kept. */
   balanceBefore?: number;
   balanceAfter?: number;
+  /** The tools the payer's Muse called on the way to this payment (the same list as the proof on the message). */
+  toolCalls?: UiToolCall[];
   at: string;
 };
 
@@ -145,11 +194,16 @@ export type PaymentsSettings = { enabled: boolean; cap: number };
 /** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
 export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
 
+/** Which recording a replay frame was built from, so the badge can say what is playing and from when. */
+export type UiRecording = { source: "live" | "scripted"; recordedAt: string };
+
 export type UiSnapshot = {
   /** The demo clock, ISO. */
   now: string;
   clockSimulated: boolean;
   mode: "live" | "replay";
+  /** Only on replay frames: the recording they came from. */
+  recording?: UiRecording;
   /** True when side b is played by the model instead of a second human. */
   simulatedFriend: boolean;
   /** What people see for each side: the Muse characters' names, never the internal ids. */
@@ -178,8 +232,16 @@ export type UiSnapshot = {
   wallets: Record<AgentId, UiWallet | null>;
   /** Payments between the Muses, oldest first. They are not in `messages`. */
   payments: UiPayment[];
+  /** The chat between side a's person and their own Muse (D31), oldest first, in order. Empty until the first question; never has a line for side b. */
+  chat: UiChatMessage[];
   /** What each side lets its Muse send. */
   paymentsScope: Record<AgentId, PaymentsSettings>;
   /** `connected` is true only when the wallets live on the real Nessie sandbox; otherwise a local ledger stands in. */
-  sandbox: { enabled: boolean; connected: boolean; text: string };
+  sandbox: {
+    enabled: boolean;
+    connected: boolean;
+    text: string;
+    /** Present only on the real sandbox, which keeps the transaction records but never moves an account's balance field (checked live); print it near the wallet chip. */
+    balanceNote?: string;
+  };
 };

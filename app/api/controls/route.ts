@@ -42,10 +42,24 @@ function refuse(message: string, status: number) {
   return NextResponse.json({ data: null, error: { message } }, { status });
 }
 
+const CAP_TEXT = `The cap is whole dollars per plan, from 0 to ${PAYMENT_MAX_DOLLARS}`;
+
+// What was wrong with a body that did not parse, named for the control it was aimed at (a payments body with a bad cap
+// says so, instead of asking for a privacy change).
+function badBodyMessage(raw: unknown): string {
+  const body = (typeof raw === "object" && raw !== null ? raw : {}) as { type?: unknown; cap?: unknown };
+  if (body.type === "payments") {
+    const capOk = body.cap === undefined || (Number.isInteger(body.cap) && (body.cap as number) >= 0 && (body.cap as number) <= PAYMENT_MAX_DOLLARS);
+    return capOk ? "Payments need a side (a or b) and enabled (true or false), and may carry a cap in whole dollars" : CAP_TEXT;
+  }
+  return "Expected a privacy change, a payments change (side, enabled, cap), a reset, or the simulated friend switch";
+}
+
 /** The controls: a sharing switch on either side, Reset for the one demo room, and the simulated friend for a judge playing alone. */
 export async function POST(request: Request) {
-  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return refuse("Expected a privacy change or a reset", 400);
+  const raw = await request.json().catch(() => null);
+  const parsed = bodySchema.safeParse(raw);
+  if (!parsed.success) return refuse(badBodyMessage(raw), 400);
   const body = parsed.data;
   const store = await getStore();
 

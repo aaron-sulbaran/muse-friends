@@ -13,7 +13,7 @@ import type { UiSnapshot } from "./types";
 
 export type ReplayFrame = { snapshot: UiSnapshot; holdMs: number };
 
-export type Replay = { id: string; label: string; source: RecordedRun["source"]; frames: ReplayFrame[] };
+export type Replay = { id: string; label: string; source: RecordedRun["source"]; recordedAt: string; frames: ReplayFrame[] };
 
 const ms = (iso: string) => Date.parse(iso);
 
@@ -106,7 +106,7 @@ export function buildReplay(run: RecordedRun): Replay {
   const frames: ReplayFrame[] = [];
   let previous = "";
   times.forEach((time, index) => {
-    const snapshot = toUiSnapshot(stateAt(run.snapshot, time), { mode: "replay" });
+    const snapshot = toUiSnapshot(stateAt(run.snapshot, time), { mode: "replay", recording: { source: run.source, recordedAt: run.recordedAt } });
     const holdMs = index < times.length - 1 ? holdFor(times[index + 1] - time) : 0;
     const key = JSON.stringify({ ...snapshot, now: undefined });
     if (key === previous && frames.length > 0) {
@@ -116,7 +116,7 @@ export function buildReplay(run: RecordedRun): Replay {
     previous = key;
     frames.push({ snapshot, holdMs });
   });
-  return { id: run.id, label: run.label, source: run.source, frames };
+  return { id: run.id, label: run.label, source: run.source, recordedAt: run.recordedAt, frames };
 }
 
 /** Of the runs saved in the store, the one that got furthest (a live run wins a tie, then the newest). Null when none qualifies. */

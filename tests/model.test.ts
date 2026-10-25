@@ -1,3 +1,4 @@
+import { describeFailure } from "@/lib/agent/runtime";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runAgentTurn, type ToolDefinition } from "@/lib/model";
 import { installFakeModel, removeFakeModel } from "./helpers/fakeModel";
@@ -39,7 +40,7 @@ describe("runAgentTurn (stateless, the default)", () => {
     const metas: unknown[] = [];
     await runAgentTurn({ ...base, handlers: { get_my_calendar: async (_args, meta) => (metas.push(meta), {}) } });
     expect(metas).toEqual([
-      { responseId: "resp_1", model: "muse-spark-1.3", call: expect.objectContaining({ responseId: "resp_1", inputTokens: 10, outputTokens: 5, reasoningTokens: 2, toolNames: ["get_my_calendar"] }), toolCalls: [] },
+      { responseId: "resp_1", model: "muse-spark-1.3", call: expect.objectContaining({ responseId: "resp_1", inputTokens: 10, outputTokens: 5, reasoningTokens: 2, toolNames: ["get_my_calendar"] }), toolCalls: [], callId: "call_1_0", finishedCalls: [] },
     ]);
   });
 
@@ -154,11 +155,11 @@ describe("runAgentTurn (stateless, the default)", () => {
     expect(nudge).toMatchObject({ role: "user" });
   });
 
-  it("fails with cap_reached after one nudge that still gets no tool call", async () => {
+  it("fails with no_tool_call after one nudge that still gets no tool call", async () => {
     const fake = installFakeModel([{ text: "prose" }, { text: "more prose" }, { text: "unused" }]);
     const result = await runAgentTurn({ ...base, handlers: {}, requiredTools: ["send_to_friend_agent"] });
     expect(result.status).toBe("failed");
-    expect(result.failure).toMatchObject({ reason: "cap_reached", detail: "no_tool_call" });
+    expect(result.failure).toMatchObject({ reason: "no_tool_call", detail: "no_tool_call" });
     expect(fake.calls).toHaveLength(2);
   });
 
@@ -186,7 +187,20 @@ describe("runAgentTurn (stateless, the default)", () => {
     installFakeModel([{ error: 500 }]);
     const result = await runAgentTurn({ ...base, handlers: {} });
     expect(result.status).toBe("failed");
-    expect(result.failure).toMatchObject({ reason: "cap_reached", detail: "api_error" });
+    expect(result.failure).toMatchObject({ reason: "model_error", detail: "api_error" });
+  });
+
+  it("calls a model that answered 404 through every retry a model error, never a cap", async () => {
+    process.env.MODEL_RETRY_SCALE = "0";
+    // The first call and each of the eight retries answer 404 model_not_found.
+    installFakeModel(Array.from({ length: 9 }, () => ({ error: 404, code: "model_not_found" })));
+    const result = await runAgentTurn({ ...base, handlers: {} });
+    delete process.env.MODEL_RETRY_SCALE;
+    expect(result.failure).toMatchObject({ reason: "model_error", detail: "api_error", message: expect.stringContaining("not found") });
+    expect(describeFailure(result.failure)).toMatch(/^the model did not answer \(.*not found/);
+    expect(describeFailure(result.failure)).not.toMatch(/cap/);
+    expect(describeFailure({ reason: "cap_reached", detail: "tool_cap" })).toBe("the model used up its tool calls for the turn");
+    expect(describeFailure({ reason: "no_tool_call", detail: "no_tool_call" })).toBe("the model replied without acting, even after a nudge");
   });
 });
 
