@@ -18,7 +18,7 @@ type Props = {
 function Row({ icon, title, detail }: { icon: React.ReactNode; title: string; detail?: string }) {
   return (
     <div className="flex items-center gap-3 py-2">
-      <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-bubble-muse text-ink">{icon}</span>
+      <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-surface text-ink">{icon}</span>
       <div className="min-w-0">
         <p className="text-[15px] font-semibold leading-5">{title}</p>
         {detail ? <p className="text-[13px] leading-[18px] text-muted">{detail}</p> : null}
@@ -50,7 +50,7 @@ export function RecommendationCard({ plan, role, view, simulatedFriend, pending,
           <Row icon={<Clock className="size-5" strokeWidth={1.75} aria-hidden="true" />} title={formatWindowFull(plan.window)} />
         ) : null}
         <div className="flex items-center gap-3 py-2">
-          <MuseAvatar agent={view.friend} simulated={simulatedFriend} size={36} />
+          <MuseAvatar agent={view.friend} simulated={simulatedFriend && view.friend === "lisa"} name={view.friendMuseName} size={36} />
           <p className="text-[15px] font-semibold leading-5">{copy.friendSaidYes(view.friendMuseName, view.friendHumanName)}</p>
         </div>
       </div>

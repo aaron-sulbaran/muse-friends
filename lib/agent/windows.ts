@@ -114,3 +114,21 @@ export function describeWindow(window: Window): string {
   const sameSuffix = start.hour >= 12 === end.hour >= 12;
   return `${start.weekday} ${formatHour(start.hour, start.minute, !sameSuffix)} to ${formatHour(end.hour, end.minute, true)}`;
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// "Sun Oct 25, 2pm" for prompts.
+export function describeInstant(ms: number): string {
+  const shifted = new Date(ms + CENTRAL_OFFSET_MINUTES * MINUTE_MS);
+  const label = clockLabel(ms);
+  return `${label.weekday} ${MONTHS[shifted.getUTCMonth()]} ${shifted.getUTCDate()}, ${formatHour(label.hour, label.minute, true)}`;
+}
+
+// Parses a time a model wrote. Anything without an offset is read as US Central.
+export function parseWhen(text: string): number {
+  const trimmed = text.trim();
+  const hasOffset = /(Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(trimmed);
+  const candidate = dateOnly ? `${trimmed}T00:00:00-05:00` : hasOffset ? trimmed : `${trimmed}-05:00`;
+  return Date.parse(candidate);
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { namesFor } from "@/lib/ui/format";
 import { useMediaQuery } from "@/lib/ui/use-media-query";
 import { useSnapshot } from "@/lib/ui/use-snapshot";
 import type { Role } from "@/lib/ui/types";
@@ -18,15 +19,16 @@ export function PhoneRoute({ role }: { role: Role }) {
   if (!snapshot) return <div className="h-dvh bg-screen" />;
 
   const screen = <MuseScreen snapshot={snapshot} role={role} framed={framed} onChanged={refresh} />;
-  const label = role === "a" ? "Aaron's Muse" : snapshot.simulatedFriend ? "Michelle's Muse, a simulated friend" : "Lisa's Muse";
+  const names = namesFor(snapshot);
+  const label = role === "a" ? `${names.muse.aaron}'s side` : snapshot.simulatedFriend ? `${names.muse.lisa}, a simulated friend` : `${names.muse.lisa}'s side`;
 
   if (!framed) {
     return (
       <div className="relative h-dvh">
         {screen}
         {snapshot.mode === "replay" ? (
-          <div className="pointer-events-none absolute inset-x-0 top-[max(env(safe-area-inset-top),8px)] flex justify-center">
-            <ReplayBadge mode="replay" />
+          <div className="pointer-events-none absolute left-3 top-[max(env(safe-area-inset-top),8px)]">
+            <ReplayBadge mode="replay" compact />
           </div>
         ) : null}
         {!connected ? <p className="absolute inset-x-0 top-1 text-center text-[12px] text-muted">Reconnecting...</p> : null}
@@ -35,7 +37,12 @@ export function PhoneRoute({ role }: { role: Role }) {
   }
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-linear-to-b from-surface to-stage-end p-6">
+    <div className="relative grid min-h-dvh place-items-center bg-linear-to-b from-surface to-stage-end p-6">
+      {snapshot.mode === "replay" ? (
+        <div className="absolute left-6 top-4">
+          <ReplayBadge mode="replay" compact />
+        </div>
+      ) : null}
       <div className="h-[min(864px,calc(100dvh-48px))] w-full">
         <FitPhone label={label}>{screen}</FitPhone>
       </div>

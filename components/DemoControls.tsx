@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { postStep } from "@/lib/ui/actions";
+import { postClockAdvance, postReset, postStep } from "@/lib/ui/actions";
 import type { UiSnapshot } from "@/lib/ui/types";
 
 type Props = {
@@ -19,7 +19,7 @@ const messageGapsMs = [2200, 2600, 2400, 2200, 2000, 2000];
 
 /**
  * Presenter-only controls. While the recorded run stands in for the live
- * agents, "Load Lisa's reel" plays the thread from the browser; once the real
+ * agents, "Load the shawarma reel" plays the thread from the browser; once the real
  * signal route exists it only posts the signal.
  */
 export function DemoControls({ snapshot, onChanged }: Props) {
@@ -47,13 +47,13 @@ export function DemoControls({ snapshot, onChanged }: Props) {
   }
 
   async function jump() {
-    await postStep({ type: "clock_next" });
+    await postClockAdvance();
     onChanged();
   }
 
   async function reset() {
     activeRun++;
-    await postStep({ type: "reset" });
+    await postReset();
     onChanged();
   }
 
@@ -79,7 +79,7 @@ export function DemoControls({ snapshot, onChanged }: Props) {
   }, []);
 
   const items: ReadonlyArray<{ label: string; key: string; run: () => void; disabled?: boolean }> = [
-    { label: "Load Lisa's reel", key: "S", run: loadReel, disabled: plan !== null },
+    { label: "Load the shawarma reel", key: "S", run: loadReel, disabled: plan !== null },
     { label: "Next message", key: "N", run: nextMessage, disabled: plan === null || plan.state !== "negotiating" && plan.state !== "detected" },
     { label: jumpLabel, key: "F", run: jump, disabled: !canJump || plan?.state === "followed_up" },
     { label: "Reset", key: "0", run: reset },

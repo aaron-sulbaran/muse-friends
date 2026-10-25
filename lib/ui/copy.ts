@@ -3,7 +3,7 @@ export const copy = {
   brand: "Muse Friends",
   tagline: "A proposal for Muse",
   activityTitle: "Activity",
-  activityEmpty: "Nothing yet. When Sprout and Mochi talk, every message shows up here.",
+  activityEmpty: (first: string, second: string) => `Nothing yet. When ${first} and ${second} talk, every message shows up here.`,
   reconnecting: "Reconnecting...",
 
   statusReading: (friend: string) => `🎞️ reading ${friend}'s reel`,
@@ -47,10 +47,12 @@ export const copy = {
 
   followThrough: "Follow-through",
   agentMessagesNotCounted: (count: number) => `Agent messages: ${count} (not counted)`,
-  followThroughEmpty: "No human events yet.",
+  humanTapsNotCounted: (count: number) => `Taps and sends: ${count} (not counted)`,
+  followThroughEmpty: "Nothing has happened yet. This counts plans that actually took place.",
 
   liveLabel: "Live",
   replayLabel: "Replay of a recorded run",
+  replayShort: "Replay",
   simulatedClock: "Simulated clock",
   simulatedFriendBanner: "Simulated friend, fictional, played by a model",
 

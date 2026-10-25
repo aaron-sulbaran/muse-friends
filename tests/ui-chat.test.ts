@@ -9,7 +9,7 @@ function run(actions: ScriptAction[], from: ScriptState = initialScriptState()):
 }
 
 function ui(state: ScriptState): UiSnapshot {
-  return toUiSnapshot(buildStateSnapshot(state), { mode: state.mode, simulatedFriend: state.simulatedFriend });
+  return toUiSnapshot(buildStateSnapshot(state), { mode: state.mode });
 }
 
 const sixMessages: ScriptAction[] = Array.from({ length: 6 }, () => ({ type: "next_message" }) as const);
@@ -21,6 +21,11 @@ const bothYes: ScriptAction[] = [
 ];
 
 describe("the recorded run, stage by stage", () => {
+  it("says Replay, because the script plays a recording", () => {
+    expect(ui(initialScriptState()).mode).toBe("replay");
+    expect(ui(run(toAwaitingHumans)).mode).toBe("replay");
+  });
+
   it("opens on the dead reel with nothing counted", () => {
     const snapshot = ui(initialScriptState());
     expect(snapshot.plan).toBeNull();
@@ -65,21 +70,66 @@ describe("the recorded run, stage by stage", () => {
   });
 });
 
-describe("follow-through counts human events only", () => {
-  it("never counts agent messages or the reel arriving, however many land", () => {
-    const snapshot = ui(run(toAwaitingHumans));
+describe("follow-through counts one thing: plans that happened", () => {
+  it("never counts agent messages, the reel arriving, or taps and sends", () => {
+    const snapshot = ui(run(bothYes));
     expect(snapshot.followThrough.agentMessageCount).toBe(6);
+    expect(snapshot.followThrough.humanTapCount).toBe(2);
     expect(snapshot.followThrough.events).toHaveLength(0);
+    expect(ui(run([...bothYes, { type: "handoff" }])).followThrough.humanTapCount).toBe(3);
   });
 
-  it("counts each human yes, the handoff, and showing up, but not policy changes", () => {
-    const state = run([...bothYes, { type: "handoff" }, { type: "clock_next" }, { type: "clock_next" }]);
-    expect(ui(state).followThrough.events.map((event) => event.label)).toEqual([
-      "Aaron said yes",
-      "Lisa said yes",
-      "Aaron took the draft to WhatsApp",
-      "Showed up (simulated clock)",
+  it("reads 0 on the dead reel and after the handoff, and 1 once the plan has happened", () => {
+    expect(ui(initialScriptState()).followThrough.events).toHaveLength(0);
+    const scheduled = run([...bothYes, { type: "handoff" }]);
+    expect(ui(scheduled).followThrough.events).toHaveLength(0);
+    const reminded = reduceScript(scheduled, { type: "clock_next" });
+    expect(ui(reminded).followThrough.events).toHaveLength(0);
+    const nextDay = reduceScript(reminded, { type: "clock_next" });
+    expect(ui(nextDay).followThrough.events.map((event) => event.label)).toEqual(["Sprout and Mochi got shawarma together"]);
+  });
+});
+
+describe("the privacy switch replays the propose", () => {
+  it("withholds location from a propose delivered after the switch", () => {
+    const state = run([{ type: "load_reel" }, { type: "set_policy", category: "location", on: false }, ...sixMessages]);
+    const snapshot = ui(state);
+    expect(snapshot.messages[1].removed).toContain("location");
+    expect(snapshot.messages[1].shared).not.toContain("location");
+    expect(snapshot.plan?.place).toBeNull();
+    expect(snapshot.messages).toHaveLength(6);
+  });
+
+  it("sends the propose again, with the withheld stamp, when the switch flips after it arrived", () => {
+    const flipped = run([...toAwaitingHumans, { type: "set_policy", category: "location", on: false }]);
+    const snapshot = ui(flipped);
+    expect(snapshot.messages).toHaveLength(7);
+    expect(snapshot.messages[1].removed).toEqual([]);
+    const replay = snapshot.messages[6];
+    expect(replay).toMatchObject({ id: snapshot.messages[1].id, replayed: true, type: "propose" });
+    expect(replay.removed).toEqual(["location"]);
+    expect(snapshot.plan?.place).toBeNull();
+    expect(snapshot.sharing.lisa.categories.location).toBe(false);
+  });
+
+  it("replays again, with nothing withheld, when the switch flips back on", () => {
+    const state = run([
+      ...toAwaitingHumans,
+      { type: "set_policy", category: "location", on: false },
+      { type: "set_policy", category: "location", on: true },
     ]);
+    const snapshot = ui(state);
+    expect(snapshot.messages).toHaveLength(8);
+    expect(snapshot.messages[7].removed).toEqual([]);
+    expect(snapshot.plan?.place).toBe("E 6th St");
+  });
+
+  it("does not replay once a person has answered", () => {
+    const answered = run([...toAwaitingHumans, { type: "decide", role: "a", choice: "accept" }]);
+    // awaiting_humans still holds until both answer, so a change here still replays; after both yes it must not.
+    const confirmed = run([...bothYes, { type: "set_policy", category: "location", on: false }]);
+    expect(ui(answered).messages).toHaveLength(6);
+    expect(ui(confirmed).messages).toHaveLength(6);
   });
 });
 
@@ -92,10 +142,21 @@ describe("what each phone shows", () => {
     expect(view.items.filter((item) => item.kind === "plan-card")).toHaveLength(1);
   });
 
-  it("names the place in the proposal bubble", () => {
+  it("names the place and both Muses by their display names", () => {
     const view = viewForRole(ui(run(toAwaitingHumans)), "a");
+    expect(view.museName).toBe("Sprout");
+    expect(view.friendMuseName).toBe("Mochi");
     const bubble = view.items.find((item) => item.kind === "bubble" && item.id === "proposal");
-    expect(bubble).toMatchObject({ text: expect.stringContaining("Shawarma Point") });
+    expect(bubble).toMatchObject({ text: "You and Mochi both want to try Shawarma Point, and you're both free Tuesday 6 to 8." });
+  });
+
+  it("never shows the internal ids Aaron or Lisa", () => {
+    for (const state of [toAwaitingHumans, bothYes, [...bothYes, { type: "handoff" } as const]]) {
+      for (const role of ["a", "b"] as const) {
+        const text = JSON.stringify(viewForRole(ui(run(state)), role));
+        expect(text).not.toMatch(/Aaron|Lisa/);
+      }
+    }
   });
 
   it("shows one live card per human and collapses it after a yes", () => {
@@ -104,7 +165,7 @@ describe("what each phone shows", () => {
     const view = viewForRole(aYes, "a");
     expect(view.items.some((item) => item.kind === "plan-card")).toBe(false);
     expect(view.items.some((item) => item.kind === "collapsed")).toBe(true);
-    expect(view.status).toBe("⏳ waiting for Lisa");
+    expect(view.status).toBe("⏳ waiting for Mochi");
     expect(viewForRole(aYes, "b").items.some((item) => item.kind === "plan-card")).toBe(true);
   });
 
@@ -114,15 +175,11 @@ describe("what each phone shows", () => {
     expect(viewForRole(confirmed, "b").items.some((item) => item.kind === "draft-card")).toBe(false);
   });
 
-  it("says the place was kept private when location is withheld", () => {
-    const withheld = ui(run([{ type: "set_location", shared: false }, ...toAwaitingHumans]));
-    expect(withheld.plan?.place).toBeNull();
-    expect(withheld.messages[1]?.removed).toContain("location");
-  });
-
-  it("labels the simulated friend instead of Lisa's Muse", () => {
+  it("labels the simulated friend instead of Mochi", () => {
     const snapshot = ui(run([{ type: "set_simulated", value: true }, ...toAwaitingHumans]));
+    expect(snapshot.simulatedFriend).toBe(true);
     expect(viewForRole(snapshot, "b").museName).toBe("Michelle's Muse");
     expect(viewForRole(snapshot, "a").friendMuseName).toBe("Michelle's Muse");
+    expect(viewForRole(snapshot, "a").friendHumanName).toBe("Michelle");
   });
 });

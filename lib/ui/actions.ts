@@ -1,4 +1,4 @@
-import type { Role } from "./types";
+import type { Category, Role } from "./types";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -28,13 +28,24 @@ export function postHandoff(planId: string, via: "whatsapp" | "copy") {
 export type StepAction =
   | { type: "load_reel" }
   | { type: "next_message" }
-  | { type: "clock_next" }
-  | { type: "set_location"; shared: boolean }
   | { type: "set_simulated"; value: boolean }
-  | { type: "set_mode"; mode: "live" | "replay" }
-  | { type: "reset" };
+  | { type: "set_mode"; mode: "live" | "replay" };
 
-/** Drives the recorded run. Goes away when the real signal and clock routes are wired. */
+/** Plays the recorded run. Goes away when the real signal route drives the agents. */
 export function postStep(action: StepAction) {
   return post("/api/state/step", action);
+}
+
+export function postClockAdvance() {
+  return post("/api/clock", { action: "advance" });
+}
+
+export function postReset() {
+  return post("/api/controls", { type: "reset" });
+}
+
+export type PrivacyChange = { tier: "close" | "friend" | "off" } | { category: Category; on: boolean };
+
+export function postPrivacy(change: PrivacyChange) {
+  return post("/api/controls", { type: "privacy", side: "b", ...change });
 }

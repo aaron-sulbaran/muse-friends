@@ -1,5 +1,5 @@
-import { categoryLabel, personas, simulatedFriend } from "./tokens";
-import type { AgentId, Category, TimeWindow, UiMessage } from "./types";
+import { categoryLabel, simulatedFriend } from "./tokens";
+import type { AgentId, Category, TimeWindow, UiMessage, UiSnapshot } from "./types";
 
 /** Every time the UI shows is Central, matching the event schedule. */
 export const displayTimeZone = "America/Chicago";
@@ -131,16 +131,20 @@ export function formatLatency(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-/** The name of an agent as the UI shows it. */
-export function museName(agent: AgentId, simulated: boolean): string {
-  if (agent === "lisa" && simulated) return simulatedFriend.muse;
-  return personas[agent].muse;
-}
+export type Names = {
+  /** The Muse's name as shown on a row or a pill: "Sprout", "Mochi", or "Michelle's Muse". */
+  muse: Record<AgentId, string>;
+  /** What the other person calls that side in a sentence: "Mochi", or "Michelle". */
+  human: Record<AgentId, string>;
+};
 
-/** The name of the human an agent serves. */
-export function humanName(agent: AgentId, simulated: boolean): string {
-  if (agent === "lisa" && simulated) return simulatedFriend.human;
-  return personas[agent].human;
+/** Every visible name comes from the snapshot's persona display names, never from the internal ids. */
+export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "simulatedFriend">): Names {
+  const simulated = snapshot.simulatedFriend;
+  return {
+    muse: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.muse : snapshot.sides.lisa },
+    human: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.human : snapshot.sides.lisa },
+  };
 }
 
 function listOf(items: string[]): string {
@@ -150,13 +154,15 @@ function listOf(items: string[]): string {
 }
 
 /** Past tense, plain: what the message did. Built from type and fields, never from model text. */
-export function messageTitle(message: UiMessage, simulated: boolean): string {
+export function messageTitle(message: UiMessage): string {
   const place = message.activity?.title ?? "the plan";
   switch (message.type) {
     case "intent":
       return `Asked about ${place}`;
-    case "propose":
-      return message.windows?.length ? `Proposed ${formatWindowList(message.windows)}` : "Proposed a plan";
+    case "propose": {
+      const verb = message.replayed ? "Proposed again" : "Proposed";
+      return message.windows?.length ? `${verb} ${formatWindowList(message.windows)}` : `${verb} a plan`;
+    }
     case "counter":
       return message.windows?.length ? `Countered with ${formatWindowList(message.windows)}` : "Countered";
     case "accept":
@@ -164,7 +170,7 @@ export function messageTitle(message: UiMessage, simulated: boolean): string {
     case "decline":
       return message.reason === "no_overlap" ? "Declined: no time works" : "Declined";
     default:
-      return `${museName(message.from, simulated)} sent a message`;
+      return "Sent a message";
   }
 }
 
@@ -186,12 +192,12 @@ export function policyStampFor(message: UiMessage): PolicyStamp {
 }
 
 /** The accessible name of an Activity row, read by screen readers. */
-export function messageAccessibleName(message: UiMessage, simulated: boolean): string {
+export function messageAccessibleName(message: UiMessage, names: Names): string {
   const stamp = policyStampFor(message);
   const parts = [
-    `${museName(message.from, simulated)} to ${museName(message.to, simulated)}`,
+    `${names.muse[message.from]} to ${names.muse[message.to]}`,
     message.type,
-    messageTitle(message, simulated),
+    messageTitle(message),
     `shared ${stamp.shared}`,
   ];
   if (stamp.withheld) parts.push(`withheld ${stamp.withheld}`);

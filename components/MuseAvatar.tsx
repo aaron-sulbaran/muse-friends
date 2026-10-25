@@ -1,10 +1,12 @@
-import { personas, simulatedFriend } from "@/lib/ui/tokens";
+import { simulatedFriend } from "@/lib/ui/tokens";
 import type { AgentId } from "@/lib/ui/types";
 
 type Props = {
   agent: AgentId;
-  /** True when Lisa's slot is played by the simulated friend; shows a grey initial disc instead of a character. */
+  /** True when side b is played by the simulated friend; shows a grey initial disc instead of a character. */
   simulated?: boolean;
+  /** The Muse's name, for the accessible label. */
+  name?: string;
   size?: number;
   className?: string;
 };
@@ -42,7 +44,7 @@ function Mochi() {
 }
 
 /** A Muse's character: a circle with a 10 percent tint of the body color and the character bottom-aligned. */
-export function MuseAvatar({ agent, simulated = false, size = 44, className = "" }: Props) {
+export function MuseAvatar({ agent, simulated = false, name = "Muse", size = 44, className = "" }: Props) {
   if (agent === "lisa" && simulated) {
     return (
       <span
@@ -54,14 +56,13 @@ export function MuseAvatar({ agent, simulated = false, size = 44, className = ""
       </span>
     );
   }
-  const persona = personas[agent];
   const tint = tintOf(agent === "aaron" ? "var(--color-sprout)" : "var(--color-mochi)");
   return (
     <span
       className={`inline-block shrink-0 overflow-hidden rounded-full ${className}`}
       style={{ width: size, height: size, backgroundColor: tint }}
     >
-      <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label={persona.muse} className="block" style={{ marginTop: size * 0.06 }}>
+      <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label={name} className="block" style={{ marginTop: size * 0.06 }}>
         {agent === "aaron" ? <Sprout /> : <Mochi />}
       </svg>
     </span>

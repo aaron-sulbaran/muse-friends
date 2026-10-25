@@ -4,12 +4,12 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { THREAD_CAP } from "@/lib/protocol";
 import { copy } from "@/lib/ui/copy";
-import { formatLatency, formatTimeWithSeconds, museName } from "@/lib/ui/format";
+import { formatLatency, formatTimeWithSeconds, type Names } from "@/lib/ui/format";
 import type { UiMessage } from "@/lib/ui/types";
 
 type Props = {
   message: UiMessage | null;
-  simulatedFriend: boolean;
+  names: Names;
   onClose: () => void;
 };
 
@@ -23,7 +23,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** Raw protocol JSON for Q&A. Collapsed by default; the consumer view never shows it. */
-export function JsonDrawer({ message, simulatedFriend, onClose }: Props) {
+export function JsonDrawer({ message, names, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -63,7 +63,7 @@ export function JsonDrawer({ message, simulatedFriend, onClose }: Props) {
                 Message {message.seq} of {THREAD_CAP}
               </h2>
               <p className="text-[13px] leading-[18px] text-muted">
-                {museName(message.from, simulatedFriend)} to {museName(message.to, simulatedFriend)}, {formatTimeWithSeconds(message.at)}
+                {names.muse[message.from]} to {names.muse[message.to]}, {formatTimeWithSeconds(message.at)}
               </p>
             </div>
             <button

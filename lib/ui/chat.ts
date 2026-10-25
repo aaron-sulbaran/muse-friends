@@ -1,5 +1,5 @@
 import { copy } from "./copy";
-import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, humanName, museName } from "./format";
+import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, namesFor } from "./format";
 import type { AgentId, Role, UiPlan, UiSnapshot } from "./types";
 
 /*
@@ -33,17 +33,11 @@ const roleAgent: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
 const agentRole: Record<AgentId, Role> = { aaron: "a", lisa: "b" };
 
 export function viewForRole(snapshot: UiSnapshot, role: Role): PhoneView {
-  const simulated = snapshot.simulatedFriend;
+  const names = namesFor(snapshot);
   const agent = roleAgent[role];
   const friend = roleAgent[role === "a" ? "b" : "a"];
-  const mine = {
-    muse: museName(agent, simulated),
-    human: humanName(agent, simulated),
-  };
-  const theirs = {
-    muse: museName(friend, simulated),
-    human: humanName(friend, simulated),
-  };
+  const mine = { muse: names.muse[agent], human: names.human[agent] };
+  const theirs = { muse: names.muse[friend], human: names.human[friend] };
 
   const items: ChatItem[] = [];
   const plan = snapshot.plan;
