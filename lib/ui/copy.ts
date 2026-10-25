@@ -155,11 +155,12 @@ export const copy = {
   replayLabel: "Replay of a recorded run",
   replayShort: "Replay",
   /** The badge text for a replay, saying what is playing: a real run with the date it was recorded, or the scripted fallback. */
-  replayBadge: (recording: { source: "live" | "scripted"; recordedAt: string } | undefined, compact: boolean) => {
+  replayBadge: (recording: { source: "live" | "scripted"; recordedAt: string; model?: string } | undefined, compact: boolean) => {
     if (!recording) return compact ? "Replay" : "Replay of a recorded run";
     if (recording.source === "scripted") return compact ? "Replay, scripted" : "Replay of a scripted run";
     const date = recordingDate(recording.recordedAt);
-    return compact ? `Replay, recorded ${date}` : `Replay of a real run, recorded ${date}`;
+    const made = recording.model ? `${date}, ${recording.model}` : date;
+    return compact ? `Replay, recorded ${made}` : `Replay of a real run, recorded ${made}`;
   },
   replayStart: "Watch a recorded run",
   simulatedClock: "Simulated clock",

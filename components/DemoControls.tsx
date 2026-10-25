@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { postClockAdvance, postGroupSignal, postLeakAttempt, postReset, postSignal, postTripSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
 import type { UiSnapshot } from "@/lib/ui/types";
+import type { ReplayScenario } from "@/lib/ui/use-replay";
 
 type Props = {
   snapshot: UiSnapshot | null;
   onChanged: () => void;
-  replay: { active: boolean; start: () => Promise<void>; stop: () => void; error: string | null };
+  replay: { active: boolean; start: (scenario?: ReplayScenario) => Promise<void>; stop: () => void; error: string | null };
   /** A run could not start because the live-run caps are reached; the stage falls back to a recording. */
   onPaused: (text: string) => void;
 };
@@ -38,6 +39,10 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
     if (replay.active) replay.stop();
     else await replay.start();
   };
+  const toggleTripReplay = async () => {
+    if (replay.active) replay.stop();
+    else await replay.start("trip");
+  };
   const loadReel = () => run(postSignal);
   const planForThree = () => run(postGroupSignal);
   const planTrip = () => run(postTripSignal);
@@ -50,9 +55,9 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
   const jump = () => run(postClockAdvance);
   const reset = () => run(postReset);
 
-  const actions = useRef({ loadReel, planForThree, planTrip, tryToLeak, jump, reset, toggleReplay });
+  const actions = useRef({ loadReel, planForThree, planTrip, tryToLeak, jump, reset, toggleReplay, toggleTripReplay });
   useEffect(() => {
-    actions.current = { loadReel, planForThree, planTrip, tryToLeak, jump, reset, toggleReplay };
+    actions.current = { loadReel, planForThree, planTrip, tryToLeak, jump, reset, toggleReplay, toggleTripReplay };
   });
 
   useEffect(() => {
@@ -69,6 +74,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
       else if (key === "f") void actions.current.jump();
       else if (key === "0") void actions.current.reset();
       else if (key === "r") void actions.current.toggleReplay();
+      else if (key === "y") void actions.current.toggleTripReplay();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -81,6 +87,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
     { label: copy.planATrip, key: "T", run: planTrip, disabled: planIsAlive || replaying },
     { label: jumpLabel, key: "F", run: jump, disabled: !canJump || replaying },
     { label: replaying ? "Stop the replay" : "Replay a recorded run", key: "R", run: toggleReplay },
+    { label: replaying ? "Stop the replay" : "Replay the recorded trip", key: "Y", run: toggleTripReplay },
     { label: "Try to leak", key: "L", run: tryToLeak, disabled: replaying || (leak !== null && "running" in leak) },
     { label: "Reset", key: "0", run: reset, disabled: replaying },
   ];

@@ -825,7 +825,7 @@ export type StateSnapshot = z.infer<typeof StateSnapshot>;
 export const RecordedRun = z.strictObject({
   id: Id,
   label: z.string().max(80),
-  scenario: z.literal("shawarma"),
+  scenario: z.enum(["shawarma", "trip"]),
   source: z.enum(["scripted", "live"]),
   recordedAt: IsoDateTime,
   snapshot: StateSnapshot,

@@ -238,7 +238,7 @@ export type PaymentsSettings = { enabled: boolean; cap: number };
 export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
 
 /** Which recording a replay frame was built from, so the badge can say what is playing and from when. */
-export type UiRecording = { source: "live" | "scripted"; recordedAt: string };
+export type UiRecording = { source: "live" | "scripted"; recordedAt: string; /** The model that made a live recording, when known. */ model?: string };
 
 export type UiSnapshot = {
   /** The demo clock, ISO. */

@@ -649,10 +649,18 @@ export type TripPlayers = {
   joins: (member: SimulatedMember, summary: string) => Promise<{ choice: "in" | "out" }>;
 };
 
-export function planSummary(plan: Plan): string {
+/** What a person sees when asked to join, in facts from the record: their own limit against the flight's price, the outline, the deposit and when it comes back. */
+export function planSummary(plan: Plan, member: MemberId): string {
   const trip = plan.trip!;
-  const lines = trip.itinerary?.lines.map((line) => `${line.label} (${money(line.cost)})`).join("; ") ?? "";
-  return `${trip.title}. Itinerary per person, ${money(trip.itinerary?.total ?? 0)} in all: ${lines}. Sprout asks for a ${money(trip.pot?.perPerson ?? 0)} deposit into a shared pot. Do you want to be in?`;
+  const itinerary = trip.itinerary;
+  const flight = itinerary?.lines.find((line) => line.kind === "flight");
+  const yours = trip.answers[member];
+  const lines = itinerary?.lines.map((line) => `${line.label} (${money(line.cost)})`).join("; ") ?? "";
+  const limit = yours && flight ? `Your Muse told Sprout your limit for a flight is ${money(yours.limit)}; the flight in this outline is ${money(flight.cost)}${flight.cost <= yours.limit ? ", within it" : ""}. ` : "";
+  return (
+    `${trip.title}. ${limit}The whole outline is ${money(itinerary?.total ?? 0)} per person across the flight, the stay and two day trips: ${lines}. ` +
+    `Sprout asks each person for a ${money(trip.pot?.perPerson ?? 0)} deposit into a shared pot, a quarter of the outline. Nothing is booked, and if anyone passes every deposit goes back. Do you want to be in?`
+  );
 }
 
 // Moves the trip along as far as it can without a human: the model-played people answer and join, the coordinator
@@ -694,7 +702,7 @@ export async function driveTrip(store: Store, planId: string, players: TripPlaye
           waiting.map(async (member) => {
             let choice: "in" | "out" = "in";
             try {
-              choice = (await players.joins(member as SimulatedMember, planSummary(plan))).choice;
+              choice = (await players.joins(member as SimulatedMember, planSummary(plan, member))).choice;
             } catch (error) {
               console.error(`${member} did not answer the trip proposal`, error);
               return; // never fake a person's yes: the card stays for a human
