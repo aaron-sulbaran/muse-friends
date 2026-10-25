@@ -338,11 +338,11 @@ function pushOutcome(items: ChatItem[], ending: ChatItem[], plan: UiPlan, role: 
   }
   if (outcome.result === "didnt") {
     items.push({ kind: "bubble", id: "outcome-answer", from: "user", text: copy.outcomeDidnt });
-    items.push({ kind: "bubble", id: "outcome-reply", from: "muse", text: copy.outcomeDidntReply(plan.activityTitle) });
+    items.push({ kind: "bubble", id: "outcome-reply", from: "muse", text: `${copy.outcomeDidntReply(plan.activityTitle)} ${copy.outcomeRememberedDidnt}` });
     return;
   }
   items.push({ kind: "bubble", id: "outcome-answer", from: "user", text: copy.outcomeWent });
-  items.push({ kind: "bubble", id: "outcome-reply", from: "muse", text: copy.outcomeWentReply });
+  items.push({ kind: "bubble", id: "outcome-reply", from: "muse", text: `${copy.outcomeWentReply} ${copy.outcomeRememberedWent}` });
   // The next idea comes from what the two already shared, never a repeat of the same place.
   const next = (outcome.nextIdeaId ? pastSignal(outcome.nextIdeaId) : undefined) ?? mostRecent(OTHER_SIGNALS);
   if (next) ending.push({ kind: "bubble", id: "next-idea", from: "muse", text: role === "a" ? next.nextIdea(friend) : next.nextIdeaMine(friend) });

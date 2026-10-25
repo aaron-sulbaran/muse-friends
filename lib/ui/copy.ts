@@ -88,6 +88,12 @@ export const copy = {
   outcomeDidnt: "Didn't happen",
   outcomeWentReply: "Love that. That's one plan that made it out of the chat.",
   outcomeDidntReply: (activity: string) => `No worries, plans slip. I'll keep ${activity} in mind for another time.`,
+  /** One more sentence on the Muse's reply to the outcome: it remembers. */
+  outcomeRememberedWent: "Awesome, I'll remember that for next time.",
+  outcomeRememberedDidnt: "Got it, I'll keep that in mind.",
+  /** The Activity row after the outcome (the Muse remembers it); no model call, built from the outcome the store records. */
+  rememberedWent: (you: string, friend: string, place: string, muse: string) => `${you} and ${friend} went to ${place} and liked it; ${muse} will suggest a plan with ${friend} again when both are free`,
+  rememberedDidnt: (friend: string, place: string, muse: string) => `${place} with ${friend} did not happen; ${muse} will ask before suggesting it again`,
   closingLine: "Done. You two are actually going. It's in Goals.",
   /** The line under the plan card (human connection): who agreed and how fast, then that the two friends actually go. */
   agreedLine: (names: string, count: number) => `${names} agreed in ${count} ${count === 1 ? "message" : "messages"}, so you two actually go.`,
