@@ -10,7 +10,7 @@ import { toUiBooking } from "./booking";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiSource, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiRefusal, UiSnapshot, UiTrip, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiSource, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiRefusal, UiSnapshot, UiTrip, UiTypedAvailability, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -459,12 +459,33 @@ function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null 
  * without any chat line and without the "You asked" rows. No role, or `a`, is the full view the stage and the gate
  * use. Anything else fails closed and gets the restricted view. If side b ever gets a chat, its lines are hidden from
  * side a the same way: the lines would carry their side and this is the one place that filters them.
+ * What a side typed about its own week (the times it is free, how it feels) is private to that side the same way: the
+ * stage, which asks without a role, sees both; side a's phone sees side a's, side b's phone sees side b's, and a role
+ * that is neither sees neither.
  */
 export const CHAT_SIDE = "a";
 
+function typedFor(snapshot: UiSnapshot, seat: AgentId | null): UiSnapshot {
+  if (!snapshot.typedAvailability) return snapshot;
+  const { typedAvailability, ...rest } = snapshot;
+  const own = seat ? typedAvailability[seat] : undefined;
+  return own && seat ? { ...rest, typedAvailability: { [seat]: own } } : rest;
+}
+
 export function forRole(snapshot: UiSnapshot, role: string | null | undefined): UiSnapshot {
-  if (role === undefined || role === null || role === CHAT_SIDE) return snapshot;
-  return { ...snapshot, chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked") };
+  if (role === undefined || role === null) return snapshot;
+  if (role === CHAT_SIDE) return typedFor(snapshot, "aaron");
+  return { ...typedFor(snapshot, role === "b" ? "lisa" : null), chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked") };
+}
+
+/** Soonest first, the way a person reads them; the stored `at` stays out of the UI. */
+function typedAvailabilityOf(state: StateSnapshot): UiSnapshot["typedAvailability"] {
+  const typed: Partial<Record<AgentId, UiTypedAvailability>> = {};
+  for (const seat of ["aaron", "lisa"] as const) {
+    const entry = state.room.availability?.[seat];
+    if (entry) typed[seat] = { windows: [...entry.windows].sort((first, second) => first.start.localeCompare(second.start)), ...(entry.feels ? { feels: entry.feels } : {}) };
+  }
+  return Object.keys(typed).length > 0 ? typed : undefined;
 }
 
 /** The latest caption read: what the model found, not the sentence the timeline says about it. */
@@ -481,6 +502,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
   const rename = renameFor(standIn);
   const messages = toUiMessages(state, rename);
   const payments = paymentsOf(state);
+  const typedAvailability = typedAvailabilityOf(state);
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
@@ -517,6 +539,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     wallets: { aaron: walletFor("aaron", state, rename), lisa: walletFor("lisa", state, rename) },
     payments,
     chat: toChat(state, rename),
+    ...(typedAvailability ? { typedAvailability } : {}),
     paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
     sandbox: sandboxFor(state),
   };

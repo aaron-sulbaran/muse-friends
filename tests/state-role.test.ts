@@ -71,7 +71,13 @@ describe("GET /api/state?role=", () => {
     expect((await fetchState("?role=b", { "if-none-match": restrictedTag })).status).toBe(304);
     expect((await fetchState("?role=b", { "if-none-match": fullTag })).status).toBe(200);
     expect((await fetchState("", { "if-none-match": fullTag })).status).toBe(304);
-    expect((await fetchState("?role=a", { "if-none-match": fullTag })).status).toBe(304);
+    // Side a's view is not the stage's (it leaves out what side b typed about its own week), so it has its own tag too.
+    const sideA = await fetchState("?role=a");
+    const sideATag = sideA.headers.get("etag")!;
+    expect(sideATag).not.toBe(fullTag);
+    expect(sideATag.endsWith('-a"')).toBe(true);
+    expect((await fetchState("?role=a", { "if-none-match": sideATag })).status).toBe(304);
+    expect((await fetchState("?role=a", { "if-none-match": fullTag })).status).toBe(200);
   });
 });
 

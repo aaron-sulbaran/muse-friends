@@ -321,6 +321,8 @@ export type UiReelRead = { place: string | null; area: string | null; hours: str
 /** Which recording a replay frame was built from, so the badge can say what is playing and from when. */
 export type UiRecording = { source: "live" | "scripted"; recordedAt: string; /** The model that made a live recording, when known. */ model?: string };
 
+export type UiTypedAvailability = { windows: TimeWindow[]; feels?: string };
+
 export type UiSnapshot = {
   /** The demo clock, ISO. */
   now: string;
@@ -375,6 +377,13 @@ export type UiSnapshot = {
   payments: UiPayment[];
   /** The chat between side a's person and their own Muse (D31), oldest first, in order. Empty until the first question; never has a line for side b. */
   chat: UiChatMessage[];
+  /**
+   * What each side typed about their own week (POST /api/availability): the times they are free, soonest first, and
+   * one line on how they feel. Keyed by seat like `sharing` and `wallets` (`aaron` is side a, `lisa` is side b). Absent
+   * until someone types. A phone gets only its own seat's entry (`role=a`, `role=b`); the stage, which asks without a
+   * role, gets both.
+   */
+  typedAvailability?: Partial<Record<AgentId, UiTypedAvailability>>;
   /** What each side lets its Muse send. */
   paymentsScope: Record<AgentId, PaymentsSettings>;
   /** `connected` is true only when the wallets live on the real Nessie sandbox; otherwise a local ledger stands in. */

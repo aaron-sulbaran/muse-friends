@@ -868,6 +868,19 @@ export const Wallet = z.strictObject({
 });
 export type Wallet = z.infer<typeof Wallet>;
 
+// What a person typed about their own week: the times they are free, and one line on how they feel. It replaces the
+// persona's seeded calendar for that seat (the room sets the whole calendar), so the Muse offers exactly these times.
+export const AVAILABILITY_MAX_WINDOWS = 8;
+export const AVAILABILITY_MIN_MINUTES = 60;
+export const FEELS_MAX = 120;
+export const TypedAvailability = z.strictObject({
+  windows: z.array(Window).min(1).max(AVAILABILITY_MAX_WINDOWS),
+  // One line in the person's own words. It is interests: it reaches the friend's Muse only if interests are shared.
+  feels: z.string().min(1).max(FEELS_MAX).optional(),
+  at: IsoDateTime,
+});
+export type TypedAvailability = z.infer<typeof TypedAvailability>;
+
 // The single demo room. `simulatedFriend` means side b is played by a model (Michelle) because
 // only one judge is present; the UI must label it.
 export const Room = z.strictObject({
@@ -882,6 +895,8 @@ export const Room = z.strictObject({
   proposals: z.record(z.string(), PaymentProposal).optional(),
   // The chat with side a's own Muse (D31), oldest first, the last CHAT_KEPT lines. Cleared by Reset.
   chat: z.array(ChatEntry).max(CHAT_KEPT).optional(),
+  // What each seat typed about their own week, by seat; a seat with nothing here keeps its seeded calendar. Cleared by Reset.
+  availability: z.partialRecord(AgentId, TypedAvailability).optional(),
   updatedAt: IsoDateTime,
 });
 export type Room = z.infer<typeof Room>;

@@ -9,8 +9,9 @@ export const dynamic = "force-dynamic";
 /**
  * The snapshot the phones and the stage poll every second. The store's cursor is
  * the ETag, so a poll with nothing new costs a 304 and never reads the snapshot.
- * `role` is `a` or `b`: the full snapshot for no role or `a` (the stage, the gate, side a's phone), and for `b` (or
- * anything else) the snapshot without side a's chat lines and "You asked" rows (see `forRole`). `room` is the demo room unless
+ * `role` is `a` or `b`: the full snapshot for no role (the stage, the gate); for `a` (side a's phone) the same without side
+ * b's typed availability; and for `b` (or anything else) the snapshot without side a's chat lines and "You asked" rows,
+ * and with only side b's typed availability (see `forRole`). `room` is the demo room unless
  * it is the code of a live judge room (the keyless path, app/j), which the table screen can show by opening
  * `/?room=<code>`; a judge room answers from its own storage and never from the demo store. Any other valid room id
  * is a phone's room (app/api/_lib/room.ts): its own state, or the empty stage until its first write makes it.
@@ -19,8 +20,8 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const room = params.get("room");
   const role = params.get("role");
-  // The restricted view has a different body for the same cursor, so it gets its own ETag.
-  const view = role === null || role === "a" ? "" : "-b";
+  // Each view has a different body for the same cursor, so each gets its own ETag: the stage, side a, and everything else.
+  const view = role === null ? "" : role === "a" ? "-a" : "-b";
   const judge = room ? await readJudgeRoom(room) : null;
   if (judge) {
     const judgeEtag = `"${judge.etag}${view}"`;
