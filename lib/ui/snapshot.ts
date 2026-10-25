@@ -6,6 +6,7 @@ import { CATEGORIES, isCategoryAllowed, isPaymentType, MEMBER_IDS, type AgentId,
 import { displayName } from "@/lib/seed/personas";
 import { CONTACTS, getContact, isMutual } from "@/lib/seed/contacts";
 import { SEEDED_LABEL, TRIP_PEOPLE } from "@/lib/seed/trip";
+import { toUiBooking } from "./booking";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
@@ -212,6 +213,7 @@ function toUiTrip(plan: Plan, state: StateSnapshot): UiTrip | null {
       : null,
     unknowns: trip.unknowns,
     seededLabel: SEEDED_LABEL,
+    ...(trip.booking ? { booking: toUiBooking(trip, ledger) } : {}),
   };
 }
 

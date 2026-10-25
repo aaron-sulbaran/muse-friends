@@ -5,6 +5,7 @@
  */
 
 import type { RunBudget } from "@/lib/agent/caps";
+import type { UiBooking } from "./group";
 import type {
   AgentId,
   Category,
@@ -121,6 +122,8 @@ export type UiTrip = {
   unknowns: string[];
   /** The label every seeded price and line carries on screen. */
   seededLabel: string;
+  /** Present once the confirmed trip is being booked with each person's yes (lib/ui/booking.ts builds it). */
+  booking?: UiBooking;
 };
 
 export type UiPlan = {
