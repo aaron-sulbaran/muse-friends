@@ -99,7 +99,7 @@ export function PhoneRoute({ role }: { role: Role }) {
       readOnly={replay.active}
       onPaused={pause}
       onOpenPayment={setOpenPayment}
-      onboarding={role === "a" && !onboardingBypassed(window.location.search)}
+      onboarding={!onboardingBypassed(window.location.search)}
       standalone={{
         activity: (close) => (
           <ActivityPanel

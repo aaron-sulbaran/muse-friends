@@ -150,3 +150,53 @@ describe("a reload on the same room", () => {
     expect(() => saveOnboarding("r1", initialOnboarding())).not.toThrow();
   });
 });
+
+describe("the free step (when you are free this week)", () => {
+  const atShare = () => run([{ type: "friendsOn" }, { type: "sync" }, { type: "continue" }]);
+  const atFreeA = () => run([{ type: "free" }], atShare());
+  const atFreeB = () => run([{ type: "name", name: "Jordan" }, { type: "free" }]);
+
+  it("comes after share on side a, and after the name on side b", () => {
+    expect(atFreeA().step).toBe("free");
+    expect(atFreeB()).toMatchObject({ step: "free", name: "Jordan" });
+  });
+
+  it("does not start from any other step", () => {
+    expect(run([{ type: "free" }], run([{ type: "friendsOn" }])).step).toBe("who");
+    expect(run([{ type: "free" }], run([{ type: "notNow" }])).step).toBe("done");
+  });
+
+  it("keeps the chips, the typed times and the feeling, and a second tap on a chip takes it back", () => {
+    const state = run([{ type: "chip", id: "tonight" }, { type: "chip", id: "saturday_afternoon" }, { type: "chip", id: "tonight" }, { type: "freeText", text: "Tue 6 to 8 PM" }, { type: "feels", text: "ramen" }], atFreeA());
+    expect(state.free).toEqual({ chips: ["saturday_afternoon"], text: "Tue 6 to 8 PM", feels: "ramen" });
+  });
+
+  it("limits what it keeps: 120 characters of feeling, 160 of typed times", () => {
+    const state = run([{ type: "freeText", text: "x".repeat(400) }, { type: "feels", text: "y".repeat(400) }], atFreeB());
+    expect(state.free.text).toHaveLength(160);
+    expect(state.free.feels).toHaveLength(120);
+  });
+
+  it("ignores its answers anywhere else, so a stray tap cannot write them", () => {
+    expect(run([{ type: "chip", id: "tonight" }, { type: "feels", text: "hi" }], atShare()).free).toEqual({ chips: [], text: "", feels: "" });
+  });
+
+  it("finishes with Done, or with a skip that is the same step: onboarding is over, with nothing else changed", () => {
+    expect(run([{ type: "done" }], atFreeA())).toMatchObject({ step: "done", friendsOn: true });
+    expect(run([{ type: "done" }], atFreeB()).step).toBe("done");
+  });
+
+  it("goes back to the share sheet on side a and to the name on side b", () => {
+    expect(run([{ type: "back" }], atFreeA()).step).toBe("share");
+    expect(run([{ type: "back" }], atFreeB()).step).toBe("name");
+  });
+
+  it("is remembered across a reload, per side, and an older save with no answers loads with none", () => {
+    saveOnboarding("room1", run([{ type: "chip", id: "tonight" }], atFreeB()), "b");
+    expect(loadOnboarding("room1", "b").free.chips).toEqual(["tonight"]);
+    expect(loadOnboarding("room1", "a")).toEqual(initialOnboarding());
+    const older = { step: "share", name: "Jordan", friendsOn: true, tiers: { michelle: "close", priya: "close" }, source: "sync" };
+    sessionStorage.setItem("muse-friends:onboarding:room2", JSON.stringify(older));
+    expect(loadOnboarding("room2")).toMatchObject({ step: "share", free: { chips: [], text: "", feels: "" } });
+  });
+});

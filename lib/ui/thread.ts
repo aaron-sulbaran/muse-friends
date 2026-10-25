@@ -1,5 +1,6 @@
 import { copy } from "./copy";
 import { messageTitle, namesFor, policyStampFor } from "./format";
+import { describeFree } from "./free-windows";
 import type { AgentId, MemberId, MessageType, Role, UiPlan, UiSnapshot, UiSource } from "./types";
 
 /*
@@ -105,7 +106,15 @@ export function threadLines(snapshot: UiSnapshot, role: Role, options: ThreadOpt
     }
     lines.sort((first, second) => Date.parse(first.at ?? "") - Date.parse(second.at ?? ""));
   }
-  return lines;
+
+  // What this person typed about their week in onboarding comes first, as a note from their own Muse, and when the two
+  // weeks do not meet, the line that says so. Both are private to the person; neither reaches the friend's phone.
+  const typed = snapshot.typedAvailability;
+  const mine = typed?.[me];
+  const notes: ThreadLine[] = [];
+  if (mine && mine.windows.length > 0) notes.push({ id: "thread-typed-free", sender: muse(me), text: copy.threadTypedFree(describeFree(mine.windows)), onlyYou: true, phase: "talk" });
+  if (typed?.overlap === false) notes.push({ id: "thread-no-shared-free", sender: muse(me), text: copy.threadNoSharedFree, onlyYou: true, phase: "talk" });
+  return [...notes, ...lines];
 }
 
 /** True when a line opens a run: a different sender than the line before it, so the chip shows above this bubble only. */

@@ -267,6 +267,8 @@ export const copy = {
   threadKeptOut: (withheld: string, friendMuse: string) => `I kept ${withheld} out of what I sent ${friendMuse}.`,
   /** What the simulated friend says once she has decided, scripted to the plan's state. */
   threadFriendYes: "Yes, I'm in.",
+  threadTypedFree: (days: string) => `You said you're free: ${days}`,
+  threadNoSharedFree: "No shared free time this week; try more windows",
   threadFriendNo: "Not this time, sorry.",
 
   // The "Message" bar at the bottom of Sprout's phone (D31): everything typed goes to your own Muse.
@@ -333,4 +335,18 @@ export const onboardingCopy = {
   done: "Done",
   /** The persistent indicator on the avatar sheet's shield while Friends is on. */
   friendsIsOn: "Friends is on",
+
+  // The free step, both sides: when you are free this week and what you feel like doing, with the sandbox line under it.
+  greetingMuse: (muse: string) => `Hi, I'm ${muse}, your Muse.`,
+  nameNext: "Next",
+  freeTitle: "When are you free this week?",
+  freeLine: "Tap the times that work, or type one.",
+  freeTextLabel: "Or type a time",
+  freeTextPlaceholder: "Tue 6 to 8 PM",
+  feelsTitle: "What do you feel like doing?",
+  feelsPlaceholder: "A long dinner or a walk",
+  feelsOptional: "Optional",
+  sandboxLine: "In this sandbox your Muse only knows what you tell it here. In Muse it would know you, and it would suggest plans instead of asking.",
+  skipFree: "Skip",
+  freeSaving: "Saving...",
 } as const;

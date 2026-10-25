@@ -121,6 +121,20 @@ export function postChat(text: string) {
   return post("/api/chat", { role: "a", text });
 }
 
+/**
+ * What a person typed about their week (onboarding's free step): the windows they are free, one line about what they
+ * feel like doing, and the name they gave. The server sets that side's calendar and interests for the room; it answers
+ * a plain message when a window is not one it can use. Nothing is posted when the person skips the step.
+ */
+export function postAvailability(input: { side: Role; windows: Array<{ start: string; end: string }>; feels: string | null; name: string | null }) {
+  return post("/api/availability", {
+    side: input.side,
+    windows: input.windows,
+    ...(input.feels === null ? {} : { feels: input.feels }),
+    ...(input.name === null || input.name === "" ? {} : { name: input.name }),
+  });
+}
+
 export type LeakAttempt = { id: string; label: string; status: number; error: string; rejected: boolean };
 
 /** "Try to leak": asks the server to forge two sends to Mochi's inbox and report what the inbox answered, verbatim. */

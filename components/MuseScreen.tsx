@@ -7,9 +7,10 @@ import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { ARRIVAL_AT_MS, ARRIVAL_LINGER_MS, withReelArrival, type ArrivalStage } from "@/lib/ui/arrival";
 import { copy } from "@/lib/ui/copy";
 import { discInitials, formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
-import { postChat, postDecision, postHandoff, postPrivacy, postReplan, postSignal, postSimulatedFriendSwitch, type Result } from "@/lib/ui/actions";
+import { postAvailability, postChat, postDecision, postHandoff, postPrivacy, postReplan, postSignal, postSimulatedFriendSwitch, type Result } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import { runInProgress } from "@/lib/ui/entry";
+import { freeWindowsFor } from "@/lib/ui/free-windows";
 import { friendsIndicator, pickerMode, ROOM_FRIEND, roomFriendTier, shareFriend, startRequest, startsRunAtDone } from "@/lib/ui/onboarding-flow";
 import { getRoom } from "@/lib/ui/room";
 import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
@@ -24,6 +25,8 @@ import { AvatarSheet } from "./AvatarSheet";
 import { Composer } from "./Composer";
 import { ContactSheet } from "./ContactSheet";
 import { FriendPickerSheet } from "./FriendPickerSheet";
+import { FriendNameCard } from "./FriendNameCard";
+import { FreeTimeCard } from "./FreeTimeCard";
 import { FriendsOptInCard } from "./FriendsOptInCard";
 import { OptOutCard, TurnOnFriendsPill } from "./OptOutCard";
 import { ShareSheet } from "./ShareSheet";
@@ -88,7 +91,7 @@ function StatusBar({ time }: { time: string }) {
   );
 }
 
-const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card", "trip-question", "trip-budget", "trip-itinerary", "trip-open", "trip-pot", "onboarding-friends", "onboarding-optout"]);
+const cardKinds: ReadonlySet<ChatItem["kind"]> = new Set(["plan-card", "draft-card", "start-card", "trip-question", "trip-budget", "trip-itinerary", "trip-open", "trip-pot", "onboarding-friends", "onboarding-name", "onboarding-free", "onboarding-optout"]);
 
 /** 4px between bubbles of one run, 14px between runs, 16px around a card. */
 function spacingBefore(previous: ChatItem | undefined, item: ChatItem, lineOf: (item: ChatItem | undefined) => ThreadLine | undefined): string {
@@ -133,11 +136,15 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const friendSender: Sender = { kind: "friend", name: view.friendHumanName, simulated };
   // Onboarding (D26): a judge's own phone opens with Sprout's greeting, a name, and the choice of Friends. Until it is done
   // it is the whole chat, with no tab bar and no composer; after an opt-out the chat is still there, but nothing starts.
-  const [onboardingState, dispatchOnboarding] = useOnboarding(getRoom());
+  const [onboardingState, dispatchOnboarding] = useOnboarding(getRoom(), role);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
-  const onboardingOn = onboarding && role === "a" && !readOnly;
+  // Side b onboards only when a real friend is on it: with Michelle playing that side there is nobody to ask.
+  const onboardingOn = onboarding && !readOnly && (role === "a" || !simulated);
   const onboardingActive = onboardingOn && onboardingState.step !== "done";
-  const friendsOff = onboardingOn && onboardingState.step === "done" && !onboardingState.friendsOn;
+  // Friends is a choice only the judge's own phone makes; the invited phone never opts out of anything.
+  const friendsOff = onboardingOn && role === "a" && onboardingState.step === "done" && !onboardingState.friendsOn;
+  const [freeError, setFreeError] = useState<string | null>(null);
+  const [freeSaving, setFreeSaving] = useState(false);
   // After Done, Michelle's reel arrives as a new message and the run starts a beat later (see lib/ui/arrival.ts). Null is the
   // static chat: a reload, the stage, or a phone that never ran onboarding in this tab.
   const [arrival, setArrival] = useState<ArrivalStage | null>(null);
@@ -151,7 +158,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, []);
   const shownItems: ChatItem[] = onboardingOn
-    ? [...onboardingItems(onboardingState, view.friendHumanName), ...(onboardingActive ? [] : friendsOff ? view.items.filter((item) => item.kind !== "start-card" && item.kind !== "contact-entry") : view.items)]
+    ? [...onboardingItems(onboardingState, view.friendHumanName, role, view.museName), ...(onboardingActive ? [] : friendsOff ? view.items.filter((item) => item.kind !== "start-card" && item.kind !== "contact-entry") : view.items)]
     : view.items;
   const allItems = withReelArrival(shownItems, arrival, snapshot.plan !== null);
   // Skips land one at a time, even on a phone that hears of two at once.
@@ -245,7 +252,26 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   }
 
   /**
-   * Done on the share step: the reel arrives (the card, then the judge's own "we should go!") and the run starts a beat
+   * Done (or Skip) on the free step. What the person typed about their week is checked here and posted for their side, so
+   * the Muses plan on it; a skip posts nothing and the seeded week stands. Side b has to give at least one time. Then
+   * onboarding is over and, on the judge's phone, the reel arrives and the run starts.
+   */
+  async function submitFree(skip: boolean) {
+    setFreeError(null);
+    if (!skip) {
+      const checked = freeWindowsFor(onboardingState.free, snapshot.now);
+      if (!checked.ok) return setFreeError(checked.message);
+      setFreeSaving(true);
+      const posted = await postAvailability({ side: role, windows: checked.windows, feels: checked.feels, name: onboardingState.name.trim() });
+      setFreeSaving(false);
+      onChanged();
+      if (!posted.ok) return setFreeError(posted.message);
+    }
+    finishOnboarding();
+  }
+
+  /**
+   * Finishing onboarding: the reel arrives (the card, then the judge's own "we should go!") and the run starts a beat
    * after, so the Muses' exchange happens in view. A run already going is left alone, and a failed start puts the
    * start card back with the error under it. Every timer is cleared if the screen goes away.
    */
@@ -278,6 +304,23 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         return SKIP_SEPARATOR_IDS.has(item.id) ? <TimeSkipCard day={item.day} time={item.time} /> : <DaySeparator day={item.day} time={item.time} />;
       case "onboarding-friends":
         return <FriendsOptInCard state={onboardingState} dispatch={dispatchOnboarding} />;
+      case "onboarding-name":
+        return <FriendNameCard state={onboardingState} dispatch={dispatchOnboarding} />;
+      case "onboarding-free":
+        return (
+          <FreeTimeCard
+            state={onboardingState}
+            nowIso={snapshot.now}
+            dispatch={(action) => {
+              setFreeError(null);
+              dispatchOnboarding(action);
+            }}
+            {...(role === "a" ? { onSkip: () => void submitFree(true) } : {})}
+            onDone={() => void submitFree(false)}
+            saving={freeSaving}
+            error={freeError}
+          />
+        );
       case "onboarding-optout":
         return <OptOutCard />;
       case "onboarding-turn-on":
@@ -377,7 +420,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       {tab === "chat" ? (
         <>
           <header className="relative flex shrink-0 flex-col items-center pb-3 pt-2">
-            {role === "b" && !readOnly ? (
+            {role === "b" && !readOnly && !onboardingActive ? (
               <button
                 type="button"
                 onClick={() => setSheetOpen(true)}
@@ -432,7 +475,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 ) : null}
               </div>
             ) : null}
-            {role === "b" && !readOnly ? (
+            {role === "b" && !readOnly && !onboardingActive ? (
               <button
                 type="button"
                 onClick={() => setSheetOpen(true)}
@@ -532,7 +575,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
             onChanged();
           }}
           onBack={() => dispatchOnboarding({ type: "back" })}
-          onDone={finishOnboarding}
+          onDone={() => dispatchOnboarding({ type: "free" })}
         />
       ) : null}
       {contactsOpen && role === "a" && !onboardingActive ? (
