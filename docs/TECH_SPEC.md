@@ -110,7 +110,7 @@ Tools:
 
 The runtime drives each turn with the Responses API in stateless mode, which Meta recommends and which measured far faster on Oct 24: 0.3 to 1.0 seconds per follow-up call, against 9 to 12.5 seconds for a `previous_response_id` chain (n=11, any output size).
 
-1. The first `client.responses.create` call sends the system prompt as `instructions`, the tools, `reasoning: { effort: "low" }`, `store: false`, `include: ["reasoning.encrypted_content"]`, and the thread history rebuilt from the Store as input.
+1. The first `client.responses.create` call sends the system prompt as `instructions`, the tools, `reasoning: { effort: "minimal" }`, `store: false`, `include: ["reasoning.encrypted_content"]`, and the thread history rebuilt from the Store as input.
 2. For each `function_call` in the response, the runtime runs the handler and appends a `function_call_output` with the same `call_id`.
 3. Every follow-up call replays the previous output items, including the encrypted reasoning items, plus the new outputs as input, and resends `instructions`, `tools`, and the reasoning effort. If a replayed reasoning item is rejected with a `400`, the runtime drops the reasoning items and retries once. `MODEL_CHAIN_MODE=chain` switches to the `previous_response_id` chain for comparison only.
 4. A response with no `function_call` ends the turn.
