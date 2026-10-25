@@ -25,24 +25,24 @@ import { defaultRoomRepo, ROOM_CAP_WINDOW_MS, ROOM_TTL_MS, RoomStorageError, typ
 // The only things a judge's Muse can send are a preset name, a plan id and accept or decline: no free
 // text, no windows of its own, nothing about the person.
 
-const YOU: AgentId = "aaron";
-const FRIEND: AgentId = "lisa";
+export const YOU: AgentId = "aaron";
+export const FRIEND: AgentId = "lisa";
 
 // Caps for one room key, shared by every plan a judge starts: the model calls these runs make count
 // against the same hourly run budget as the stage (lib/agent/caps.ts), under a key of their own.
-const RUN_BUDGET_KEY = "byom";
+export const RUN_BUDGET_KEY = "byom";
 const STALLED_AFTER_MS = 4 * 60 * 1000;
 
 export type Failure = {
   ok: false;
-  status: 400 | 403 | 404 | 409 | 422 | 429 | 502 | 503;
+  status: 400 | 403 | 404 | 409 | 410 | 422 | 429 | 502 | 503;
   code: string;
   message: string;
   retryAfterSeconds?: number;
 };
 export type Outcome<T> = { ok: true; value: T } | Failure;
 
-function fail(status: Failure["status"], code: string, message: string, extra: Partial<Pick<Failure, "retryAfterSeconds">> = {}): Failure {
+export function fail(status: Failure["status"], code: string, message: string, extra: Partial<Pick<Failure, "retryAfterSeconds">> = {}): Failure {
   return { ok: false, status, code, message, ...extra };
 }
 
@@ -75,12 +75,12 @@ export function productionDeps(): ByomDeps {
   };
 }
 
-function maxRooms(deps: ByomDeps): number {
+export function maxRooms(deps: ByomDeps): number {
   const configured = Number(process.env.BYOM_ROOMS_PER_HOUR);
   return deps.maxRoomsPerHour ?? (Number.isInteger(configured) && configured > 0 ? configured : 10);
 }
 
-async function guarded<T>(work: () => Promise<T>): Promise<Outcome<T>> {
+export async function guarded<T>(work: () => Promise<T>): Promise<Outcome<T>> {
   try {
     return { ok: true, value: await work() };
   } catch (error) {
@@ -110,7 +110,7 @@ export const RespondInput = z.object({ planId: z.string().min(1, "planId is requ
 
 // A person is free in exactly the preset's windows and busy otherwise: one marker block says the room sets
 // the whole calendar (the persona's seeded events stay out), then the gaps are busy blocks.
-async function seedRoomCalendar(store: Store, agent: AgentId, windows: Window[]): Promise<void> {
+export async function seedRoomCalendar(store: Store, agent: AgentId, windows: Window[]): Promise<void> {
   const marker = { id: `${CALENDAR_SET_BY_ROOM}_${agent}`, title: "Calendar set by the room", start: CALENDAR_RANGE.start, end: toCentralIso(toMs(CALENDAR_RANGE.start) + 60_000), private: true };
   await store.addBusy({ agent, event: marker });
   const gaps: Window[] = [];
@@ -126,7 +126,7 @@ async function seedRoomCalendar(store: Store, agent: AgentId, windows: Window[])
 }
 
 // Always the seeded, fictional reel: nothing a judge sends can change what the agents read.
-function judgeSignal(nowMs: number): Signal {
+export function judgeSignal(nowMs: number): Signal {
   return { ...rawShawarmaSignal(), id: newId("sig", nowMs) };
 }
 
@@ -143,6 +143,21 @@ export async function runNegotiation(store: Store, input: { contextId: string; s
     const agent = queue.shift()!;
     await runInboxTurn({ store, agent, contextId: input.contextId, wallNow: input.now, deliver: deliverFrom(agent) });
   }
+}
+
+// The two agents talk after the response is sent, inside the route's time limit; every write is saved to the room.
+export function scheduleNegotiation(deps: ByomDeps, roomKey: string, store: Store, contextId: string, signalId: string): void {
+  const persisted = persistingStore(store, (snapshot) => deps.repo.save(roomKey, snapshot));
+  const negotiate = deps.negotiate ?? runNegotiation;
+  deps.schedule(async () => {
+    try {
+      await negotiate(persisted.store, { contextId, signalId, now: deps.now });
+    } catch (error) {
+      console.error("judge room negotiation failed", error instanceof Error ? error.message : error);
+    } finally {
+      await persisted.flush().catch((error) => console.error("judge room final save failed", error instanceof Error ? error.message : error));
+    }
+  });
 }
 
 export type StartPlanView = {
@@ -202,17 +217,7 @@ export async function startPlan(raw: unknown, deps: ByomDeps): Promise<Outcome<S
     return created;
   }
 
-  const persisted = persistingStore(store, (snapshot) => deps.repo.save(roomKey, snapshot));
-  const negotiate = deps.negotiate ?? runNegotiation;
-  deps.schedule(async () => {
-    try {
-      await negotiate(persisted.store, { contextId, signalId: signal.id, now: deps.now });
-    } catch (error) {
-      console.error("judge room negotiation failed", error instanceof Error ? error.message : error);
-    } finally {
-      await persisted.flush().catch((error) => console.error("judge room final save failed", error instanceof Error ? error.message : error));
-    }
-  });
+  scheduleNegotiation(deps, roomKey, store, contextId, signal.id);
 
   return {
     ok: true,
@@ -234,9 +239,9 @@ export async function startPlan(raw: unknown, deps: ByomDeps): Promise<Outcome<S
 // Looking at a room, and answering in it
 // ---------------------------------------------------------------------------
 
-type OpenRoom = { store: Store; flush: () => Promise<void> };
+export type OpenRoom = { store: Store; flush: () => Promise<void> };
 
-async function openRoom(deps: ByomDeps, roomKey: string): Promise<Outcome<OpenRoom>> {
+export async function openRoom(deps: ByomDeps, roomKey: string): Promise<Outcome<OpenRoom>> {
   const loaded = await guarded(() => deps.repo.load(roomKey, deps.now()));
   if (!loaded.ok) return loaded;
   if (!loaded.value) return fail(404, "no_such_plan", "No plan with that planId. It may have expired: plans last 2 hours.");
@@ -347,6 +352,7 @@ export async function checkPlan(raw: unknown, deps: ByomDeps): Promise<Outcome<P
     const opened = await openRoom(deps, roomKey);
     if (!opened.ok) return opened;
     const plan = (await opened.value.store.snapshot()).plans[0];
+    if (!plan) return fail(409, "not_started", "That plan has not been started yet.");
     await settleMochi(deps, opened.value, plan.id);
     const flushed = await guarded(() => opened.value.flush());
     if (!flushed.ok) return flushed;
@@ -366,6 +372,7 @@ export async function respond(raw: unknown, deps: ByomDeps): Promise<Outcome<Res
     if (!opened.ok) return opened;
     const { store, flush } = opened.value;
     const plan = (await store.snapshot()).plans[0];
+    if (!plan) return fail(409, "not_started", "That plan has not been started yet.");
     const answered = await decide(store, { planId: plan.id, agent: YOU, choice: parsed.data.decision }, { wallNow: deps.now });
     if (!answered.ok) {
       const status = answered.status === 404 ? 404 : answered.status === 422 ? 422 : 409;
