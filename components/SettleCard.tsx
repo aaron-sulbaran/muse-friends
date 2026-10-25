@@ -4,7 +4,7 @@ import { HandCoins } from "lucide-react";
 import { useEffect, useState } from "react";
 import { postSettle } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import { formatDollars, type SettleOffer } from "@/lib/ui/payments";
+import { settleDetailFor, type SettleOffer } from "@/lib/ui/payments";
 import type { Role } from "@/lib/ui/types";
 
 type Props = {
@@ -26,7 +26,9 @@ type Props = {
 
 /**
  * After a confirmed plan: ask your Muse to settle up. The Muse decides whether money moves and how much, within
- * the cap you set; the friend's Muse accepts it or sends it back. Off until the person turns payments on.
+ * the cap you set; the friend's Muse accepts it or sends it back. Off until the person turns payments on. The card
+ * says what is being settled (the plan's event and day) and the cap. The Muse prepares an amount and the person
+ * confirms it on the payment card (D28); nothing moves before that.
  */
 export function SettleCard({ planId, role, offer, friendName, friendMuse, paymentCount, readOnly, onChanged, onPaused, onOpenSettings }: Props) {
   const [note, setNote] = useState("");
@@ -66,7 +68,7 @@ export function SettleCard({ planId, role, offer, friendName, friendMuse, paymen
         <div className="min-w-0">
           <h3 className="text-[17px] font-semibold leading-[22px]">{off ? copy.settleOffTitle : copy.settleTitle(friendName)}</h3>
           <p className="mt-0.5 text-[13px] leading-[18px] text-muted">
-            {off ? copy.settleOffDetail : copy.settleDetail(formatDollars(offer.cap), friendMuse)}
+            {off ? copy.settleOffDetail : settleDetailFor({ cap: offer.cap, event: offer.event, friendMuse })}
           </p>
         </div>
       </div>
@@ -88,8 +90,8 @@ export function SettleCard({ planId, role, offer, friendName, friendMuse, paymen
             disabled={waiting || readOnly}
             onChange={(event) => setNote(event.target.value)}
             placeholder={copy.settleNotePlaceholder}
-            aria-label={copy.settleNotePlaceholder}
-            className="mt-4 w-full rounded-full bg-group px-4 py-2.5 text-[15px] leading-5 outline-none placeholder:text-faint focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
+            aria-label={copy.settleNoteLabel}
+            className="mt-4 w-full truncate rounded-full bg-group px-4 py-2.5 text-[15px] leading-5 outline-none placeholder:text-faint focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
           />
           <button
             type="button"

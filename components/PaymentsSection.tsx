@@ -5,6 +5,7 @@ import { postPaymentsScope } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
 import { formatDollars } from "@/lib/ui/payments";
 import { PAYMENT_MAX_DOLLARS } from "@/lib/protocol";
+import { PaymentHistoryLive } from "./PaymentHistory";
 import type { PaymentsSettings, Role } from "@/lib/ui/types";
 
 type Props = {
@@ -12,13 +13,16 @@ type Props = {
   settings: PaymentsSettings;
   /** Called after a change lands so the caller can refresh the snapshot at once. */
   onChanged: () => void;
+  /** Which tab opens first. */
+  initialTab?: "settings" | "history";
 };
 
 /**
  * What this seat lets its Muse do with money: off unless switched on, with the most per plan in whole dollars.
  * Same switch as the sharing toggles; the limit is enforced in code at both ends, not by the prompt.
  */
-export function PaymentsSection({ role, settings, onChanged }: Props) {
+export function PaymentsSection({ role, settings, onChanged, initialTab = "settings" }: Props) {
+  const [tab, setTab] = useState<"settings" | "history">(initialTab);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [capText, setCapText] = useState(String(settings.cap));
@@ -51,8 +55,29 @@ export function PaymentsSection({ role, settings, onChanged }: Props) {
 
   return (
     <section className="mt-5" aria-label={copy.paymentsSection}>
-      <h3 className="text-[13px] font-semibold leading-[18px] text-muted">{copy.paymentsSection}</h3>
-      <ul className="mt-1 divide-y divide-bezel-line">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[13px] font-semibold leading-[18px] text-muted">{copy.paymentsSection}</h3>
+        <div role="tablist" aria-label={copy.paymentsSection} className="flex gap-0.5 rounded-full bg-group p-0.5">
+          {(["settings", "history"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={tab === value}
+              onClick={() => setTab(value)}
+              className="rounded-full px-3 py-1 text-[12px] font-semibold leading-4 text-muted transition-colors aria-selected:bg-surface aria-selected:text-ink aria-selected:shadow-float"
+            >
+              {value === "settings" ? copy.paymentsTabSettings : copy.paymentsTabHistory}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === "history" ? (
+        <div className="mt-1" role="tabpanel">
+          <PaymentHistoryLive agent={role === "a" ? "aaron" : "lisa"} />
+        </div>
+      ) : null}
+      <ul className={`mt-1 divide-y divide-bezel-line ${tab === "history" ? "hidden" : ""}`}>
         <li>
           <label className="flex items-center justify-between gap-4 py-3">
             <span>
@@ -103,6 +128,7 @@ export function PaymentsSection({ role, settings, onChanged }: Props) {
           </li>
         ) : null}
       </ul>
+      <p className="mt-2 text-[12px] leading-4 text-muted">{copy.paymentsAsksFirst}</p>
       {error ? (
         <p role="alert" className="mt-2 text-[13px] leading-[18px] text-withheld">
           {error}

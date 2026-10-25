@@ -3,9 +3,10 @@ import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
 import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
+import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiSnapshot, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -160,7 +161,7 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<UiNote["kind"]>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed"]);
+const noteKinds = new Set<UiNote["kind"]>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed", "chat_asked"]);
 
 /**
  * An inbox that refuses a message for what it carries (422) or who sent it (403) is the code saying no, which is
@@ -185,10 +186,27 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
   }));
 }
 
-function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
+function toNotes(events: StateSnapshot["events"], rename: (text: string) => string, payments: UiPayment[], chat: StateSnapshot["room"]["chat"] = []): UiNote[] {
   return events
     .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]) && isWorthARow(event))
-    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(event.text) }));
+    .map((event) => {
+      const base = { id: event.id, kind: event.kind, at: event.at, text: rename(describeNote(event.text, payments)) };
+      if (event.kind !== "chat_asked" || !event.messageId) return base;
+      // A "You asked" row carries the tools the Muse used, read from the proof on its answer.
+      const toolCalls = toolCallsOf(chat.find((entry) => entry.id === event.messageId)?.proof);
+      return { ...base, answerId: event.messageId, ...(toolCalls ? { toolCalls } : {}) };
+    });
+}
+
+function toChat(state: StateSnapshot, rename: (text: string) => string): UiChatMessage[] {
+  return (state.room.chat ?? []).map((entry) => ({
+    id: entry.id,
+    from: entry.from,
+    text: rename(entry.text),
+    at: entry.at,
+    ...(entry.replyTo ? { replyTo: entry.replyTo } : {}),
+    ...(entry.proof ? { proof: withToolCalls(entry.proof) } : {}),
+  }));
 }
 
 /** The message's proof, with its recorded tool calls tidied for display when there are any. */
@@ -267,10 +285,32 @@ function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null 
   return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null };
 }
 
+/**
+ * What a phone is allowed to read. The chat with a Muse (D31) belongs to the person on side a, and the snapshot is
+ * otherwise the same for both phones, so a request that says it is side b (`/api/state?role=b`) gets the snapshot
+ * without any chat line and without the "You asked" rows. No role, or `a`, is the full view the stage and the gate
+ * use. Anything else fails closed and gets the restricted view. If side b ever gets a chat, its lines are hidden from
+ * side a the same way: the lines would carry their side and this is the one place that filters them.
+ */
+export const CHAT_SIDE = "a";
+
+export function forRole(snapshot: UiSnapshot, role: string | null | undefined): UiSnapshot {
+  if (role === undefined || role === null || role === CHAT_SIDE) return snapshot;
+  return { ...snapshot, chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked") };
+}
+
+/** The latest caption read: what the model found, not the sentence the timeline says about it. */
+function reelReadFor(state: StateSnapshot): UiReelRead | null {
+  const extracted = state.signals.findLast((signal) => signal.extracted !== undefined)?.extracted;
+  if (!extracted || (!extracted.place && !extracted.area && !extracted.hours)) return null;
+  return { place: extracted.place ?? null, area: extracted.area ?? null, hours: extracted.hours ?? null };
+}
+
 export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnapshot {
   const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
   const messages = toUiMessages(state);
+  const payments = paymentsOf(state);
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
@@ -279,7 +319,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state))].sort((first, second) => first.at.localeCompare(second.at)),
+    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state), payments, state.room.chat)].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events, renameFor(state)),
@@ -289,18 +329,22 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     inFlight: deriveInFlight(state, plan),
     budget: overlay.budget ?? null,
     reel: reelFor(state, overlay.liveReel ?? null),
+    reelRead: reelReadFor(state),
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
     wallets: { aaron: walletFor("aaron", state), lisa: walletFor("lisa", state) },
-    payments: paymentsOf(state),
+    payments,
+    chat: toChat(state, renameFor(state)),
     paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
     sandbox: sandboxFor(state),
   };
 }
 
+// The wallet is named for the person at that seat, as the rest of the screen says it ("Michelle's wallet" when the
+// simulated friend plays side b); the Nessie record keeps the seed's nickname.
 function walletFor(owner: AgentId, state: StateSnapshot): UiWallet | null {
   const wallet = state.room.wallets?.[owner];
-  return wallet ? { balance: wallet.balance, nickname: wallet.nickname, source: wallet.source, accountId: wallet.accountId } : null;
+  return wallet ? { balance: wallet.balance, nickname: renameFor(state)(wallet.nickname), source: wallet.source, accountId: wallet.accountId } : null;
 }
 
 function paymentsScopeFor(owner: AgentId, state: StateSnapshot): PaymentsSettings {
@@ -312,7 +356,19 @@ function sandboxFor(state: StateSnapshot): UiSnapshot["sandbox"] {
   const wallets = Object.values(state.room.wallets ?? {});
   const connected = wallets.length > 0 && wallets.every((wallet) => wallet.source === "nessie");
   const enabled = paymentsEnabled();
-  return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, local ledger" };
+  return {
+    enabled,
+    connected,
+    text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, local ledger",
+    // Only true of the real sandbox: its transactions are real records, but the balance field on its accounts never follows them.
+    ...(enabled && connected ? { balanceNote: "The sandbox records each payment but never changes an account's own balance, so Muse keeps the balances shown here." } : {}),
+  };
+}
+
+/** The plan a payment belongs to, as far as naming it goes: its title and window. */
+function planNamed(planId: string, state: StateSnapshot): Pick<UiPlan, "activityTitle" | "window"> | null {
+  const plan = state.plans.find((candidate) => candidate.id === planId);
+  return plan ? { activityTitle: plan.activity?.title ?? "the plan", window: plan.window ?? null } : null;
 }
 
 const dollars = (amount: number) => (amount < 0 ? `-$${-amount}` : `$${amount}`);
@@ -373,7 +429,7 @@ function toUiPayment(view: PaymentView, proposal?: PaymentProposal): UiPayment {
     ...(view.depositId ? { depositId: view.depositId } : {}),
     ...(view.balanceBefore !== undefined ? { balanceBefore: view.balanceBefore } : {}),
     ...(view.balanceAfter !== undefined ? { balanceAfter: view.balanceAfter } : {}),
-    ...(view.toolCalls ? { toolCalls: view.toolCalls } : {}),
+    ...(toolCallsOf({ toolCalls: view.toolCalls }) ? { toolCalls: toolCallsOf({ toolCalls: view.toolCalls }) } : {}),
     at: view.at,
   };
   if (!proposal) return base;
@@ -394,5 +450,10 @@ function paymentsOf(state: StateSnapshot): UiPayment[] {
   const byId = new Map<string, UiPayment>();
   for (const proposal of Object.values(proposals)) byId.set(proposal.paymentId, fromProposal(proposal));
   for (const view of sent) byId.set(view.paymentId, toUiPayment(view, proposals[view.paymentId]));
-  return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at));
+  return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at)).map((payment) => named(payment, planNamed(payment.planId, state)));
+}
+
+/** A payment with the plan's event and day in front of its reason, for the cards and the Activity row. */
+function named(payment: UiPayment, plan: Pick<UiPlan, "activityTitle" | "window"> | null): UiPayment {
+  return { ...payment, description: describePayment(payment.reason, plan), ...(plan ? { planLabel: eventLabel(plan) } : {}) };
 }
