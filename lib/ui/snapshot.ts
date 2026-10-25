@@ -1,12 +1,12 @@
 import type { RunBudget } from "@/lib/agent/caps";
 import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
-import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { describeNote, describePayment } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -161,7 +161,7 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed"]);
+const noteKinds = new Set<UiNote["kind"]>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed"]);
 
 /**
  * An inbox that refuses a message for what it carries (422) or who sent it (403) is the code saying no, which is
@@ -271,7 +271,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
   const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
   const messages = toUiMessages(state);
-  const payments = paymentsFrom(state.messages).map((view) => toUiPayment(view, planNamed(view.planId, state)));
+  const payments = paymentsOf(state);
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
@@ -313,7 +313,7 @@ function sandboxFor(state: StateSnapshot): UiSnapshot["sandbox"] {
   const wallets = Object.values(state.room.wallets ?? {});
   const connected = wallets.length > 0 && wallets.every((wallet) => wallet.source === "nessie");
   const enabled = paymentsEnabled();
-  return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, using a local ledger" };
+  return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, local ledger" };
 }
 
 /** The plan a payment belongs to, as far as naming it goes: its title and window. */
@@ -322,15 +322,57 @@ function planNamed(planId: string, state: StateSnapshot): Pick<UiPlan, "activity
   return plan ? { activityTitle: plan.activity?.title ?? "the plan", window: plan.window ?? null } : null;
 }
 
-function toUiPayment(view: PaymentView, plan: Pick<UiPlan, "activityTitle" | "window"> | null): UiPayment {
+const dollars = (amount: number) => (amount < 0 ? `-$${-amount}` : `$${amount}`);
+
+// "Why $16?" from the same lines the card shows: each line with its amount, then the total.
+function explain(proposal: PaymentProposal): string {
+  return `${proposal.breakdown.map((line) => `${line.label}: ${dollars(line.amount)}`).join(". ")}. Together ${dollars(proposal.amount)}.`;
+}
+
+function breakdownLines(proposal: PaymentProposal): UiBreakdownLine[] {
+  const calls = proposal.calls ?? [];
+  return proposal.breakdown.map((line) => ({
+    label: line.label,
+    amount: line.amount,
+    source: line.source,
+    sourceKind: line.source === "estimate" ? "estimate" : line.source === "note" ? "note" : "tool",
+    ...(calls.find((call) => call.callId === line.source) ? { tool: calls.find((call) => call.callId === line.source)!.name } : {}),
+  }));
+}
+
+// A proposal that has not become a payment message yet. confirming is mid-send, so it reads as sent.
+function fromProposal(proposal: PaymentProposal): UiPayment {
+  const open = proposal.status === "proposed" || proposal.status === "failed";
+  const status: UiPayment["status"] = proposal.status === "confirming" || proposal.status === "confirmed" ? "sent" : proposal.status;
+  const toolCalls = toolCallsOf(proposal.proof);
   return {
+    id: proposal.paymentId,
+    planId: proposal.planId,
+    from: proposal.payer,
+    to: proposal.payee,
+    amount: proposal.amount,
+    reason: proposal.reason,
+    ...(proposal.note ? { note: proposal.note } : {}),
+    status,
+    source: proposal.source,
+    breakdown: breakdownLines(proposal),
+    explanation: explain(proposal),
+    ...(proposal.receipt ? { receipt: { seeded: true as const, place: proposal.receipt.place, total: proposal.receipt.total } } : {}),
+    ...(open ? { confirmUrl: `/api/payments/${proposal.paymentId}/confirm`, declineUrl: `/api/payments/${proposal.paymentId}/decline` } : {}),
+    ...(proposal.error ? { error: proposal.error } : {}),
+    ...(toolCalls ? { toolCalls } : {}),
+    at: proposal.proposedAt,
+  };
+}
+
+function toUiPayment(view: PaymentView, proposal?: PaymentProposal): UiPayment {
+  const base: UiPayment = {
     id: view.paymentId,
     planId: view.planId,
     from: view.payer,
     to: view.payee,
     amount: view.amount,
     reason: view.reason,
-    description: describePayment(view.reason, plan),
     ...(view.note ? { note: view.note } : {}),
     status: view.status,
     source: view.source,
@@ -338,6 +380,31 @@ function toUiPayment(view: PaymentView, plan: Pick<UiPlan, "activityTitle" | "wi
     ...(view.depositId ? { depositId: view.depositId } : {}),
     ...(view.balanceBefore !== undefined ? { balanceBefore: view.balanceBefore } : {}),
     ...(view.balanceAfter !== undefined ? { balanceAfter: view.balanceAfter } : {}),
+    ...(view.toolCalls ? { toolCalls: view.toolCalls } : {}),
     at: view.at,
   };
+  if (!proposal) return base;
+  return {
+    ...base,
+    breakdown: breakdownLines(proposal),
+    explanation: explain(proposal),
+    ...(proposal.receipt ? { receipt: { seeded: true as const, place: proposal.receipt.place, total: proposal.receipt.total } } : {}),
+    ...(base.toolCalls ? {} : toolCallsOf(proposal.proof) ? { toolCalls: toolCallsOf(proposal.proof) } : {}),
+    at: proposal.proposedAt,
+  };
+}
+
+// Every payment in the room, oldest first: the proposals (waiting, declined, failed) and the payments they became.
+function paymentsOf(state: StateSnapshot): UiPayment[] {
+  const proposals = state.room.proposals ?? {};
+  const sent = paymentsFrom(state.messages);
+  const byId = new Map<string, UiPayment>();
+  for (const proposal of Object.values(proposals)) byId.set(proposal.paymentId, fromProposal(proposal));
+  for (const view of sent) byId.set(view.paymentId, toUiPayment(view, proposals[view.paymentId]));
+  return [...byId.values()].sort((a, b) => a.at.localeCompare(b.at)).map((payment) => named(payment, planNamed(payment.planId, state)));
+}
+
+/** A payment with the plan's event and day in front of its reason, for the cards and the Activity row. */
+function named(payment: UiPayment, plan: Pick<UiPlan, "activityTitle" | "window"> | null): UiPayment {
+  return { ...payment, description: describePayment(payment.reason, plan) };
 }

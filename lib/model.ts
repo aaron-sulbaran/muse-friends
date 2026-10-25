@@ -56,7 +56,16 @@ export type ToolDefinition = {
 // What a handler may know about the model call that asked for it.
 // What a handler is told about the model call that asked for it. `toolCalls` are the calls this turn has already
 // finished, in order, summarized for the proof (never shown to the model).
-export type ToolMeta = { responseId: string; model: string; call: ModelCallTrace; toolCalls: ToolCallSummary[] };
+export type ToolMeta = {
+  responseId: string;
+  model: string;
+  call: ModelCallTrace;
+  toolCalls: ToolCallSummary[];
+  // This call's own id, and the ids of the calls this turn has already finished (with their tool names). A tool can
+  // hand its id back to the model so a later call can cite it as the source of a number.
+  callId: string;
+  finishedCalls: Array<{ callId: string; name: string }>;
+};
 
 // Receives the parsed JSON arguments, or the raw string when the model sent invalid JSON.
 // Handlers zod-parse their own input; whatever they return (or throw) goes back to the model.
@@ -224,6 +233,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
   const toolCalls: ToolCallTrace[] = [];
   // The same calls as one-line summaries for the message proof; kept beside the traces, never sent to the model.
   const performed: ToolCallSummary[] = [];
+  const finished: Array<{ callId: string; name: string }> = [];
 
   const mode = options.mode ?? contextMode();
   const initial: ResponseInput =
@@ -324,7 +334,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
         ok = false;
       } else {
         try {
-          output = await handler(args, { responseId: trace.responseId, model: trace.model, call: trace, toolCalls: [...performed] });
+          output = await handler(args, { responseId: trace.responseId, model: trace.model, call: trace, toolCalls: [...performed], callId: call.call_id, finishedCalls: [...finished] });
           if (typeof output === "object" && output !== null && "error" in output) ok = false;
         } catch (error) {
           output = { error: describeError(error) };
@@ -338,6 +348,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
         error: ok ? undefined : JSON.stringify(output).slice(0, 200),
       });
       performed.push((options.summarizeCall ?? summarizeToolCall)({ name: call.name, args, output, ok }));
+      finished.push({ callId: call.call_id, name: call.name });
       if (ok && required.has(call.name)) requiredSatisfied = true;
       outputs.push({ type: "function_call_output", call_id: call.call_id, output: JSON.stringify(output) });
     }

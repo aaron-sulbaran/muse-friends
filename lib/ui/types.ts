@@ -96,7 +96,7 @@ export type FollowThroughEvent = {
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source" | "payment_sent" | "payment_received" | "payment_declined" | "payment_failed";
+  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source" | "payment_sent" | "payment_received" | "payment_declined" | "payment_failed" | "payment_proposed" | "payment_cancelled" | "receipt_read";
   at: string;
   text: string;
 };
@@ -119,7 +119,24 @@ export type UiWallet = {
   accountId: string;
 };
 
-/** One payment between the two Muses, newest state: sent (waiting on the friend), received (kept), or refunded (declined). */
+/** One line of a payment's breakdown. The lines add up to the payment's amount; a deduction is negative. */
+export type UiBreakdownLine = {
+  label: string;
+  amount: number;
+  /** The raw source: a tool call id from the turn that prepared it, "note", or "estimate". */
+  source: string;
+  /** "tool" lines cite a call (the seeded receipt read, for example), "note" the person's words, "estimate" the Muse's own. */
+  sourceKind: "tool" | "note" | "estimate";
+  /** The name of the tool a "tool" source points at, when it is one of the tool calls on the payment. */
+  tool?: string;
+};
+
+/**
+ * One payment between the two Muses. proposed: the Muse prepared it and explained it, and nothing has moved until the
+ * person confirms (D28); declined: the person said no; failed: the confirm did not go through and nothing moved (or it
+ * was refunded); sent: confirmed, waiting on the friend's Muse; received: the friend's Muse kept it; refunded: the
+ * friend's Muse sent it back.
+ */
 export type UiPayment = {
   id: string;
   planId: string;
@@ -130,14 +147,27 @@ export type UiPayment = {
   /** The reason with the plan's event and day in front ("Shawarma Point, Tue Oct 27, dinner share"); the cards show this when set. */
   description?: string;
   note?: string;
-  status: "sent" | "received" | "refunded";
+  status: "proposed" | "declined" | "failed" | "sent" | "received" | "refunded";
   source: "nessie" | "local";
+  /** The sourced breakdown behind the amount, shown in the provenance drawer. */
+  breakdown?: UiBreakdownLine[];
+  /** The breakdown as a plain sentence built from the same lines, for "Why $16?". */
+  explanation?: string;
+  /** Set when the Muse read the seeded receipt: it is a labeled fixture, never a real receipt. */
+  receipt?: { seeded: true; place: string; total: number };
+  /** While proposed (or failed and retryable): POST { role } here to confirm or decline. */
+  confirmUrl?: string;
+  declineUrl?: string;
+  /** Why a confirm did not go through, in words. */
+  error?: string;
   withdrawalId?: string;
   /** The deposit into the receiver, or the refund deposit into the payer. */
   depositId?: string;
   /** The receiver's balance around the deposit, when it was kept. */
   balanceBefore?: number;
   balanceAfter?: number;
+  /** The tools the payer's Muse called on the way to this payment (the same list as the proof on the message). */
+  toolCalls?: UiToolCall[];
   at: string;
 };
 

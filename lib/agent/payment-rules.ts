@@ -1,8 +1,9 @@
 import { paymentsCheck } from "@/lib/policy";
-import type { ActivityEvent, AgentId, AgentMessage, MessageRecord, Plan, Redaction, SharePolicy, Thread } from "@/lib/protocol";
+import type { ActivityEvent, AgentId, AgentMessage, MessageRecord, Plan, Redaction, SharePolicy, Thread, ToolCallProof } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import { newId } from "./ids";
+import { getProposal } from "./proposal-store";
 import { walletOf } from "./wallets";
 
 // The rules of the payments channel that need the store: how much has gone out for a plan, whether a payment
@@ -29,13 +30,15 @@ export type PaymentView = {
   depositId?: string;
   balanceBefore?: number;
   balanceAfter?: number;
+  // The tools the payer's Muse called on the way to the payment, from the proof on the message.
+  toolCalls?: ToolCallProof[];
   at: string;
 };
 
 // Every payment in the room, one row per paymentId, oldest first. Derived from the messages, which are the record.
 export function paymentsFrom(records: MessageRecord[]): PaymentView[] {
   const views = new Map<string, PaymentView>();
-  for (const { message } of records) {
+  for (const { message, proof } of records) {
     const payment = message.payment;
     if (!payment) continue;
     if (message.type === "payment") {
@@ -52,9 +55,10 @@ export function paymentsFrom(records: MessageRecord[]): PaymentView[] {
         withdrawalId: payment.withdrawalId,
         payerAccountId: payment.payerAccountId,
         status: "sent",
+        ...(proof?.toolCalls ? { toolCalls: proof.toolCalls } : {}),
         at: message.at,
       });
-    } else {
+    } else if (message.type !== "payment_cancelled") {
       const view = views.get(payment.paymentId);
       if (!view) continue;
       view.status = payment.outcome === "accepted" ? "received" : "refunded";
@@ -92,12 +96,25 @@ export async function validatePaymentIncoming(store: Store, message: AgentMessag
   if (message.type === "payment") {
     if (!SETTLEABLE_STATES.includes(plan.state)) return { ok: false, status: 409, error: `the plan is ${plan.state}; money moves only once it is confirmed` };
     if (known.some((entry) => entry.paymentId === payment.paymentId)) return { ok: false, status: 409, error: "this payment was already sent" };
+    // D28: nothing moves without the person's confirm, so a payment with no confirmed proposal behind it is refused here too.
+    const proposal = await getProposal(store, payment.paymentId);
+    if (!proposal || (proposal.status !== "confirming" && proposal.status !== "confirmed") || proposal.payer !== message.from || proposal.amount !== payment.amount) {
+      return { ok: false, status: 422, error: "the payment has no confirmed proposal behind it" };
+    }
     const wallet = await walletOf(store, message.from);
     // Only act on accounts this app created: the money has to come out of the sender's own wallet.
     if (!wallet || wallet.accountId !== payment.payerAccountId || wallet.source !== payment.source) return { ok: false, status: 422, error: "the payment does not come from the sender's own wallet" };
     const spent = known.filter((entry) => entry.planId === plan.id && entry.payer === message.from && entry.status !== "refunded").reduce((total, entry) => total + entry.amount, 0);
     const refused = paymentsCheck(senderPolicy, payment.amount, spent);
     if (refused) return { ok: false, status: 422, error: refused };
+    return { ok: true };
+  }
+
+  if (message.type === "payment_cancelled") {
+    const proposal = await getProposal(store, payment.paymentId);
+    if (!proposal || proposal.status !== "declined" || proposal.payer !== message.from || proposal.payee !== message.to || proposal.amount !== payment.amount) {
+      return { ok: false, status: 422, error: "the cancellation does not match a payment the sender's person declined" };
+    }
     return { ok: true };
   }
 
@@ -121,6 +138,9 @@ function describePayment(message: AgentMessage): { kind: ActivityEvent["kind"]; 
   const where = payment.source === "nessie" ? "Nessie sandbox" : "local ledger";
   if (message.type === "payment") {
     return { kind: "payment_sent", text: `${from}'s Muse sent ${money(payment.amount)} to ${to}'s Muse: ${payment.reason} (${where}, withdrawal ${payment.withdrawalId})` };
+  }
+  if (message.type === "payment_cancelled") {
+    return { kind: "payment_cancelled", text: `${from}'s person declined the ${money(payment.amount)} prepared for ${to}: nothing moved (${where})` };
   }
   if (payment.outcome === "accepted") {
     return { kind: "payment_received", text: `${from}'s Muse accepted ${money(payment.amount)} from ${to}: balance ${money(payment.balanceBefore ?? 0)} to ${money(payment.balanceAfter ?? 0)} (${where}, deposit ${payment.depositId})` };

@@ -107,7 +107,11 @@ describe("roomIsEmpty", () => {
 
 type Room = { plan: unknown; messages: unknown[]; simulatedFriend: boolean; inFlight?: unknown };
 
-describe("runGate end to end", () => {
+// These tests run the real gate against a fake app and spawn a real node process for each demo run, so what they cost
+// depends on the machine: a few hundred milliseconds when it is idle, seconds when the whole suite (or another suite)
+// is running beside it. Vitest's 5 second default timed them out under load, so they get a limit nothing real comes
+// near, and nothing in them is asserted on wall-clock time.
+describe("runGate end to end", { timeout: 60_000 }, () => {
   let server: Server;
   let base: string;
   let room: Room;
@@ -116,6 +120,10 @@ describe("runGate end to end", () => {
   let controls: Array<Record<string, unknown>>;
   let demoRuns: number;
   let dir: string;
+  // The running agent turn "finishes" on the Nth read of /api/state, counted by the fake app, instead of after a
+  // wall-clock delay, so the test does not depend on how fast the gate gets to its first read.
+  let stateReads: number;
+  let finishTurnAfterReads: number | null;
 
   const readBody = (request: IncomingMessage) =>
     new Promise<string>((resolve) => {
@@ -130,6 +138,8 @@ describe("runGate end to end", () => {
     replay = goodReplay();
     controls = [];
     demoRuns = 0;
+    stateReads = 0;
+    finishTurnAfterReads = null;
     dir = mkdtempSync(path.join(tmpdir(), "muse-gate-"));
     server = createServer(async (request, response) => {
       const send = (status: number, body: unknown) => {
@@ -137,7 +147,11 @@ describe("runGate end to end", () => {
         response.end(JSON.stringify(body));
       };
       if (request.method === "GET" && request.url === "/api/health") return send(health.status, health.body);
-      if (request.method === "GET" && request.url === "/api/state") return send(200, room);
+      if (request.method === "GET" && request.url === "/api/state") {
+        stateReads += 1;
+        if (finishTurnAfterReads !== null && stateReads >= finishTurnAfterReads) room.inFlight = undefined;
+        return send(200, room);
+      }
       if (request.method === "GET" && request.url === "/api/replay") return send(200, replay);
       if (request.method === "POST" && request.url === "/api/controls") {
         const body = JSON.parse((await readBody(request)) || "{}");
@@ -230,10 +244,13 @@ process.exit(${exit});
 
   it("with --force waits for the running turn to finish before it starts, and fails if it never does", async () => {
     room.inFlight = { agent: "aaron" };
-    setTimeout(() => (room.inFlight = undefined), 700);
+    finishTurnAfterReads = 3;
     const waited = await gate(["--force", "--runs", "1"], fakeDemo());
     expect(waited.code).toBe(0);
     expect(waited.text).toContain("PASS  no agent turn is running (it finished");
+    // It saw the turn running (the room check and the first idle check), then waited and saw it finish.
+    expect(stateReads).toBeGreaterThanOrEqual(3);
+    finishTurnAfterReads = null;
 
     room.inFlight = { agent: "lisa" };
     const lines: string[] = [];
