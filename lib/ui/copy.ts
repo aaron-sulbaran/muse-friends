@@ -124,6 +124,7 @@ export const copy = {
   provenanceTool: (tool: string) => `Read with ${tool}`,
   provenanceToolUnknown: "A tool call from this turn",
   provenanceTools: (names: string) => `Tools called: ${names}`,
+  toolPrepared: (state: string) => `send_money (prepared, ${state})`,
   provenanceLedgerLater: "Ledger ids appear here after you send.",
   provenanceInWords: "In words",
   confirmTitle: (friend: string) => `Send to ${friend}`,
