@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Muse Friends",
   description: "A proposal for Muse: your agent talks to your friends' agents so plans actually happen.",
+  appleWebApp: { capable: true, title: "Muse Friends", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
