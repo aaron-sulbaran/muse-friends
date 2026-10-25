@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# Runs one "bring your own Muse" plan end to end over the REST mirror: closed without the right key,
+# free text and windows of your own refused, start_plan, check_plan until the agents agree, respond, the keyless
+# link path (/j/<code>) the same way, and a check that the demo room's content did not change. The judge key is
+# read from .env and handed to curl on stdin, so it never appears in the command line or the output.
+#
+#   ./scripts/byom-smoke.sh http://localhost:3003            local dev server (STORE unset, JSON store)
+#   ./scripts/byom-smoke.sh https://www.musefriends.tech     production: creates one plan room in that
+#                                                            deployment's byom_rooms table (never the
+#                                                            demo room) and spends about 6 model calls
+#
+# Needs MCP_TOKEN_JUDGE in .env (the same value the server has). It picks the "evenings" preset; the presets'
+# fictional windows run Oct 26 to Oct 31, so after Oct 31 start_plan answers 422 slots_expired.
+# Use the www address for production: the bare name answers with a 308 redirect.
+set -uo pipefail
+
+cd "$(dirname "$0")/.."
+
+base_url="${1:?usage: byom-smoke.sh <base url>}"
+base_url="${base_url%/}"
+token="$(awk 'index($0, "MCP_TOKEN_JUDGE=") == 1 { value = substr($0, length("MCP_TOKEN_JUDGE=") + 1) } END { printf "%s", value }' .env 2> /dev/null || true)"
+team_token="$(awk 'index($0, "MCP_TOKEN_A=") == 1 { value = substr($0, length("MCP_TOKEN_A=") + 1) } END { printf "%s", value }' .env 2> /dev/null || true)"
+if [ -z "$token" ]; then
+  echo "MCP_TOKEN_JUDGE is not set in .env" >&2
+  exit 1
+fi
+
+window='{"slots":"evenings"}'
+body_file="$(mktemp)"
+trap 'rm -f "$body_file"' EXIT
+
+failures=0
+check() {
+  if [ "$2" = "ok" ]; then echo "PASS  $1"; else echo "FAIL  $1: $3"; failures=$((failures + 1)); fi
+}
+
+# call <key or none> <METHOD> <path> [json body]; prints the HTTP status, leaves the body in $body_file.
+call() {
+  local key="$1" method="$2" path="$3" payload="${4:-}"
+  local args=(-sS -m 90 -o "$body_file" -w '%{http_code}' -X "$method" "$base_url$path")
+  [ -n "$payload" ] && args+=(-H 'content-type: application/json' -d "$payload")
+  if [ "$key" = "none" ]; then
+    curl "${args[@]}" 2> /dev/null || echo 000
+  else
+    printf 'header = "Authorization: Bearer %s"\n' "$key" | curl -K - "${args[@]}" 2> /dev/null || echo 000
+  fi
+}
+
+# pick <dotted path>: a field from the last response body, "" when absent.
+pick() {
+  node -e 'const fs=require("fs");try{const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));const v=process.argv[2].split(".").reduce((o,k)=>o==null?o:o[k],j);console.log(v==null?"":typeof v==="object"?JSON.stringify(v):v)}catch{console.log("")}' "$body_file" "$1"
+}
+
+# The demo room's content, not its run counters: those are shared with every other room on purpose.
+demo_fingerprint() {
+  curl -s -m 20 "$base_url/api/state" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);const keep={messages:j.messages,notes:j.notes,plan:j.plan,followThrough:j.followThrough,inFlight:j.inFlight,reel:j.reel,failure:j.failure,simulatedFriend:j.simulatedFriend,roomRunsUsed:j.budget&&j.budget.room.used};console.log(require("crypto").createHash("sha256").update(JSON.stringify(keep)).digest("hex").slice(0,16))}catch{console.log("unreadable")}})'
+}
+
+before="$(demo_fingerprint)"
+
+status="$(call none POST /api/connector/start_plan "$window")"
+[ "$status" = "401" ] && check "start_plan without a key is refused (401)" ok || check "start_plan without a key is refused (401)" fail "got $status"
+
+if [ -n "$team_token" ]; then
+  status="$(call "$team_token" POST /api/connector/start_plan "$window")"
+  [ "$status" = "403" ] && check "a team key cannot start a plan (403)" ok || check "a team key cannot start a plan (403)" fail "got $status"
+fi
+
+status="$(call "$token" POST /api/connector/start_plan '{"slots":"evenings","reel_hint":"anything I type"}')"
+[ "$status" = "400" ] && check "free text is refused (400) before any model call" ok || check "free text is refused (400) before any model call" fail "got $status"
+
+status="$(call "$token" POST /api/connector/start_plan '{"free_windows":[{"day":"2026-10-29","start":"19:00","end":"21:00"}]}')"
+[ "$status" = "400" ] && check "windows of your own are refused (400)" ok || check "windows of your own are refused (400)" fail "got $status"
+
+status="$(call "$token" POST /api/connector/start_plan '{"slots":"mornings"}')"
+[ "$status" = "400" ] && check "an unknown preset is refused (400)" ok || check "an unknown preset is refused (400)" fail "got $status"
+
+status="$(call "$token" POST /api/connector/start_plan "$window")"
+plan_id="$(pick data.planId)"
+if [ "$status" = "202" ] && [ -n "$plan_id" ]; then
+  check "start_plan accepted (202) with a plan id" ok
+else
+  check "start_plan accepted (202) with a plan id" fail "got $status: $(head -c 300 "$body_file")"
+  exit 1
+fi
+
+status="$(call "$token" GET "/api/connector/check_plan?planId=room_does_not_exist")"
+[ "$status" = "404" ] && check "check_plan on an unknown plan is 404" ok || check "check_plan on an unknown plan is 404" fail "got $status"
+
+state=""
+for _ in $(seq 1 40); do
+  sleep 3
+  status="$(call "$token" GET "/api/connector/check_plan?planId=$plan_id")"
+  state="$(pick data.state)"
+  case "$state" in awaiting_you | dropped | stalled | confirmed) break ;; esac
+done
+messages="$(pick data.messages | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).length)}catch{console.log(0)}})')"
+if [ "$state" = "awaiting_you" ] && [ "${messages:-0}" -ge 2 ]; then
+  check "the agents agreed: awaiting_you after $messages messages, with a drafted WhatsApp text" ok
+else
+  check "the agents agreed" fail "state=$state messages=$messages"
+fi
+[ -n "$(pick data.whatsapp_draft)" ] && check "check_plan carries the drafted message" ok || check "check_plan carries the drafted message" fail "no draft"
+
+status="$(call "$token" POST /api/connector/respond "{\"planId\":\"$plan_id\",\"decision\":\"accept\"}")"
+if [ "$status" = "200" ] && [ "$(pick data.state)" = "confirmed" ]; then
+  check "respond accept confirms the plan" ok
+else
+  check "respond accept confirms the plan" fail "status=$status state=$(pick data.state)"
+fi
+
+status="$(call "$token" POST /api/connector/respond "{\"planId\":\"$plan_id\",\"decision\":\"accept\"}")"
+[ "$status" = "409" ] && check "a second respond is refused (409)" ok || check "a second respond is refused (409)" fail "got $status"
+
+# The keyless path: a link code, the plain page a Muse's browser opens, native form posts, and the table screen.
+status="$(call none GET /api/connector/code)"
+[ "$status" = "401" ] && check "a link code without a key is refused (401)" ok || check "a link code without a key is refused (401)" fail "got $status"
+status="$(call "$token" GET /api/connector/code)"
+link_code="$(pick data.code)"
+if [ "$status" = "200" ] && [ -n "$link_code" ]; then
+  check "a link code is minted (200)" ok
+else
+  check "a link code is minted (200)" fail "got $status: $(head -c 200 "$body_file")"
+  link_code=""
+fi
+if [ -n "$link_code" ]; then
+  page_status="$(curl -s -m 30 -o "$body_file" -w '%{http_code}' "$base_url/j/$link_code")"
+  boxes="$(grep -c 'type="checkbox"' "$body_file" || true)"
+  [ "$page_status" = "200" ] && [ "$boxes" = "6" ] && check "/j/<code> shows the six times as checkboxes" ok || check "/j/<code> shows the six times as checkboxes" fail "status=$page_status boxes=$boxes"
+  status="$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$base_url/j/$link_code/start")"
+  [ "$status" = "400" ] && check "sending no picks is refused (400)" ok || check "sending no picks is refused (400)" fail "got $status"
+  status="$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST -d 'slot=wed-18' "$base_url/j/$link_code/start")"
+  [ "$status" = "422" ] && check "a pick Mochi cannot do is refused (422)" ok || check "a pick Mochi cannot do is refused (422)" fail "got $status"
+  status="$(curl -s -m 60 -o /dev/null -w '%{http_code}' -X POST -d 'slot=tue-18&slot=thu-19' "$base_url/j/$link_code/start")"
+  [ "$status" = "303" ] && check "sending picks starts the plan (303 back to the page)" ok || check "sending picks starts the plan (303 back to the page)" fail "got $status"
+  agreed="no"
+  for _ in $(seq 1 40); do
+    sleep 3
+    curl -s -m 60 -o "$body_file" "$base_url/j/$link_code"
+    if grep -q 'name="decision"' "$body_file"; then agreed="yes"; break; fi
+  done
+  [ "$agreed" = "yes" ] && check "the page shows Approve and Decline once the agents agree" ok || check "the page shows Approve and Decline once the agents agree" fail "no decision buttons after 2 minutes"
+  status="$(curl -s -m 90 -o /dev/null -w '%{http_code}' -X POST -d 'decision=accept' "$base_url/j/$link_code/answer")"
+  [ "$status" = "303" ] && check "Approve is accepted (303 back to the page)" ok || check "Approve is accepted (303 back to the page)" fail "got $status"
+  curl -s -m 60 -o "$body_file" "$base_url/j/$link_code"
+  grep -q '<strong>Confirmed.</strong>' "$body_file" && check "the page confirms the plan" ok || check "the page confirms the plan" fail "no Confirmed line"
+  table_messages="$(curl -s -m 30 "$base_url/api/state?room=$link_code" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).messages.length)}catch{console.log(0)}})')"
+  [ "${table_messages:-0}" -ge 2 ] && check "the table screen's state for ?room=<code> carries the room's messages" ok || check "the table screen's state for ?room=<code> carries the room's messages" fail "messages=$table_messages"
+fi
+
+after="$(demo_fingerprint)"
+[ "$before" = "$after" ] && [ "$before" != "unreadable" ] && check "the demo room's content is unchanged" ok || check "the demo room's content is unchanged" fail "before=$before after=$after"
+
+if [ "$failures" -eq 0 ]; then
+  echo "all checks passed."
+else
+  echo "$failures check(s) failed."
+  exit 1
+fi

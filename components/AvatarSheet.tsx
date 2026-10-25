@@ -8,12 +8,12 @@ import type { Category, ShareTier, SharingSettings } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
 
 type Props = {
-  /** True when this Muse's person is the simulated friend: the avatar is the grey initial disc. */
-  simulated: boolean;
   /** The Muse whose sharing this is, and the friend it is shared with. */
   museName: string;
   friendMuseName: string;
   sharing: SharingSettings;
+  /** On a phone with no Activity panel beside it, a way to open Activity from here. */
+  onOpenActivity?: () => void;
   /** Called after a change lands so the caller can refresh the snapshot at once. */
   onChanged: () => void;
   onClose: () => void;
@@ -38,7 +38,7 @@ const categories: ReadonlyArray<{ value: Category; label: string; fixedOn?: stri
  * switch is checked in code on the next message and replays the propose, so
  * the withheld stamp shows up in Activity.
  */
-export function AvatarSheet({ simulated, museName, friendMuseName, sharing, onChanged, onClose }: Props) {
+export function AvatarSheet({ museName, friendMuseName, sharing, onOpenActivity, onChanged, onClose }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -80,7 +80,7 @@ export function AvatarSheet({ simulated, museName, friendMuseName, sharing, onCh
               <img src="/wordmark/muse-friends-wordmark.svg" alt="Muse Friends" className="h-[22px] w-auto" />
             </h2>
             <div className="mt-3 flex items-center gap-3">
-              <MuseAvatar agent="lisa" simulated={simulated} name={museName} size={40} />
+              <MuseAvatar agent="lisa" name={museName} size={40} />
               <div>
                 <p className="text-[15px] font-semibold leading-5">{museName}</p>
                 <p className="text-[13px] leading-[18px] text-muted">Sharing with {friendMuseName}</p>
@@ -153,6 +153,15 @@ export function AvatarSheet({ simulated, museName, friendMuseName, sharing, onCh
         <p className="mt-4 text-[13px] leading-[18px] text-muted">
           {museName} only tells {friendMuseName} what&apos;s switched on. This is checked in code before anything is sent.
         </p>
+        {onOpenActivity ? (
+          <button
+            type="button"
+            onClick={onOpenActivity}
+            className="mt-4 w-full rounded-full bg-group px-4 py-2.5 text-[15px] font-semibold transition-colors hover:bg-bubble-muse"
+          >
+            {copy.activityOpen}
+          </button>
+        ) : null}
       </section>
     </div>
   );

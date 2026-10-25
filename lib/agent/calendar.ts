@@ -3,11 +3,18 @@ import type { AgentId, CalendarEvent, Window } from "@/lib/protocol";
 import { CALENDAR_RANGE, getPersona } from "@/lib/seed/fixtures";
 import { freeBlocks, toCentralIso, toMs } from "./windows";
 
+// A room that sets a person's whole calendar (a judge's room, from a fixed preset through the connector)
+// says so with one marker block per person (id room_calendar plus a suffix); the persona's seeded events then stay out of it.
+export const CALENDAR_SET_BY_ROOM = "room_calendar";
+
 // An agent's calendar as its own tools see it: the persona's seeded events plus busy blocks a
 // judge added from the controls. Only the owner's agent ever reads this.
 export async function ownCalendar(store: Store, agent: AgentId): Promise<CalendarEvent[]> {
   const added = await store.listBusy(agent);
-  return [...getPersona(agent).calendar, ...added.map((block) => block.event)];
+  const isMarker = (block: { event: CalendarEvent }) => block.event.id.startsWith(CALENDAR_SET_BY_ROOM);
+  const events = added.filter((block) => !isMarker(block)).map((block) => block.event);
+  const setByRoom = added.some(isMarker);
+  return setByRoom ? events : [...getPersona(agent).calendar, ...events];
 }
 
 // Free blocks from the demo clock's "now" to the end of the seeded horizon, or the requested slice of it.
