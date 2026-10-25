@@ -51,7 +51,7 @@ export async function injectSignal(store: Store, signal: Signal, wallNow: () => 
 
 // The timeline says a turn failed and why in a word; the full reason (an API error body, an incomplete
 // response) goes to the server log, where the person running the demo can read it.
-function logFailure(agent: AgentId, result: TurnResult): void {
+function logFailure(agent: MemberId, result: TurnResult): void {
   if (process.env.NODE_ENV !== "test") console.error(`agent turn failed (${agent})`, result.failure);
 }
 
@@ -167,6 +167,7 @@ export async function runGroupTurn(options: RuntimeOptions & { agent: MemberId; 
     requiredSuccesses: friends.length,
   });
   if (result.status === "failed") {
+    logFailure(agent, result);
     for (const { contextId } of memberContexts(group)) await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
   }
   return result;
