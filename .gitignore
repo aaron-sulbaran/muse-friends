@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Local JSON store (Lane A)
 data/store.json
+
+# pnpm shots writes its pictures here
+/shots/

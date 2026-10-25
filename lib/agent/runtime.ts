@@ -52,9 +52,38 @@ export async function injectSignal(store: Store, signal: Signal, wallNow: () => 
 }
 
 // The timeline says a turn failed and why in a word; the full reason (an API error body, an incomplete
-// response) goes to the server log, where the person running the demo can read it.
-function logFailure(agent: MemberId, result: TurnResult): void {
-  if (process.env.NODE_ENV !== "test") console.error(`agent turn failed (${agent})`, result.failure);
+// response) goes to the server log, where the person running the demo can read it. The log says what happened in
+// plain words: a model that did not answer is not a cap, and it says whether the scripted fallback spoke.
+export function describeFailure(failure: TurnResult["failure"]): string {
+  switch (failure?.reason) {
+    case "model_error":
+      return `the model did not answer (${failure.message ?? failure.detail})`;
+    case "no_tool_call":
+      return "the model replied without acting, even after a nudge";
+    case "cap_reached":
+      return "the model used up its tool calls for the turn";
+    default:
+      return "the turn did not finish";
+  }
+}
+
+// The few words the timeline row carries (the long reason stays in the log): never the API's body, and never "cap"
+// for a model that simply did not answer.
+function failureWords(failure: TurnResult["failure"]): string {
+  switch (failure?.reason) {
+    case "model_error":
+      return "the model did not answer";
+    case "no_tool_call":
+      return "the model replied without acting";
+    case "cap_reached":
+      return "the model used up its tool calls";
+    default:
+      return "turn failed";
+  }
+}
+
+function logFailure(agent: MemberId, result: TurnResult, fallbackSpoke: boolean): void {
+  if (process.env.NODE_ENV !== "test") console.error(`agent turn failed (${agent}): ${describeFailure(result.failure)}; ${fallbackSpoke ? "the scripted fallback spoke" : "no scripted fallback could speak"}`);
 }
 
 // A turn the model could not finish still gets an answer: the scripted fallback sends a message built in code.
@@ -68,9 +97,10 @@ async function recoverOrFail(
   contexts: string[] = [options.contextId],
 ): Promise<TurnResult> {
   const outcome = await fallback();
+  logFailure(options.agent, result, outcome.sent);
   if (outcome.sent) return { ...result, status: "completed", fallback: true };
   const reason = outcome.reason === "no_windows" ? "no_overlap" : "agent_unavailable";
-  for (const contextId of contexts) await failThread(options.store, contextId, options.agent, result.failure?.detail ?? "turn failed", options.wallNow?.(), reason);
+  for (const contextId of contexts) await failThread(options.store, contextId, options.agent, failureWords(result.failure), options.wallNow?.(), reason);
   return result;
 }
 
@@ -101,7 +131,6 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
     requiredSuccesses: friends?.length ?? 1,
   });
   if (result.status === "failed") {
-    logFailure(agent, result);
     if (group) return recoverOrFail(options, result, () => fallbackGroupOpening(ctx, group), memberContexts(group).map(({ contextId }) => contextId));
     return recoverOrFail(options, result, () => fallbackOpening(ctx));
   }
@@ -155,7 +184,6 @@ export async function runInboxTurn(options: RuntimeOptions & { agent: MemberId; 
     requiredTools: ["send_to_friend_agent"],
   });
   if (result.status === "failed") {
-    logFailure(agent, result);
     return recoverOrFail(options, result, () => fallbackReply(ctx, { thread, mutualWindows, ledger, group: plan?.group !== undefined }));
   }
   return result;
@@ -191,7 +219,6 @@ export async function runGroupTurn(options: RuntimeOptions & { agent: MemberId; 
     requiredSuccesses: friends.length,
   });
   if (result.status === "failed") {
-    logFailure(agent, result);
     return recoverOrFail(options, result, () => fallbackGroupConfirm(ctx, plan, candidates), memberContexts(group).map(({ contextId }) => contextId));
   }
   return result;

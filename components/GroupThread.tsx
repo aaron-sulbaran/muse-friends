@@ -4,11 +4,12 @@ import { Check, CircleDashed } from "lucide-react";
 import { useState } from "react";
 import type { ChatItem } from "@/lib/ui/chat";
 import { postTripJoin } from "@/lib/ui/actions";
-import { answerWord, money, personOf, servedBy, tripDates, type GroupLine, type GroupSender } from "@/lib/ui/group";
+import { answerWord, money, personOf, servedBy, tripDates, type GroupLine } from "@/lib/ui/group";
 import type { AvatarMood, MemberId, UiTrip } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
 import { PersonDisc } from "./PersonDisc";
 import { QuestionCard } from "./QuestionCard";
+import { ThreadBubble } from "./ThreadBubble";
 
 /*
  * The trip's group thread (D30, D32): people and their Muses in one chat. A Muse's bubble is tinted for that Muse and
@@ -17,45 +18,11 @@ import { QuestionCard } from "./QuestionCard";
  * Every number on a card names its source, and anything seeded says so.
  */
 
-const tint: Record<MemberId, string> = { aaron: "bg-tint-sprout", lisa: "bg-tint-mochi", kai: "bg-tint-pebble" };
 const cardShell = "ml-8 max-w-[92%] animate-card-in rounded-card bg-surface p-5 shadow-float";
 
-function GroupChip({ sender }: { sender: GroupSender }) {
-  const [explained, setExplained] = useState(false);
-  const isMuse = sender.kind === "your-muse" || sender.kind === "friend-muse";
-  const tag = sender.kind === "your-muse" ? "your Muse" : sender.kind === "friend-muse" && sender.owner ? `${sender.owner}'s Muse` : null;
-  return (
-    <div className="mb-1 pl-1 text-[12px] leading-4">
-      <div className="flex items-center gap-1.5">
-        {isMuse && sender.agent ? <MuseAvatar agent={sender.agent} name={sender.name} size={20} /> : <PersonDisc name={sender.name} size={20} />}
-        <span className="font-semibold text-ink">{sender.name}</span>
-        {tag ? <span className="text-muted">{tag}</span> : null}
-        {sender.simulated ? (
-          <button
-            type="button"
-            onClick={() => setExplained((open) => !open)}
-            aria-expanded={explained}
-            className="rounded-full bg-group px-1.5 py-px text-[11px] font-semibold leading-[14px] text-muted"
-          >
-            simulated
-          </button>
-        ) : null}
-      </div>
-      {explained ? <p className="mt-1 animate-fade-in text-muted">{sender.name} is played by a model for this demo.</p> : null}
-    </div>
-  );
-}
-
+/** One line of the thread, drawn by the shared thread bubble (chip above the first, picture beside the last). */
 function GroupBubble({ line }: { line: GroupLine }) {
-  const mine = line.sender.kind === "you";
-  const isMuse = line.sender.kind === "your-muse" || line.sender.kind === "friend-muse";
-  const fill = mine ? "bg-bubble-user" : isMuse && line.sender.agent ? tint[line.sender.agent] : "bg-bubble-muse";
-  return (
-    <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-      {line.first && !mine ? <GroupChip sender={line.sender} /> : null}
-      <p className={`max-w-[78%] animate-fade-in rounded-bubble px-3.5 py-2.5 text-[16px] leading-[22px] ${fill}`}>{line.text}</p>
-    </div>
-  );
+  return <ThreadBubble line={line} showSender={line.first} showPicture={line.last} />;
 }
 
 function CardLabel({ children }: { children: React.ReactNode }) {

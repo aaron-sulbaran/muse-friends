@@ -1,5 +1,6 @@
 import type { ChatItem, PhoneStatus } from "./chat";
 import { listOf } from "./format";
+import type { Sender, ThreadLine } from "./thread";
 import type { AvatarMood, MemberId, Role, UiSnapshot, UiTrip, UiTripAnswer, UiTripPerson } from "./types";
 
 /*
@@ -12,25 +13,13 @@ import type { AvatarMood, MemberId, Role, UiSnapshot, UiTrip, UiTripAnswer, UiTr
  * a line a person did not give is never written for them: a person's line is built from what they answered.
  */
 
-/** Who is speaking. Same shape as the one-to-one thread's sender, with a Muse of any member (Pebble too). */
-export type GroupSender = {
-  kind: "you" | "friend" | "your-muse" | "friend-muse";
-  /** A person's name, or a Muse's own name (Sprout, Mochi, Pebble). */
-  name: string;
-  /** For a Muse, the person it belongs to; absent when the reader's own Muse says it already ("your Muse"). */
-  owner?: string;
-  /** True for a person a model plays, or a fictional one the demo scripts. */
-  simulated?: boolean;
-  /** Which Muse, so the chip can draw it. Absent for people. */
-  agent?: MemberId;
-};
-
-export type GroupLine = {
-  id: string;
-  sender: GroupSender;
-  text: string;
+/** Who is speaking, and a line of the thread: Lane B's thread model, so the group reads like the one-to-one chat. */
+export type GroupSender = Sender;
+export type GroupLine = ThreadLine & {
   /** The first bubble of a run: the chip shows above it, and only above it. */
   first: boolean;
+  /** The last bubble of a run: the sender's picture sits beside it. */
+  last: boolean;
 };
 
 /** The words of the trip thread. Plain, whole dollars, no emoji, no em dashes. */
@@ -153,7 +142,9 @@ export function tripThread(snapshot: UiSnapshot, role: Role): TripThread {
   const say = (sender: GroupSender, text: string) => {
     const previous = items.at(-1);
     const first = !(previous?.kind === "group-line" && sameSender(previous.line.sender, sender));
-    const line: GroupLine = { id: id("line"), sender, text, first };
+    const line: GroupLine = { id: id("line"), sender, text, first, last: true };
+    // A run's last bubble is the one with a different sender (or a card) after it, so the one before it stops being last.
+    if (!first && previous?.kind === "group-line") previous.line.last = false;
     lines.push(line);
     items.push({ kind: "group-line", id: line.id, line });
   };

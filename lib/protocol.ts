@@ -717,6 +717,7 @@ export const ACTIVITY_KINDS = [
   "payment_proposed",
   "payment_cancelled",
   "receipt_read",
+  "chat_asked",
 ] as const;
 export const ActivityKind = z.enum(ACTIVITY_KINDS);
 export type ActivityKind = z.infer<typeof ActivityKind>;
@@ -737,6 +738,21 @@ export const ActivityEvent = z.strictObject({
   text: z.string().min(1).max(240),
 });
 export type ActivityEvent = z.infer<typeof ActivityEvent>;
+
+// One line of the conversation between a person and their own Muse (D31). The person's question and the Muse's
+// answer; the answer carries the proof of the model call that wrote it and the read tools it used. Side a only.
+export const CHAT_QUESTION_MAX = 500;
+export const CHAT_KEPT = 40;
+export const ChatEntry = z.strictObject({
+  id: Id,
+  from: z.enum(["user", "muse"]),
+  text: z.string().min(1).max(1500),
+  at: IsoDateTime,
+  // On a Muse answer: the question it answers.
+  replyTo: Id.optional(),
+  proof: ModelProof.optional(),
+});
+export type ChatEntry = z.infer<typeof ChatEntry>;
 
 // The simulated "now" used by the plan lifecycle (reminder, happened, follow-up).
 export const DemoClock = z.strictObject({ now: IsoDateTime });
@@ -799,6 +815,8 @@ export const Room = z.strictObject({
   localLedger: z.record(z.string(), z.number().int()).optional(),
   // Payments prepared and waiting for the person to confirm (or decided), by payment id.
   proposals: z.record(z.string(), PaymentProposal).optional(),
+  // The chat with side a's own Muse (D31), oldest first, the last CHAT_KEPT lines. Cleared by Reset.
+  chat: z.array(ChatEntry).max(CHAT_KEPT).optional(),
   updatedAt: IsoDateTime,
 });
 export type Room = z.infer<typeof Room>;
