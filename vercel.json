@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "rm -rf .next && pnpm run build",
-  "crons": [{ "path": "/api/cron/sweep", "schedule": "0 14 * * *" }]
+  "crons": [{ "path": "/api/cron/sweep", "schedule": "*/15 * * * *" }]
 }

@@ -99,6 +99,16 @@ describe("a mutual acquaintance: the run starts, with a smaller footprint", () =
     expect(viewForRole(snapshot, "a").friendHumanName).toBe("Jules");
   });
 
+  it("draws a grey disc for a contact but not for Michelle, whose Muse is Mochi", async () => {
+    const store = await freshStore();
+    await store.putRoom({ ...(await store.getRoom()), simulatedFriend: true });
+    const withMichelle = await ui(store);
+    expect(withMichelle.standIn).toEqual({ person: "Michelle", muse: "Michelle's Muse" });
+    expect(discInitials(withMichelle)).toEqual({ aaron: null, lisa: null });
+    expect(await startFollowUp(store, { target: "jules" })).toMatchObject({ ok: true, started: true });
+    expect(discInitials(await ui(store))).toEqual({ aaron: null, lisa: "J" });
+  });
+
   it("never talks about a reel: no reel in the card, the status, the goal, or phone b's chat", async () => {
     const store = await freshStore();
     await startFollowUp(store, { target: "jules" });

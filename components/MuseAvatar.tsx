@@ -5,7 +5,7 @@ import type { AgentId, AvatarMood } from "@/lib/ui/types";
 
 type Props = {
   agent: AgentId;
-  /** A letter: show a grey initial disc instead of the character (the simulated friend, or a contact the person chose). */
+  /** A letter: show a grey initial disc instead of the character (a contact the person chose to follow up with). */
   initial?: string | null;
   /** The Muse's name, for the accessible label. */
   name?: string;
@@ -32,8 +32,9 @@ function preloadLoops() {
 
 /**
  * A Muse's character: Blender renders of Sprout and Mochi, bare, no circle and no tile. The header gets the loop for its
- * mood (a still frame under reduced motion); everywhere else is the static portrait. Michelle, the simulated friend,
- * keeps a grey initial disc so she never looks like a real Muse; so does a contact the person chose to follow up with.
+ * mood (a still frame under reduced motion); everywhere else is the static portrait. Mochi is Michelle's Muse too, so
+ * the simulated friend's side shows Mochi; Michelle herself, the person, is a PersonDisc. A contact the person chose to
+ * follow up with keeps a grey initial disc, so they never look like a real Muse.
  */
 export function MuseAvatar({ agent, initial = null, name = "Muse", size = 44, mood, className = "" }: Props) {
   useEffect(() => {

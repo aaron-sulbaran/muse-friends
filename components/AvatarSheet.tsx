@@ -4,16 +4,22 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { postPrivacy, type PrivacyChange } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import type { Category, ShareTier, SharingSettings } from "@/lib/ui/types";
+import type { Category, PaymentsSettings, Role, ShareTier, SharingSettings } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
+import { PaymentsSection } from "./PaymentsSection";
 
 type Props = {
   /** The grey-disc letter when this Muse person is a stand-in; null for the character art. */
   initial: string | null;
+  /** Which phone this sheet is on: side b has the sharing switches, and either side has its payments. */
+  role: Role;
   /** The Muse whose sharing this is, and the friend it is shared with. */
   museName: string;
   friendMuseName: string;
-  sharing: SharingSettings;
+  /** What this Muse tells its friend's Muse; omitted on side a, whose sheet holds only its payments. */
+  sharing?: SharingSettings;
+  /** What this seat lets its Muse send; omitted when payments are switched off for the room. */
+  payments?: PaymentsSettings;
   /** On a phone with no Activity panel beside it, a way to open Activity from here. */
   onOpenActivity?: () => void;
   /** Called after a change lands so the caller can refresh the snapshot at once. */
@@ -41,7 +47,7 @@ const categories: ReadonlyArray<{ value: Category; label: string; fixedOn?: stri
  * switch is checked in code on the next message and replays the propose, so
  * the withheld stamp shows up in Activity.
  */
-export function AvatarSheet({ initial, museName, friendMuseName, sharing, onOpenActivity, onChanged, onClose }: Props) {
+export function AvatarSheet({ role, initial, museName, friendMuseName, sharing, payments, onOpenActivity, onChanged, onClose }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -72,7 +78,7 @@ export function AvatarSheet({ initial, museName, friendMuseName, sharing, onOpen
       <section
         role="dialog"
         aria-modal="true"
-        aria-label={`${museName} sharing with ${friendMuseName}`}
+        aria-label={sharing ? `${museName} sharing with ${friendMuseName}` : `${museName} payments`}
         className="max-h-[88%] w-full animate-card-in overflow-y-auto rounded-t-card bg-surface px-5 pb-8 pt-5 shadow-float"
       >
         <header className="flex items-start justify-between gap-3">
@@ -83,10 +89,10 @@ export function AvatarSheet({ initial, museName, friendMuseName, sharing, onOpen
               <img src="/wordmark/muse-friends-wordmark.svg" alt="Muse Friends" className="h-[22px] w-auto" />
             </h2>
             <div className="mt-3 flex items-center gap-3">
-              <MuseAvatar agent="lisa" initial={initial} name={museName} size={40} />
+              <MuseAvatar agent={role === "a" ? "aaron" : "lisa"} initial={initial} name={museName} size={40} />
               <div>
                 <p className="text-[15px] font-semibold leading-5">{museName}</p>
-                <p className="text-[13px] leading-[18px] text-muted">Sharing with {friendMuseName}</p>
+                <p className="text-[13px] leading-[18px] text-muted">{sharing ? `Sharing with ${friendMuseName}` : copy.paymentsSection}</p>
               </div>
             </div>
           </div>
@@ -101,61 +107,69 @@ export function AvatarSheet({ initial, museName, friendMuseName, sharing, onOpen
           </button>
         </header>
 
-        <fieldset className="mt-5">
-          <legend className="sr-only">Who {friendMuseName} is to {museName}</legend>
-          <div className="flex gap-1 rounded-full bg-group p-1">
-            {tiers.filter(({ value }) => value !== "acquaintance" || sharing.tier === "acquaintance").map(({ value, label }) => (
-              <label key={value} className="flex-1">
-                <input
-                  type="radio"
-                  name="tier"
-                  value={value}
-                  checked={sharing.tier === value}
-                  disabled={pending || value === "off" || value === "acquaintance"}
-                  onChange={() => change({ tier: value })}
-                  className="peer sr-only"
-                />
-                <span className="block cursor-pointer rounded-full px-2 py-1.5 text-center text-[13px] font-semibold text-muted transition-colors peer-checked:bg-surface peer-checked:text-ink peer-checked:shadow-float peer-disabled:cursor-default peer-disabled:opacity-50 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
-                  {label}
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        {sharing ? (
+            <>
+            <fieldset className="mt-5">
+              <legend className="sr-only">Who {friendMuseName} is to {museName}</legend>
+              <div className="flex gap-1 rounded-full bg-group p-1">
+                {tiers.filter(({ value }) => value !== "acquaintance" || sharing.tier === "acquaintance").map(({ value, label }) => (
+                  <label key={value} className="flex-1">
+                    <input
+                      type="radio"
+                      name="tier"
+                      value={value}
+                      checked={sharing.tier === value}
+                      disabled={pending || value === "off" || value === "acquaintance"}
+                      onChange={() => change({ tier: value })}
+                      className="peer sr-only"
+                    />
+                    <span className="block cursor-pointer rounded-full px-2 py-1.5 text-center text-[13px] font-semibold text-muted transition-colors peer-checked:bg-surface peer-checked:text-ink peer-checked:shadow-float peer-disabled:cursor-default peer-disabled:opacity-50 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
+                      {label}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
-        <ul className="mt-3 divide-y divide-bezel-line">
-          {categories.map(({ value, label, fixedOn }) => (
-            <li key={value}>
-              <label className="flex items-center justify-between gap-4 py-3">
-                <span>
-                  <span className="block text-[16px] leading-[22px]">{label}</span>
-                  {fixedOn ? <span className="block text-[12px] leading-4 text-muted">{fixedOn}</span> : null}
-                </span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={sharing.categories[value]}
-                  disabled={pending || fixedOn !== undefined}
-                  onChange={(event) => change({ category: value, on: event.target.checked })}
-                  className="peer sr-only"
-                />
-                <span
-                  aria-hidden="true"
-                  className="relative h-7 w-12 shrink-0 cursor-pointer rounded-full bg-faint transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-6 after:rounded-full after:bg-surface after:shadow-float after:transition-transform peer-checked:bg-tracking peer-checked:after:translate-x-5 peer-disabled:cursor-default peer-disabled:opacity-60 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
-                />
-              </label>
-            </li>
-          ))}
-        </ul>
+            <ul className="mt-3 divide-y divide-bezel-line">
+              {categories.map(({ value, label, fixedOn }) => (
+                <li key={value}>
+                  <label className="flex items-center justify-between gap-4 py-3">
+                    <span>
+                      <span className="block text-[16px] leading-[22px]">{label}</span>
+                      {fixedOn ? <span className="block text-[12px] leading-4 text-muted">{fixedOn}</span> : null}
+                    </span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={sharing.categories[value]}
+                      disabled={pending || fixedOn !== undefined}
+                      onChange={(event) => change({ category: value, on: event.target.checked })}
+                      className="peer sr-only"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="relative h-7 w-12 shrink-0 cursor-pointer rounded-full bg-faint transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-6 after:rounded-full after:bg-surface after:shadow-float after:transition-transform peer-checked:bg-tracking peer-checked:after:translate-x-5 peer-disabled:cursor-default peer-disabled:opacity-60 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+                    />
+                  </label>
+                </li>
+              ))}
+            </ul>
+            </>
+        ) : null}
+
+        {payments ? <PaymentsSection role={role} settings={payments} onChanged={onChanged} /> : null}
 
         {error ? (
           <p role="alert" className="mt-3 text-[13px] leading-[18px] text-withheld">
             {error}
           </p>
         ) : null}
-        <p className="mt-4 text-[13px] leading-[18px] text-muted">
-          {museName} only tells {friendMuseName} what&apos;s switched on. This is checked in code before anything is sent.
-        </p>
+        {sharing ? (
+          <p className="mt-4 text-[13px] leading-[18px] text-muted">
+            {museName} only tells {friendMuseName} what&apos;s switched on. This is checked in code before anything is sent.
+          </p>
+        ) : null}
         {onOpenActivity ? (
           <button
             type="button"

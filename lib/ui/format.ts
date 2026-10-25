@@ -147,9 +147,14 @@ export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "standIn">): Names
   };
 }
 
-/** The letter for a grey initial disc, for the side whose person is not the Muse's own persona; null means the character art. */
-export function discInitials(snapshot: Pick<UiSnapshot, "standIn">): Record<AgentId, string | null> {
-  return { aaron: null, lisa: snapshot.standIn ? snapshot.standIn.person.charAt(0) : null };
+/**
+ * The letter for a grey initial disc where a person who is not a Muse stands in for the friend's Muse: a contact the
+ * person chose to follow up with. Michelle, the simulated friend, is not one: her Muse is Mochi and her own M disc is
+ * the banner's (PersonDisc). Null means the character art.
+ */
+export function discInitials(snapshot: Pick<UiSnapshot, "standIn" | "plan">): Record<AgentId, string | null> {
+  const contact = snapshot.plan?.target !== null && snapshot.plan?.target !== undefined && !snapshot.plan.refused;
+  return { aaron: null, lisa: snapshot.standIn && contact ? snapshot.standIn.person.charAt(0) : null };
 }
 
 const GENERIC_PLACE = /^(the plan|a plan|the spot|this spot|that spot|a spot|the place|this place|that place|a place)$/i;

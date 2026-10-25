@@ -10,11 +10,12 @@ import type { Signal } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
 
-// Starts a plan. Two ways in, both seeded and fictional:
+// Starts a plan. Two ways in, seeded by default:
 //   {} or { scenario: "shawarma" }               "Lisa sent Aaron a reel": injects the reel and starts the
-//                                                receiving agent's turn after responding. The caption is read
-//                                                by Muse Spark live. The reel is read live from its owner's
-//                                                Instagram (lib/instagram.ts) when a token is set, else the seeded one.
+//                                                receiving agent's turn after responding. The reel is read live
+//                                                from its owner's Instagram (lib/instagram.ts) when a token is
+//                                                set, else the seeded, fictional one; either way the caption is
+//                                                read by Muse Spark live.
 //   { scenario: "follow_up", target: "<id>" }    a person names someone they met and their Muse reaches out.
 //                                                The contact is the person's choice. It starts only if you
 //                                                and the contact follow each other (409 not_mutual otherwise,

@@ -116,7 +116,19 @@ export type UiRefusal = { id: string; at: string; contactName: string; text: str
 /** A timeline row that is not a message: the reel's caption read, the thread opening, a sharing change. */
 export type UiNote = {
   id: string;
-  kind: "caption_extracted" | "thread_opened" | "policy_changed" | "busy_added" | "message_rejected" | "reel_source" | "contact_chosen" | "contact_refused";
+  kind:
+    | "caption_extracted"
+    | "thread_opened"
+    | "policy_changed"
+    | "busy_added"
+    | "message_rejected"
+    | "reel_source"
+    | "contact_chosen"
+    | "contact_refused"
+    | "payment_sent"
+    | "payment_received"
+    | "payment_declined"
+    | "payment_failed";
   at: string;
   text: string;
 };
@@ -130,6 +142,37 @@ export type SharingSettings = {
   tier: ShareTier;
   categories: Record<Category, boolean>;
 };
+
+/** One seat's wallet. The balance is what the ledger last said; `source` says which ledger. */
+export type UiWallet = {
+  balance: number;
+  nickname: string;
+  source: "nessie" | "local";
+  accountId: string;
+};
+
+/** One payment between the two Muses, newest state: sent (waiting on the friend), received (kept), or refunded (declined). */
+export type UiPayment = {
+  id: string;
+  planId: string;
+  from: AgentId;
+  to: AgentId;
+  amount: number;
+  reason: string;
+  note?: string;
+  status: "sent" | "received" | "refunded";
+  source: "nessie" | "local";
+  withdrawalId?: string;
+  /** The deposit into the receiver, or the refund deposit into the payer. */
+  depositId?: string;
+  /** The receiver's balance around the deposit, when it was kept. */
+  balanceBefore?: number;
+  balanceAfter?: number;
+  at: string;
+};
+
+/** What a person lets their Muse do with money: off by default, with a cap per plan in whole dollars. */
+export type PaymentsSettings = { enabled: boolean; cap: number };
 
 /** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
 export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
@@ -172,4 +215,12 @@ export type UiSnapshot = {
   failure: { agent: AgentId } | null;
   /** What each side currently lets the other see. */
   sharing: Record<AgentId, SharingSettings>;
+  /** Each side's wallet; null until Reset has created it (or while payments are switched off). */
+  wallets: Record<AgentId, UiWallet | null>;
+  /** Payments between the Muses, oldest first. They are not in `messages`. */
+  payments: UiPayment[];
+  /** What each side lets its Muse send. */
+  paymentsScope: Record<AgentId, PaymentsSettings>;
+  /** `connected` is true only when the wallets live on the real Nessie sandbox; otherwise a local ledger stands in. */
+  sandbox: { enabled: boolean; connected: boolean; text: string };
 };

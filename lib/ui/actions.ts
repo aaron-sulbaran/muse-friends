@@ -97,6 +97,16 @@ export async function postLeakAttempt(): Promise<{ ok: true; attempts: LeakAttem
   }
 }
 
+/** Asks the person's Muse to settle up for a confirmed plan. The Muse decides whether money moves and how much, within the cap. */
+export function postSettle(planId: string, role: Role, note?: string) {
+  return post(`/api/plans/${planId}/settle`, note ? { role, note } : { role });
+}
+
+/** What a seat lets its Muse send: on or off, and a cap per plan in whole dollars (0 to 500; left out keeps the last one). */
+export function postPaymentsScope(role: Role, enabled: boolean, cap?: number) {
+  return post("/api/controls", { type: "payments", side: role, enabled, ...(cap === undefined ? {} : { cap }) });
+}
+
 export function postClockAdvance() {
   return post("/api/clock", { action: "advance" });
 }
