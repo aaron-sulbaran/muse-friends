@@ -107,3 +107,21 @@ describe("the Meta app glyphs", () => {
     expect(renderToStaticMarkup(createElement(WhatsAppGlyph))).toContain("size-[18px]");
   });
 });
+
+describe("the status pill's sent glyph", () => {
+  const glyph = readFileSync("public/status/status-done.svg", "utf8");
+
+  it("is Muse's blue, with no green left in the file", () => {
+    expect(glyph).toContain("#0058DC");
+    expect(glyph).not.toMatch(/#019F38|green/i);
+    expect(CHECK_BLUE).toBe("#0058DC");
+  });
+
+  it("keeps its own draw-in, its reduced-motion rule and its 24 grid, which the pill draws at 14 pixels", () => {
+    expect(glyph).toContain("@keyframes draw");
+    expect(glyph).toContain("animation:draw");
+    expect(glyph).toContain("prefers-reduced-motion");
+    expect(glyph).toContain('viewBox="0 0 24 24"');
+    expect(readFileSync("components/StatusPill.tsx", "utf8")).toContain("width={14} height={14}");
+  });
+});
