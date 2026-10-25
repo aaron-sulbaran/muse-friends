@@ -1,3 +1,4 @@
+import { seatOf } from "@/lib/agent/ids";
 import { describeWindow, toCentralIso, toMs, windowHash } from "@/lib/agent/windows";
 import {
   categoriesInMessage,
@@ -220,7 +221,7 @@ function messageEvent(message: AgentMessage): ActivityEvent {
     at: message.at,
     kind: "message_sent",
     actor: "agent",
-    agent: message.from,
+    agent: seatOf(message.from),
     contextId: message.contextId,
     messageId: message.id,
     text: `${displayName(message.from)} sent ${message.type}${windows ? `: ${windows}` : ""}`,

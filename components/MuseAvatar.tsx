@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import type { AgentId, AvatarMood } from "@/lib/ui/types";
+import type { AvatarMood, MemberId } from "@/lib/ui/types";
 
 type Props = {
-  agent: AgentId;
+  agent: MemberId;
   /** The Muse's name, for the accessible label. */
   name?: string;
   /** Rendered height in pixels. The renders are made for 36 (rows and cards) and 44 (the header), never above 96. */
@@ -14,7 +14,7 @@ type Props = {
   className?: string;
 };
 
-const characterOf: Record<AgentId, string> = { aaron: "sprout", lisa: "mochi" };
+const characterOf = { aaron: "sprout", lisa: "mochi" } as const;
 const moods: AvatarMood[] = ["idle", "thinking", "talking"];
 
 let preloaded = false;
@@ -37,6 +37,20 @@ export function MuseAvatar({ agent, name = "Muse", size = 44, mood, className = 
   useEffect(() => {
     if (mood) preloadLoops();
   }, [mood]);
+
+  if (agent === "kai") {
+    // Pebble, the third friend of a group plan, has no render yet: an initial on a warm stone disc, never Michelle's grey.
+    return (
+      <span
+        aria-label={name}
+        role="img"
+        className={`inline-grid shrink-0 place-items-center rounded-full bg-pebble font-semibold text-ink ${className}`}
+        style={{ width: size, height: size, fontSize: size * 0.42 }}
+      >
+        {name.charAt(0)}
+      </span>
+    );
+  }
 
   const character = characterOf[agent];
   const image = (src: string) => (

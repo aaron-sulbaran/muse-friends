@@ -1,5 +1,5 @@
-import { categoryLabel, simulatedFriend, unnamedFriend } from "./tokens";
-import type { AgentId, Category, TimeWindow, UiMessage, UiSnapshot } from "./types";
+import { categoryLabel, simulatedFriend, simulatedMember, unnamedFriend } from "./tokens";
+import type { AgentId, Category, MemberId, TimeWindow, UiMessage, UiSnapshot } from "./types";
 
 /** Every time the UI shows is Central, matching the event schedule. */
 export const displayTimeZone = "America/Chicago";
@@ -133,12 +133,12 @@ export function formatLatency(ms: number): string {
 
 export type Names = {
   /** The Muse's name as shown on a row or a pill: "Sprout", "Mochi", or "Michelle's Muse". */
-  muse: Record<AgentId, string>;
+  muse: Record<MemberId, string>;
   /**
    * What the other person calls that side's person in a sentence: "Michelle", a name someone gave, or "your friend"
    * when nobody has. Never the Muse's name: a person is not their Muse.
    */
-  human: Record<AgentId, string>;
+  human: Record<MemberId, string>;
 };
 
 /** Every visible name comes from the snapshot's persona display names, never from the internal ids. */
@@ -147,8 +147,9 @@ export function namesFor(snapshot: Pick<UiSnapshot, "sides" | "simulatedFriend">
   const person = (agent: AgentId): string =>
     snapshot.humans?.[agent]?.trim() || (agent === "lisa" && simulated ? simulatedFriend.human : unnamedFriend);
   return {
-    muse: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.muse : snapshot.sides.lisa },
-    human: { aaron: person("aaron"), lisa: person("lisa") },
+    muse: { aaron: snapshot.sides.aaron, lisa: simulated ? simulatedFriend.muse : snapshot.sides.lisa, kai: snapshot.sides.kai },
+    // Kai, the third person of a plan for three, is fictional and named in every room.
+    human: { aaron: person("aaron"), lisa: person("lisa"), kai: simulatedMember.human },
   };
 }
 
@@ -161,7 +162,8 @@ export function reelRowTitle(activityTitle: string, reelOwner: string): string {
   return `${named} from ${reelOwner} reel`;
 }
 
-function listOf(items: string[]): string {
+/** "A", "A and B", "A, B, and C": names in a sentence. */
+export function listOf(items: string[]): string {
   if (items.length <= 1) return items.join("");
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;

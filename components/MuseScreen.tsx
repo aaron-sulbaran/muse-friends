@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
-import { formatStatusBarTime, namesFor } from "@/lib/ui/format";
+import { formatStatusBarTime, listOf, namesFor } from "@/lib/ui/format";
 import { postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
@@ -15,6 +15,7 @@ import { AvatarSheet } from "./AvatarSheet";
 import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
+import { MemberCard } from "./MemberCard";
 import { MuseAvatar } from "./MuseAvatar";
 import { PaymentCard } from "./PaymentCard";
 import { OutcomeReplies } from "./OutcomeReplies";
@@ -91,7 +92,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const simulated = snapshot.simulatedFriend;
   const names = namesFor(snapshot);
   const goalContext: GoalContext = {
-    friend: view.friendHumanName,
+    friend: view.group ? listOf(view.group.others.map((other) => other.name)) : view.friendHumanName,
     reelOwner: role === "a" ? `${view.friendHumanName}'s` : "your",
     muses: [names.muse.aaron, names.muse.lisa],
   };
@@ -176,7 +177,9 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         return <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} permalink={item.permalink} align={item.align} label={item.live ? copy.reelLiveLabel : copy.reelLabel} />;
       case "agreed-line":
         // On the stage, Activity already sits between the phones; a phone on its own opens it as a sheet.
-        return standalone ? <AgreedLine first={item.first} second={item.second} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
+        return standalone ? <AgreedLine names={item.names} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
+      case "member-card":
+        return <MemberCard planId={item.planId} member={item.member} name={item.name} readOnly={readOnly} onChanged={onChanged} />;
       case "outcome-replies":
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":

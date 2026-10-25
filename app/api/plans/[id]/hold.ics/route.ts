@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readPhoneRoom } from "@/app/api/_lib/room";
-import { namesFor } from "@/lib/ui/format";
+import { listOf, namesFor } from "@/lib/ui/format";
 import { buildHoldIcs } from "@/lib/ui/ics";
 import { readSnapshot } from "@/lib/ui/source";
 
@@ -19,10 +19,14 @@ export async function GET(request: Request, ctx: RouteContext<"/api/plans/[id]/h
   if (!plan.window || plan.state === "dropped") {
     return NextResponse.json({ data: null, error: { message: "This plan has no time to hold" } }, { status: 409 });
   }
+  // A plan for three holds the time with both of the others.
+  const names = namesFor(snapshot).human;
+  const me = role === "a" ? "aaron" : "lisa";
+  const withWhom = plan.group ? listOf(plan.group.members.filter((member) => member.id !== me).map((member) => names[member.id])) : names[role === "a" ? "lisa" : "aaron"];
   const stampedAt = plan.history.find((entry) => entry.state === "scheduled")?.at ?? snapshot.now;
   const body = buildHoldIcs({
     uid: `${plan.id}@muse-friends`,
-    summary: `${plan.activityTitle} with ${namesFor(snapshot).human[role === "a" ? "lisa" : "aaron"]}`,
+    summary: `${plan.activityTitle} with ${withWhom}`,
     window: plan.window,
     stampedAt,
   });

@@ -2,7 +2,7 @@
 
 import { Info } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { postClockAdvance, postLeakAttempt, postReset, postSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
+import { postClockAdvance, postGroupSignal, postLeakAttempt, postReset, postSignal, type LeakAttempt, type Result } from "@/lib/ui/actions";
 import { controlInfo, jumpLabel as jumpLabelFor, loadReelLabel, SCENARIO_LOCKED_NOTE, scenarios, type ControlKey } from "@/lib/ui/controls";
 import { friendLink } from "@/lib/ui/entry";
 import { getRoom } from "@/lib/ui/room";
@@ -66,6 +66,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
     else await replay.start();
   };
   const loadReel = () => run(postSignal);
+  const planForThree = () => run(postGroupSignal);
   const tryToLeak = async () => {
     setLeak({ running: true });
     const result = await postLeakAttempt();
@@ -75,9 +76,9 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
   const jump = () => run(postClockAdvance);
   const reset = () => run(postReset);
 
-  const actions = useRef({ loadReel, tryToLeak, jump, reset, toggleReplay });
+  const actions = useRef({ loadReel, planForThree, tryToLeak, jump, reset, toggleReplay });
   useEffect(() => {
-    actions.current = { loadReel, tryToLeak, jump, reset, toggleReplay };
+    actions.current = { loadReel, planForThree, tryToLeak, jump, reset, toggleReplay };
   });
 
   useEffect(() => {
@@ -88,6 +89,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
       const key = event.key.toLowerCase();
       if (key === "s") void actions.current.loadReel();
+      else if (key === "g") void actions.current.planForThree();
       else if (key === "l") void actions.current.tryToLeak();
       else if (key === "f") void actions.current.jump();
       else if (key === "0") void actions.current.reset();
@@ -144,7 +146,8 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused, initiallyO
                   type="button"
                   role="radio"
                   aria-checked={scenario.available}
-                  disabled={!scenario.available}
+                  disabled={!scenario.available || (scenario.id === "group" && (planIsAlive || replaying))}
+                  onClick={scenario.id === "group" ? planForThree : undefined}
                   className="flex w-full items-center justify-between rounded-group px-3 py-1.5 text-left text-[15px] disabled:opacity-40"
                 >
                   <span className="flex items-center gap-2">

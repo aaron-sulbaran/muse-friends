@@ -1,5 +1,5 @@
 import type { Store } from "@/lib/store";
-import type { AgentId, CalendarEvent, Window } from "@/lib/protocol";
+import type { CalendarEvent, MemberId, Window } from "@/lib/protocol";
 import { CALENDAR_RANGE, getPersona } from "@/lib/seed/fixtures";
 import { freeBlocks, toCentralIso, toMs } from "./windows";
 
@@ -9,7 +9,7 @@ export const CALENDAR_SET_BY_ROOM = "room_calendar";
 
 // An agent's calendar as its own tools see it: the persona's seeded events plus busy blocks a
 // judge added from the controls. Only the owner's agent ever reads this.
-export async function ownCalendar(store: Store, agent: AgentId): Promise<CalendarEvent[]> {
+export async function ownCalendar(store: Store, agent: MemberId): Promise<CalendarEvent[]> {
   const added = await store.listBusy(agent);
   const isMarker = (block: { event: CalendarEvent }) => block.event.id.startsWith(CALENDAR_SET_BY_ROOM);
   const events = added.filter((block) => !isMarker(block)).map((block) => block.event);
@@ -18,7 +18,7 @@ export async function ownCalendar(store: Store, agent: AgentId): Promise<Calenda
 }
 
 // Free blocks from the demo clock's "now" to the end of the seeded horizon, or the requested slice of it.
-export async function ownFreeBlocks(store: Store, agent: AgentId, range?: Window): Promise<Window[]> {
+export async function ownFreeBlocks(store: Store, agent: MemberId, range?: Window): Promise<Window[]> {
   const [{ now }, calendar] = await Promise.all([store.getClock(), ownCalendar(store, agent)]);
   const start = Math.max(toMs(now), toMs(CALENDAR_RANGE.start), range ? toMs(range.start) : 0);
   const end = Math.min(toMs(CALENDAR_RANGE.end), range ? toMs(range.end) : Infinity);

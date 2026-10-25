@@ -1,7 +1,7 @@
 import type { RunBudget } from "@/lib/agent/caps";
 import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
-import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { CATEGORIES, isCategoryAllowed, isPaymentType, MEMBER_IDS, type AgentId, type MemberId, type PaymentProposal, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
@@ -26,11 +26,11 @@ export type UiOverlay = {
 };
 
 /*
- * The people this build can draw. A store can hold rows written by a newer build (a group plan's third friend,
- * left in a shared room by a branch run); drawing them would give a row with no name and no avatar, so
- * everything that names a stranger is left out instead.
+ * The people this build can draw: the two phone seats and a group plan's third friend. A store can hold rows
+ * written by a newer build; drawing them would give a row with no name and no avatar, so everything that names
+ * a stranger is left out instead.
  */
-const KNOWN_AGENTS: ReadonlySet<string> = new Set(AGENT_IDS);
+const KNOWN_AGENTS: ReadonlySet<string> = new Set(MEMBER_IDS);
 
 function isKnownAgent(id: string | undefined): boolean {
   return id !== undefined && KNOWN_AGENTS.has(id);
@@ -118,6 +118,13 @@ function toUiPlan(plan: Plan, state: StateSnapshot): UiPlan {
       a: (plan.decisions.aaron ?? "pending") as Decision,
       b: (plan.decisions.lisa ?? "pending") as Decision,
     },
+    group: plan.group
+      ? {
+          coordinator: plan.group.coordinator,
+          members: plan.group.members.map((id) => ({ id, decision: (plan.group?.decisions[id] ?? "pending") as Decision })),
+          contextIds: [...new Set([plan.contextId, ...Object.values(plan.group.contexts)])],
+        }
+      : null,
     draft: plan.draft ? rename(plan.draft) : null,
     droppedReason: plan.state === "dropped" ? dropReasonText(plan.dropReason, failureOf(state, plan) !== null) : null,
     history: plan.history.map(({ state, at }) => ({ state, at })),
@@ -244,14 +251,25 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
   });
 }
 
-/** Whose model call is running right now, derived from the thread: the receiver of the last message, or the initiator before the first. */
+/**
+ * Whose model call is running right now: for each pair thread still working, the receiver of its last message, or
+ * the initiator before the first. A plan for three has two pair threads, so both friends can be thinking at once.
+ */
 function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["inFlight"] {
   if (!plan) return null;
-  const thread = state.threads.find((candidate) => candidate.contextId === plan.contextId);
-  if (!thread) return plan.state === "detected" ? { agent: plan.initiator } : null;
-  if (thread.state !== "working") return null;
-  const last = state.messages.filter((record) => record.message.contextId === thread.contextId).at(-1);
-  return { agent: last ? last.message.to : thread.initiator };
+  const groupId = plan.group?.groupId;
+  const threads = groupId ? state.threads.filter((candidate) => candidate.groupId === groupId) : state.threads.filter((candidate) => candidate.contextId === plan.contextId);
+  if (threads.length === 0) return plan.state === "detected" ? { agent: plan.initiator, agents: [plan.initiator] } : null;
+  const thinking: Array<{ agent: MemberId; at: string }> = [];
+  for (const thread of threads) {
+    if (thread.state !== "working") continue;
+    const last = state.messages.filter((record) => record.message.contextId === thread.contextId).at(-1);
+    thinking.push({ agent: last ? last.message.to : thread.initiator, at: last?.message.at ?? thread.updatedAt });
+  }
+  if (thinking.length === 0) return null;
+  const agents = [...new Set(thinking.map((entry) => entry.agent))];
+  const latest = [...thinking].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0].agent;
+  return { agent: latest, agents };
 }
 
 /** An agent's turn that produced no message ends the thread as failed and leaves a turn_failed event naming the agent. */
@@ -316,7 +334,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     mode: overlay.mode,
     ...(overlay.recording ? { recording: overlay.recording } : {}),
     simulatedFriend: state.room.simulatedFriend,
-    sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
+    sides: { aaron: displayName("aaron"), lisa: displayName("lisa"), kai: displayName("kai") },
     messages,
     notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state), payments, state.room.chat)].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,

@@ -79,7 +79,7 @@ export function stateAt(run: StateSnapshot, time: number): StateSnapshot {
   });
 
   const awaitingOrLater = plan !== undefined && plan.state !== "detected" && plan.state !== "negotiating";
-  const cards = awaitingOrLater ? run.cards.map((card) => ({ ...card, status: plan.decisions[card.forAgent] ?? card.status })) : [];
+  const cards = awaitingOrLater ? run.cards.map((card) => ({ ...card, status: plan.decisions[card.forAgent as AgentId] ?? card.status })) : [];
 
   return {
     ...run,

@@ -11,6 +11,12 @@ import { z } from "zod";
 export const AGENT_IDS = ["aaron", "lisa"] as const;
 export const AgentId = z.enum(AGENT_IDS);
 export type AgentId = z.infer<typeof AgentId>;
+// Everyone who can sit on the wire: the two phone seats plus a third seeded friend (Pebble) who joins
+// group plans. AgentId stays the two-person pair every existing flow knows; MemberId is the superset
+// used by the fields a group needs (message from and to, policies, cards, timeline rows).
+export const MEMBER_IDS = ["aaron", "lisa", "kai"] as const;
+export const MemberId = z.enum(MEMBER_IDS);
+export type MemberId = z.infer<typeof MemberId>;
 
 // The two phones. Role "a" is the first judge's side, "b" the second (or the simulated friend).
 // AgentId stays internal; people see the persona's displayName.
@@ -231,8 +237,8 @@ export const AgentMessage = z
     id: Id,
     contextId: Id,
     seq: z.number().int().min(1).max(THREAD_CAP),
-    from: AgentId,
-    to: AgentId,
+    from: MemberId,
+    to: MemberId,
     type: MessageType,
     state: TaskState,
     activity: Activity.optional(),
@@ -268,7 +274,7 @@ export const MessageDraft = MessageDraftShape.superRefine(checkWindowRules);
 export type MessageDraft = z.infer<typeof MessageDraft>;
 
 export const SendToFriendArgs = MessageDraftShape.extend({
-  friend: AgentId.describe('The friend\'s agent id, exactly "aaron" or "lisa" (not a display name)'),
+  friend: MemberId.describe('The friend\'s agent id, exactly "aaron", "lisa", or "kai" (not a display name)'),
 }).superRefine(checkWindowRules);
 export type SendToFriendArgs = z.infer<typeof SendToFriendArgs>;
 
@@ -307,8 +313,8 @@ export type PaymentsScope = z.infer<typeof PaymentsScope>;
 // `owner` is whose policy this is; `friend` is who it governs. A new friend defaults to tier "off".
 export const SharePolicy = z
   .strictObject({
-    owner: AgentId,
-    friend: AgentId,
+    owner: MemberId,
+    friend: MemberId,
     tier: ShareTier,
     categories: z.partialRecord(Category, z.boolean()),
     payments: PaymentsScope.optional(),
@@ -341,8 +347,8 @@ export const Redaction = z.strictObject({
   id: Id,
   contextId: Id,
   messageId: Id,
-  from: AgentId,
-  to: AgentId,
+  from: MemberId,
+  to: MemberId,
   removed: z.array(Category).min(1),
   detail: z.string().max(160),
   at: IsoDateTime,
@@ -393,8 +399,10 @@ export const Thread = z.strictObject({
   contextId: Id,
   planId: Id,
   signalId: Id.optional(),
-  initiator: AgentId,
-  participants: z.tuple([AgentId, AgentId]),
+  // Set on each pair thread of a group plan (the coordinator's thread with one member).
+  groupId: Id.optional(),
+  initiator: MemberId,
+  participants: z.tuple([MemberId, MemberId]),
   state: TaskState,
   messageCount: z.number().int().min(0).max(THREAD_CAP),
   dropReason: DropReason.optional(),
@@ -413,6 +421,26 @@ export const PlanHistoryEntry = z.strictObject({
 });
 export type PlanHistoryEntry = z.infer<typeof PlanHistoryEntry>;
 
+// The group part of a plan: three agents agreeing on one thing, star topology. The coordinator's agent opens one
+// pair thread with each other member (the existing two-person protocol, unchanged); code intersects every
+// member's windows; the plan moves to awaiting_humans when every pair thread has agreed.
+export const PlanGroup = z.strictObject({
+  groupId: Id,
+  coordinator: MemberId,
+  // Everyone in the plan, the coordinator first.
+  members: z.array(MemberId).min(3).max(3),
+  // Member -> the contextId of the coordinator's pair thread with them. The coordinator has none.
+  contexts: z.partialRecord(MemberId, Id),
+  // Every member's answer, the coordinator's and the third friend's included. The two phone seats are mirrored
+  // into Plan.decisions so everything that reads that keeps working.
+  decisions: z.partialRecord(MemberId, Decision),
+  // Coordinator rounds used, at most 2: round 1 gathers every member's free windows, round 2 confirms one.
+  rounds: z.number().int().min(0).max(2),
+  // All members have to be in; there is no "most people" yet.
+  quorum: z.literal("all"),
+});
+export type PlanGroup = z.infer<typeof PlanGroup>;
+
 export const Plan = z.strictObject({
   id: Id,
   contextId: Id,
@@ -422,6 +450,8 @@ export const Plan = z.strictObject({
   activity: Activity.optional(),
   window: Window.optional(),
   decisions: z.record(AgentId, Decision),
+  // Present when this plan is a group of three.
+  group: PlanGroup.optional(),
   draft: z.string().max(500).optional(),
   dropReason: DropReason.optional(),
   history: z.array(PlanHistoryEntry),
@@ -434,8 +464,11 @@ export type Plan = z.infer<typeof Plan>;
 export const Recommendation = z.strictObject({
   id: Id,
   planId: Id,
-  forAgent: AgentId,
-  friend: AgentId,
+  forAgent: MemberId,
+  friend: MemberId,
+  // Set on the cards of a group plan: who is in it. "friend" is then the coordinator for a member, and for
+  // the coordinator the first other member; the card text names everyone.
+  group: z.strictObject({ groupId: Id, members: z.array(MemberId).min(3).max(3) }).optional(),
   text: z.string().min(1).max(240),
   activity: Activity,
   window: Window,
@@ -460,8 +493,9 @@ export const CalendarEvent = z.strictObject({
 export type CalendarEvent = z.infer<typeof CalendarEvent>;
 
 export const Persona = z.strictObject({
-  id: AgentId,
-  role: Role,
+  id: MemberId,
+  // The phone seat, when there is one. The third friend in a group has no phone of their own.
+  role: Role.optional(),
   displayName: z.string().min(1).max(40),
   calendar: z.array(CalendarEvent),
   interests: z.partialRecord(SharedCategory, z.array(z.string().min(1).max(40))),
@@ -557,6 +591,7 @@ export const ActivityEvent = z.strictObject({
   at: IsoDateTime,
   kind: ActivityKind,
   actor: z.enum(["agent", "human", "system"]),
+  // Absent on the third friend's rows (Pebble has no phone seat); the text names them.
   agent: AgentId.optional(),
   contextId: Id.optional(),
   planId: Id.optional(),
@@ -678,3 +713,8 @@ export const RecordedRun = z.strictObject({
   snapshot: StateSnapshot,
 });
 export type RecordedRun = z.infer<typeof RecordedRun>;
+
+// Everyone a plan is about: the group's members, or the two people of a pair.
+export function membersOfPlan(plan: Pick<Plan, "participants" | "group">): MemberId[] {
+  return plan.group ? [...plan.group.members] : [...plan.participants];
+}

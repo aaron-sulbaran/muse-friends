@@ -47,7 +47,7 @@ describe("toUiSnapshot on Lane A's fixtures", () => {
     state.threads[0].messageCount = 5;
     state.messages = state.messages.slice(0, 5);
     // Message 5 is Aaron's accept, so Lisa's agent has the next turn.
-    expect(toUiSnapshot(state, live).inFlight).toEqual({ agent: "lisa" });
+    expect(toUiSnapshot(state, live).inFlight).toEqual({ agent: "lisa", agents: ["lisa"] });
   });
 
   it("counts only followed_through events: the reel arriving and taps are not the outcome", () => {
@@ -62,7 +62,7 @@ describe("toUiSnapshot on Lane A's fixtures", () => {
 
   it("names each side from the persona display names and reads the room's simulated flag", () => {
     const state = recordedSnapshot();
-    expect(toUiSnapshot(state, live).sides).toEqual({ aaron: "Sprout", lisa: "Mochi" });
+    expect(toUiSnapshot(state, live).sides).toEqual({ aaron: "Sprout", lisa: "Mochi", kai: "Pebble" });
     expect(toUiSnapshot(state, live).simulatedFriend).toBe(false);
     state.room = { ...state.room, simulatedFriend: true };
     expect(toUiSnapshot(state, live).simulatedFriend).toBe(true);
