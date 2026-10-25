@@ -57,7 +57,7 @@ afterEach(() => {
 
 describe("how long a tool took", () => {
   it("is measured around each handler, on the trace and on the summaries the next tool is told about", async () => {
-    installFakeModel([{ calls: [{ name: "slow" }] }, { calls: [{ name: "quick" }] }, { text: "done" }]);
+    installFakeModel([{ calls: [{ name: "slow", args: {} }] }, { calls: [{ name: "quick", args: {} }] }, { text: "done" }]);
     const told: ToolMeta["toolCalls"][] = [];
     const result = await runAgentTurn({
       instructions: "x",

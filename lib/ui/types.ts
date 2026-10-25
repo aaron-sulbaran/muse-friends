@@ -29,7 +29,7 @@ export type { AgentId, Category, Decision, MemberId, MessageReason, MessageType,
 export type AvatarMood = "idle" | "thinking" | "talking";
 
 /** One tool a model call used: its name and a one-line summary of the arguments and of what came back. */
-export type UiToolCall = { name: string; args: string; result: string };
+export type UiToolCall = { name: string; args: string; result: string; /** Milliseconds the tool took, when it was measured. */ ms?: number };
 
 export type ModelProof = {
   /** The model that answered. */
