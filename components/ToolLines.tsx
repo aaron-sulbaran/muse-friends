@@ -11,6 +11,8 @@ type Props = {
   context: ToolLineContext;
   /** Show every line from the start, for a card drawn after the fact. */
   initiallyOpen?: boolean;
+  /** Under a note's own text instead of under an avatar row: no left inset. */
+  inline?: boolean;
 };
 
 /**
@@ -19,7 +21,7 @@ type Props = {
  * tab. Six lines at most;
  * the tool lines past that sit behind "+n more", and the why stays in view.
  */
-export function ToolLines({ calls, why, context, initiallyOpen = false }: Props) {
+export function ToolLines({ calls, why, context, initiallyOpen = false, inline = false }: Props) {
   const [open, setOpen] = useState(initiallyOpen);
   const items = toolLines(calls, context);
   if (items.length === 0 && !why) return null;
@@ -29,7 +31,7 @@ export function ToolLines({ calls, why, context, initiallyOpen = false }: Props)
   const hidden = items.length - shown.length;
 
   return (
-    <ul className="flex flex-col gap-0.5 pb-2.5 pl-[60px] pr-3 text-[12px] leading-4 text-muted">
+    <ul className={`flex flex-col gap-0.5 text-[12px] leading-4 text-muted ${inline ? "mt-1.5" : "pb-2.5 pl-[60px] pr-3"}`}>
       {shown.map((item, index) => (
         <li key={index} data-line>
           {item.text}

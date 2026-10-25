@@ -76,6 +76,21 @@ export type ToolLineContext = {
   person: (agentId: string) => string;
 };
 
+/** What a chat answer's tool lines are said about: the chat's read tools send nothing, so only the wording of a name is needed. */
+export const chatLineContext: ToolLineContext = { to: "your friend's Muse", owner: "you", person: () => "your friend" };
+
+/**
+ * A chat answer keeps the pages its search found on the answer, not on a call; this puts them on the first web_search
+ * call that has none of its own, so the line that says what was searched carries the chips. Unchanged when there are no
+ * pages or no search to hang them on.
+ */
+export function withSearchSources(calls: UiToolCall[] | undefined, sources: UiSource[] | undefined): UiToolCall[] | undefined {
+  if (!calls || !sources || sources.length === 0) return calls;
+  const index = calls.findIndex((call) => call.name === "web_search" && !call.sources);
+  if (index === -1) return calls;
+  return calls.map((call, at) => (at === index ? { ...call, sources: sources.slice(0, MAX_SOURCES) } : call));
+}
+
 /** A row shows this many lines at most; the rest sit behind "+n more". */
 export const MAX_TOOL_LINES = 6;
 

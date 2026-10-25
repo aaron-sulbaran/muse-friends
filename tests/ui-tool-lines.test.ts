@@ -7,7 +7,7 @@ import { snapshotAtPlanState } from "@/lib/seed/states";
 import { summarizeToolCall } from "@/lib/tool-summary";
 import { discInitials, namesFor } from "@/lib/ui/format";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
-import { MAX_TOOL_LINES, sourcesOf, toolCallsOf, toolLine, toolLines, whyLine, type ToolLineContext, type UiToolCall } from "@/lib/ui/tools";
+import { MAX_TOOL_LINES, sourcesOf, toolCallsOf, toolLine, toolLines, whyLine, withSearchSources, type ToolLineContext, type UiToolCall } from "@/lib/ui/tools";
 import type { UiMessage } from "@/lib/ui/types";
 
 /** A call as the store records it: the real summarizer, so the mapper is tested against the lines it will actually read. */
@@ -152,6 +152,38 @@ describe("the sources a web search carries", () => {
     expect("sources" in plain!).toBe(false);
     const viaSources = toolCallsOf({ toolCalls: [{ name: "web_search", args: "q", result: "1 result", sources: ["https://yelp.com/biz/x"] }] })!;
     expect(viaSources[0]?.sources?.[0]?.host).toBe("yelp.com");
+  });
+});
+
+describe("the pages a chat answer's search found", () => {
+  const pages = [
+    { title: "Eater", url: "https://eater.com/a", host: "eater.com" },
+    { title: "Yelp", url: "https://yelp.com/b", host: "yelp.com" },
+  ];
+  const calls: UiToolCall[] = [
+    { name: "get_plan", args: "", result: "plan awaiting_humans" },
+    { name: "web_search", args: "q", result: "2 results" },
+    { name: "web_search", args: "r", result: "1 result" },
+  ];
+
+  it("ride on the first web_search call, and on no other", () => {
+    const joined = withSearchSources(calls, pages)!;
+    expect(joined[1]?.sources).toEqual(pages);
+    expect("sources" in joined[0]!).toBe(false);
+    expect("sources" in joined[2]!).toBe(false);
+  });
+
+  it("leave the calls as they were when there are no pages, or none of the calls is a search", () => {
+    expect(withSearchSources(calls, undefined)).toBe(calls);
+    expect(withSearchSources(calls, [])).toBe(calls);
+    const plain = [calls[0]!];
+    expect(withSearchSources(plain, pages)).toEqual(plain);
+    expect(withSearchSources(undefined, pages)).toBeUndefined();
+  });
+
+  it("keep a search's own pages when it already has some", () => {
+    const own = [{ title: "Reddit", url: "https://reddit.com/c", host: "reddit.com" }];
+    expect(withSearchSources([{ name: "web_search", args: "q", result: "1 result", sources: own }], pages)![0]?.sources).toEqual(own);
   });
 });
 

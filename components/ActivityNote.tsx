@@ -1,7 +1,8 @@
 import { CalendarX, Film, MessageCircle, Receipt, Shield, ShieldCheck, TriangleAlert, Undo2, UserMinus, Users, Wallet, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
-import { ToolsCalled } from "./ToolsCalled";
+import { chatLineContext, withSearchSources } from "@/lib/ui/tools";
+import { ToolLines } from "./ToolLines";
 
 const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: boolean }> = {
   caption_extracted: { icon: Film, title: "Read the reel caption" },
@@ -19,7 +20,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
   payment_proposed: { icon: Wallet, title: "Payment prepared" },
   payment_cancelled: { icon: Undo2, title: "Payment declined by its person" },
   receipt_read: { icon: Receipt, title: "Read a receipt" },
-  // Lane B shows the tools under this row (UiNote.toolCalls) and pairs it with the answer in UiSnapshot.chat.
+  // The tools the answer used show under this row as plain lines (UiNote.toolCalls), a web search with its pages as Source chips.
   chat_asked: { icon: MessageCircle, title: "You asked your Muse" },
 };
 
@@ -38,7 +39,7 @@ export function ActivityNote({ note }: { note: UiNote }) {
             <span className="shrink-0 text-[12px] leading-4 text-muted">{formatTimeWithSeconds(note.at)}</span>
           </span>
           <span className="mt-0.5 block text-[13px] leading-[18px] text-muted">{note.text}</span>
-          {note.toolCalls && note.toolCalls.length > 0 ? <ToolsCalled calls={note.toolCalls} /> : null}
+          <ToolLines calls={withSearchSources(note.toolCalls, note.sources)} context={chatLineContext} inline />
         </span>
       </div>
     </li>
