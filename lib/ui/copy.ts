@@ -173,6 +173,14 @@ export const copy = {
   threadFriendYes: "Yes, I'm in.",
   threadFriendNo: "Not this time, sorry.",
 
+  // The composer at the bottom of Sprout's phone (D31, D32): talk to the friend, or ask your own Muse in private.
+  composerMessage: (friend: string) => `Message ${friend}`,
+  composerAskPill: (muse: string) => `Ask ${muse}`,
+  composerAskPlaceholder: (muse: string) => `Ask ${muse} privately`,
+  composerAskUnavailable: (muse: string) => `Asking ${muse} is not available yet`,
+  composerSend: "Send",
+  composerSending: "Sending",
+
   drawerClose: "Close",
   drawerCopy: "Copy JSON",
   drawerSent: "Sent",
