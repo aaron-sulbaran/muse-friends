@@ -85,6 +85,7 @@ Added when the MCP front door is deployed; see the next section of this runbook 
 
 Who: anyone with a phone. Time: 5 minutes. Run it on venue Wi-Fi and again on mobile data, in a private tab.
 
+0. Optional first pass from a laptop on the same network: `./scripts/smoke-production.sh`. Expect six `PASS` lines (health, home, both phones, the QR file, the state JSON), none over 3 seconds, none redirected to a Vercel login. It does not run the negotiation; that is step 2 on a phone.
 1. Scan `/qr.svg` (open https://muse-friends.vercel.app/qr.svg on another screen) or type the URL.
 2. Pass: the page loads with no Vercel login, `/api/health` shows `ok: true`, and once the agents are merged, one negotiation runs end to end inside 300 seconds with the timeline updating live.
 3. Fail: write down which network, what you saw, and the time, and send it to the orchestrator.

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_ROOM } from "@/lib/seed/fixtures";
 import { createSupabaseStore, StoreError } from "@/lib/store/supabase";
 
 // A stand-in for the PostgREST query builder: every step returns itself and awaiting it yields
@@ -43,5 +44,22 @@ describe("createSupabaseStore", () => {
     const store = createSupabaseStore({ client: clientReplying({ data: null, error: null }) });
     const clock = await store.getClock();
     expect(Date.parse(clock.now)).not.toBeNaN();
+  });
+
+  it("falls back to the default demo room when none is stored", async () => {
+    const store = createSupabaseStore({ client: clientReplying({ data: null, error: null }) });
+    expect(await store.getRoom()).toEqual(DEFAULT_ROOM);
+  });
+
+  it("reports the cursor as a string and starts at zero when the counter row is missing", async () => {
+    const withCounter = createSupabaseStore({ client: clientReplying({ data: { version: 7 }, error: null }) });
+    expect(await withCounter.cursor()).toBe("7");
+    const withoutCounter = createSupabaseStore({ client: clientReplying({ data: null, error: null }) });
+    expect(await withoutCounter.cursor()).toBe("0");
+  });
+
+  it("lists no busy blocks when there are none", async () => {
+    const store = createSupabaseStore({ client: clientReplying({ data: null, error: null }) });
+    expect(await store.listBusy("aaron")).toEqual([]);
   });
 });

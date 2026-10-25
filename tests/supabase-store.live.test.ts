@@ -64,6 +64,7 @@ describe.skipIf(!live)("supabase store against the real project", () => {
       admin.from("signals").delete().like("id", like),
       admin.from("events").delete().like("id", like),
       admin.from("recorded_runs").delete().like("id", like),
+      admin.from("busy").delete().like("event_id", like),
     ]);
   }
 
@@ -119,7 +120,29 @@ describe.skipIf(!live)("supabase store against the real project", () => {
     expect(runs.map((item) => item.id)).toContain(run.id);
   });
 
-  it("reads the clock and returns a snapshot that parses and contains the test thread", async () => {
+  it("keeps busy blocks per agent and moves the cursor on every write", async () => {
+    const before = await timed("cursor", () => store.cursor());
+    const block = {
+      agent: "aaron" as const,
+      event: {
+        id: `busy_test${runId}`,
+        title: "Test block",
+        start: "2026-10-27T18:00:00-05:00",
+        end: "2026-10-27T19:00:00-05:00",
+        private: true,
+      },
+    };
+    await timed("addBusy", () => store.addBusy(block));
+    await timed("addBusy (duplicate)", () => store.addBusy(block));
+    const own = await timed("listBusy", () => store.listBusy("aaron"));
+    expect(own.filter((item) => item.event.id === block.event.id)).toEqual([block]);
+    const others = await store.listBusy("lisa");
+    expect(others.map((item) => item.event.id)).not.toContain(block.event.id);
+    expect(await store.cursor()).not.toBe(before);
+  });
+
+  it("reads the room and the clock and returns a snapshot that parses and contains the test thread", async () => {
+    expect((await timed("getRoom", () => store.getRoom())).id).toBe("demo");
     expect(Date.parse((await timed("getClock", () => store.getClock())).now)).not.toBeNaN();
     const snapshot = await timed("snapshot", () => store.snapshot());
     expect(StateSnapshot.safeParse(snapshot).success).toBe(true);

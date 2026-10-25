@@ -1,18 +1,20 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   ActivityEvent,
+  BusyBlock,
   DemoClock,
   MessageRecord,
   Plan,
   RecordedRun,
   Recommendation,
   Redaction,
+  Room,
   SharePolicy,
   Signal,
   StateSnapshot,
   Thread,
 } from "@/lib/protocol";
-import { DEMO_START } from "@/lib/seed/fixtures";
+import { DEFAULT_ROOM, DEMO_START } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 
 // The production Store. Every collection is a table of JSONB documents (supabase/migrations), read
@@ -196,6 +198,27 @@ export function createSupabaseStore(options: SupabaseStoreOptions = {}): Store {
       return documents<ActivityEvent>("listEvents", await query.order("ord"));
     },
 
+    async getRoom() {
+      return (
+        document<Room>("getRoom", await db.from("room").select("data").eq("id", "demo").maybeSingle()) ?? DEFAULT_ROOM
+      );
+    },
+    async putRoom(room) {
+      unwrap("putRoom", await db.from("room").upsert({ id: room.id, data: room }));
+    },
+
+    async addBusy(block) {
+      unwrap(
+        "addBusy",
+        await db.from("busy").upsert({ event_id: block.event.id, agent: block.agent, data: block }, appendOnly),
+      );
+    },
+    async listBusy(agent) {
+      let query = db.from("busy").select("data");
+      if (agent) query = query.eq("agent", agent);
+      return documents<BusyBlock>("listBusy", await query.order("ord"));
+    },
+
     async getClock() {
       const stored = document<DemoClock>("getClock", await db.from("clock").select("data").eq("id", 1).maybeSingle());
       return stored ?? { now: DEMO_START };
@@ -217,11 +240,16 @@ export function createSupabaseStore(options: SupabaseStoreOptions = {}): Store {
       return documents<RecordedRun>("listRecordedRuns", await db.from("recorded_runs").select("data").order("ord"));
     },
 
+    async cursor() {
+      const row = unwrap<{ version: number | string }>("cursor", await db.from("cursor").select("version").eq("id", 1).maybeSingle());
+      return String(row?.version ?? 0);
+    },
+
     async snapshot() {
       const snapshot = unwrap("snapshot", await db.rpc("store_snapshot"));
       if (!snapshot) throw new StoreError("snapshot", "empty reply");
       const state = snapshot as StateSnapshot;
-      return { ...state, clock: state.clock ?? { now: DEMO_START } };
+      return { ...state, room: state.room ?? DEFAULT_ROOM, clock: state.clock ?? { now: DEMO_START } };
     },
     async replaceAll(snapshot) {
       unwrap("replaceAll", await db.rpc("store_replace_all", { snapshot }));
