@@ -128,7 +128,7 @@ export const copy = {
   paymentPaperLocal: "Paper dollars on a local ledger. Not real money.",
   provenanceTitle: (amount: string) => `How your Muse worked out ${amount}`,
   provenanceLine: "Every line says where it came from.",
-  provenanceTogether: "Together",
+  provenanceTogether: "You send",
   provenanceReceipt: (total: string) => `Receipt total ${total}, a seeded receipt, fictional`,
   provenanceNote: "Your note",
   provenanceEstimate: "Your Muse's estimate",

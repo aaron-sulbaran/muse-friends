@@ -521,7 +521,7 @@ const dollars = (amount: number) => (amount < 0 ? `-$${-amount}` : `$${amount}`)
 
 // "Why $16?" from the same lines the card shows: each line with its amount, then the total.
 function explain(proposal: PaymentProposal): string {
-  return `${proposal.breakdown.map((line) => `${line.label}: ${dollars(line.amount)}`).join(". ")}. Together ${dollars(proposal.amount)}.`;
+  return `${proposal.breakdown.map((line) => `${line.label}: ${dollars(line.amount)}`).join(". ")}. You send ${dollars(proposal.amount)}.`;
 }
 
 function breakdownLines(proposal: PaymentProposal): UiBreakdownLine[] {
