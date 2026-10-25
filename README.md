@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/wordmark/muse-friends-wordmark.svg" alt="Muse Friends" width="380">
+  <img src="public/brand/muse-friends-lockup.png" alt="Muse Friends, a proposal for Muse" width="520">
 </p>
 
 <p align="center"><strong>Plans that make it out of the group chat.</strong></p>
