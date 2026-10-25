@@ -4,6 +4,7 @@
  * schemas directly and a contract change lands in one adapter.
  */
 
+import type { RunBudget } from "@/lib/agent/caps";
 import type {
   AgentId,
   Category,
@@ -119,6 +120,8 @@ export type UiSnapshot = {
     humanTapCount: number;
   };
   inFlight: InFlight | null;
+  /** The live-run caps right now; null while a recording is on screen, which spends nothing. */
+  budget: RunBudget | null;
   /** Set when an agent's turn ended without a message: the thread stopped and the presenter decides on Replay. */
   failure: { agent: AgentId } | null;
   /** What each side currently lets the other see. */

@@ -1,3 +1,4 @@
+import { runBudget } from "@/lib/agent/caps";
 import { getStore } from "@/lib/store";
 import { toUiSnapshot } from "./snapshot";
 import type { UiSnapshot } from "./types";
@@ -19,5 +20,5 @@ export async function readCursor(): Promise<string> {
 
 export async function readSnapshot(): Promise<UiSnapshot> {
   const store = await getStore();
-  return toUiSnapshot(await store.snapshot(), { mode });
+  return toUiSnapshot(await store.snapshot(), { mode, budget: runBudget() });
 }

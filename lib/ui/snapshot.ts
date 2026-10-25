@@ -1,3 +1,4 @@
+import type { RunBudget } from "@/lib/agent/caps";
 import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
@@ -12,6 +13,8 @@ import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, 
 
 export type UiOverlay = {
   mode: "live" | "replay";
+  /** The run caps for the JSON drawer; omit for a recording, which spends nothing. */
+  budget?: RunBudget | null;
 };
 
 /** Taps and sends that move a plan along. Not the outcome, so never counted. */
@@ -178,6 +181,7 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
       humanTapCount: state.events.filter((event) => event.actor === "human" && humanTapKinds.has(event.kind)).length,
     },
     inFlight: deriveInFlight(state, plan),
+    budget: overlay.budget ?? null,
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
   };
