@@ -7,6 +7,7 @@ import { copy } from "@/lib/ui/copy";
 import { SWITCH_ROWS } from "@/lib/ui/categories";
 import type { PaymentsSettings, Role, SharingSettings } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
+import { Wordmark } from "./Wordmark";
 import { PaymentsSection } from "./PaymentsSection";
 import { SwitchRow } from "./SwitchRow";
 import { TierControl } from "./TierControl";
@@ -75,9 +76,8 @@ export function AvatarSheet({ role, initial, museName, friendMuseName, sharing, 
         <header className="flex items-start justify-between gap-3">
           <div>
             <h2>
-              {/* The wordmark names the feature where its settings live. A fixed vector asset from the brand kit. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/wordmark/muse-friends-wordmark.svg" alt="Muse Friends" className="h-[22px] w-auto" />
+              {/* The lockup names the feature where its settings live, at about the height the old wordmark was. */}
+              <Wordmark size={19} />
             </h2>
             <div className="mt-3 flex items-center gap-3">
               <MuseAvatar agent={role === "a" ? "aaron" : "lisa"} initial={initial} name={museName} size={40} />

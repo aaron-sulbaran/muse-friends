@@ -47,12 +47,13 @@ describe("the page", () => {
   it("does not show a Muse screenshot: every image is our own asset", () => {
     const sources = [...html.matchAll(/<img[^>]*src="([^"]+)"/g)].map((match) => match[1]);
     expect(sources.length).toBeGreaterThan(0);
-    for (const source of sources) expect(source).toMatch(/^\/(avatars|wordmark|how)\//);
+    for (const source of sources) expect(source).toMatch(/^\/(avatars|brand|wordmark|how)\//);
   });
 
-  it("opens on the header's text lockup, not the retired script wordmark", () => {
+  it("opens on the header's lockup, Meta's blue script Muse and Friends, not the retired wordmark", () => {
     expect(html).not.toContain("muse-friends-wordmark.svg");
     expect(html).toContain('aria-label="Muse Friends"');
+    expect(html).toContain('src="/brand/muse-script-blue.svg"');
   });
 
   it("shows the Muses bare, never in a circle or a tile, and speaks plainly about the second phone", () => {

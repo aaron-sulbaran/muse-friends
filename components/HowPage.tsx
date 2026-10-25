@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { HOW_ANCHORS, README_URL, builtCopy, howCopy, loopCopy, museCopy, privacyCopy, protocolCopy, realCopy } from "@/lib/how";
 import { HowLoopDiagram } from "./HowLoopDiagram";
+import { Wordmark } from "./Wordmark";
 
 function Section({ id, heading, children }: { id: string; heading: string; children: React.ReactNode }) {
   return (
@@ -135,10 +136,8 @@ export function HowPage() {
         </Link>
 
         <header className="mt-4 flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-card bg-linear-to-b from-surface to-stage-end px-4 py-8 text-center">
-          {/* The stage header's text lockup. */}
-          <span className="text-[36px] font-bold leading-none tracking-[-0.02em]" aria-label="Muse Friends">
-            Muse <span className="text-accent-dot">Friends</span>
-          </span>
+          {/* The stage header's lockup, larger. */}
+          <Wordmark size={36} />
           <h1 className="text-[32px] font-bold leading-[38px]">{howCopy.title}</h1>
           <p className="text-[15px] leading-[22px] text-muted">{howCopy.subtitle}</p>
           <div className="mt-1 flex items-end gap-3" aria-hidden="true">
