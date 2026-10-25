@@ -1,4 +1,4 @@
-import type { AgentId, CalendarEvent, Persona, Role, Window } from "@/lib/protocol";
+import type { AgentId, CalendarEvent, MemberId, Persona, Role, Window } from "@/lib/protocol";
 
 // Everything here is fictional demo data. The calendars are the only source of availability:
 // agents see them through get_my_calendar and nothing else.
@@ -53,7 +53,20 @@ const lisaCalendar: CalendarEvent[] = [
   event("lisa-11", "Farmers market shift", "31", "12:00", "18:00"),
 ];
 
-export const PERSONAS: Record<AgentId, Persona> = {
+// The third friend of a group plan, Pebble: free only on Tuesday evening from 6:30, so a group of three has
+// exactly one evening that works for everyone.
+const kaiCalendar: CalendarEvent[] = [
+  event("kai-01", "Weekend away", "25", "13:00", "22:00", true),
+  event("kai-02", "Internship", "26", "09:00", "18:00"),
+  event("kai-03", "Band rehearsal", "26", "19:00", "22:00"),
+  event("kai-04", "Internship", "27", "09:00", "18:30"),
+  event("kai-05", "Out of town", "28", "09:00", "22:00"),
+  event("kai-06", "Internship and night class", "29", "09:00", "22:00"),
+  event("kai-07", "Conference", "30", "09:00", "22:00"),
+  event("kai-08", "Family wedding", "31", "09:00", "22:00", true),
+];
+
+export const PERSONAS: Record<MemberId, Persona> = {
   aaron: {
     id: "aaron",
     role: "a",
@@ -64,6 +77,22 @@ export const PERSONAS: Record<AgentId, Persona> = {
       events: ["live music", "hackathons"],
       interests: ["embedded systems", "pickup soccer", "film photography"],
       location: ["East Austin", "campus"],
+    },
+    provenance: {
+      source: "seeded",
+      fictional: true,
+      note: "Fictional demo persona; details are invented.",
+    },
+  },
+  kai: {
+    id: "kai",
+    displayName: "Pebble",
+    calendar: kaiCalendar,
+    interests: {
+      food: ["shawarma", "pho", "boba"],
+      events: ["live music", "game nights"],
+      interests: ["board games", "climbing", "anime"],
+      location: ["Mueller", "downtown"],
     },
     provenance: {
       source: "seeded",
@@ -90,12 +119,12 @@ export const PERSONAS: Record<AgentId, Persona> = {
   },
 };
 
-export function getPersona(id: AgentId): Persona {
+export function getPersona(id: MemberId): Persona {
   return PERSONAS[id];
 }
 
 // What people see: the Muse characters Sprout and Mochi, not the internal ids.
-export function displayName(id: AgentId): string {
+export function displayName(id: MemberId): string {
   return PERSONAS[id].displayName;
 }
 
@@ -103,7 +132,8 @@ export const ROLE_TO_AGENT: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
 export const AGENT_TO_ROLE: Record<AgentId, Role> = { aaron: "a", lisa: "b" };
 
 // Strings that must never appear in any delivered message. Used by the leak tests (smoke test 5).
-export const PRIVATE_STRINGS: Record<AgentId, string[]> = {
+export const PRIVATE_STRINGS: Record<MemberId, string[]> = {
+  kai: ["Family wedding", "Weekend away"],
   aaron: ["Northwind", "Interview", "Family dinner"],
   lisa: ["Physical therapy", "Friend's birthday", "Family dinner"],
 };

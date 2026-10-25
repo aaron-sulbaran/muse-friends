@@ -2,7 +2,7 @@ import { paymentsCheck } from "@/lib/policy";
 import type { ActivityEvent, AgentId, AgentMessage, MessageRecord, Plan, Redaction, SharePolicy, Thread, ToolCallProof } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
-import { newId } from "./ids";
+import { newId, seatOf } from "./ids";
 import { getProposal } from "./proposal-store";
 import { walletOf } from "./wallets";
 
@@ -41,13 +41,17 @@ export function paymentsFrom(records: MessageRecord[]): PaymentView[] {
   for (const { message, proof } of records) {
     const payment = message.payment;
     if (!payment) continue;
+    // Payments are between the two phone seats; a message that names a group member is not one of ours.
+    const payer = seatOf(message.from);
+    const payee = seatOf(message.to);
+    if (!payer || !payee) continue;
     if (message.type === "payment") {
       views.set(payment.paymentId, {
         paymentId: payment.paymentId,
         planId: payment.planId,
         contextId: message.contextId,
-        payer: message.from,
-        payee: message.to,
+        payer,
+        payee,
         amount: payment.amount,
         reason: payment.reason,
         note: message.note,
@@ -90,7 +94,9 @@ export async function validatePaymentIncoming(store: Store, message: AgentMessag
   if (!payment) return { ok: false, status: 422, error: "a payment message needs a payment" };
   const plan = await store.getPlan(payment.planId);
   if (!plan) return { ok: false, status: 422, error: "the payment names a plan that does not exist" };
-  if (!plan.participants.includes(message.from) || !plan.participants.includes(message.to)) return { ok: false, status: 422, error: "the payment is between people who are not in the plan" };
+  const from = seatOf(message.from);
+  const to = seatOf(message.to);
+  if (!from || !to || !plan.participants.includes(from) || !plan.participants.includes(to)) return { ok: false, status: 422, error: "the payment is between people who are not in the plan" };
 
   const records = await store.listMessages();
   const known = paymentsFrom(records);
@@ -103,10 +109,10 @@ export async function validatePaymentIncoming(store: Store, message: AgentMessag
     if (!proposal || (proposal.status !== "confirming" && proposal.status !== "confirmed") || proposal.payer !== message.from || proposal.amount !== payment.amount) {
       return { ok: false, status: 422, error: "the payment has no confirmed proposal behind it" };
     }
-    const wallet = await walletOf(store, message.from);
+    const wallet = await walletOf(store, from);
     // Only act on accounts this app created: the money has to come out of the sender's own wallet.
     if (!wallet || wallet.accountId !== payment.payerAccountId || wallet.source !== payment.source) return { ok: false, status: 422, error: "the payment does not come from the sender's own wallet" };
-    const spent = known.filter((entry) => entry.planId === plan.id && entry.payer === message.from && entry.status !== "refunded").reduce((total, entry) => total + entry.amount, 0);
+    const spent = known.filter((entry) => entry.planId === plan.id && entry.payer === from && entry.status !== "refunded").reduce((total, entry) => total + entry.amount, 0);
     const refused = paymentsCheck(senderPolicy, payment.amount, spent);
     if (refused) return { ok: false, status: 422, error: refused };
     return { ok: true };
@@ -125,7 +131,7 @@ export async function validatePaymentIncoming(store: Store, message: AgentMessag
   if (original.payer !== message.to || original.payee !== message.from) return { ok: false, status: 422, error: "only the person paid can answer this payment" };
   if (original.amount !== payment.amount) return { ok: false, status: 422, error: "the answer names a different amount" };
   if (payment.outcome === "accepted") {
-    const wallet = await walletOf(store, message.from);
+    const wallet = await walletOf(store, from);
     if (!wallet || wallet.accountId !== payment.payeeAccountId) return { ok: false, status: 422, error: "the money was not deposited into the receiver's own wallet" };
   }
   return { ok: true };
@@ -167,9 +173,9 @@ export async function commitPaymentCore(store: Store, record: MessageRecord, red
     updatedAt: message.at,
   };
   const { kind, text } = describePayment(message);
-  const events: ActivityEvent[] = [{ id: newId("evt"), at: message.at, kind, actor: "agent", agent: message.from, contextId: message.contextId, planId: payment.planId, messageId: message.id, text: text.slice(0, 240) }];
+  const events: ActivityEvent[] = [{ id: newId("evt"), at: message.at, kind, actor: "agent", agent: seatOf(message.from), contextId: message.contextId, planId: payment.planId, messageId: message.id, text: text.slice(0, 240) }];
   if (redaction) {
-    events.push({ id: newId("evt"), at: message.at, kind: "redaction", actor: "system", agent: message.from, contextId: message.contextId, planId: payment.planId, messageId: message.id, redactionId: redaction.id, text: `Policy removed ${redaction.removed.join(", ")} from ${displayName(message.from)}'s payment note` });
+    events.push({ id: newId("evt"), at: message.at, kind: "redaction", actor: "system", agent: seatOf(message.from), contextId: message.contextId, planId: payment.planId, messageId: message.id, redactionId: redaction.id, text: `Policy removed ${redaction.removed.join(", ")} from ${displayName(message.from)}'s payment note` });
   }
   await Promise.all([store.appendMessage(record), store.putThread({ ...thread, state: message.state, messageCount: Math.max(thread.messageCount, message.seq), updatedAt: message.at })]);
   const finish = async () => {

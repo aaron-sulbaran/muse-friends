@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { z } from "zod";
 import { reserveRun, runBudget } from "@/lib/agent/caps";
+import { startGroup } from "@/lib/agent/group";
 import { injectSignal, runSignalTurn } from "@/lib/agent/runtime";
 import { newId } from "@/lib/agent/ids";
 import { httpDeliver } from "@/lib/agent/wire";
@@ -16,9 +17,12 @@ import { getStore } from "@/lib/store";
 // Live runs spend Muse credits, so each start is counted against a per-room and a global hourly cap
 // (lib/agent/caps.ts). Past either, the answer is 429 { paused: true, text: "Live runs paused, playing a
 // recording" }: the room is meant to fall back to Replay. GET returns the counters for the JSON drawer.
+//
+// scenario "group" is the same reel, but Sprout makes it a plan for three (Mochi and Pebble): one pair thread per
+// friend, the protocol unchanged, a groupId on each thread, one plan with a group on it.
 export const maxDuration = 300;
 
-const Body = z.strictObject({ scenario: z.literal("shawarma").default("shawarma") });
+const Body = z.strictObject({ scenario: z.enum(["shawarma", "group"]).default("shawarma") });
 
 export async function GET() {
   return Response.json({ budget: runBudget() }, { headers: { "Cache-Control": "no-store" } });
@@ -54,9 +58,26 @@ export async function POST(request: Request) {
         },
       }
     : { ...seeded, id: newId("sig") };
+  const origin = new URL(request.url).origin;
+
+  if (body.data.scenario === "group") {
+    const started = await startGroup(store, signal);
+    const group = (await store.getPlan(started.planId))?.group;
+    after(async () => {
+      try {
+        await runSignalTurn({ store, agent: signal.to, signalId: signal.id, contextId: started.firstContextId, group, deliver: httpDeliver(origin, signal.to) });
+      } catch (error) {
+        console.error("group signal turn failed", error);
+      }
+    });
+    return Response.json(
+      { signalId: signal.id, contextId: started.firstContextId, planId: started.planId, groupId: started.groupId, contexts: started.contexts, status: { state: "working" }, budget },
+      { status: 202 },
+    );
+  }
+
   const { contextId, planId } = await injectSignal(store, signal);
 
-  const origin = new URL(request.url).origin;
   after(async () => {
     try {
       await runSignalTurn({ store, agent: signal.to, signalId: signal.id, contextId, deliver: httpDeliver(origin, signal.to) });

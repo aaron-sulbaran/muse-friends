@@ -4,6 +4,7 @@ import {
   SendToFriendArgs,
   MAX_WINDOW_HOURS,
   THREAD_CAP,
+  type MemberId,
   type MessageRecord,
   type Window,
 } from "@/lib/protocol";
@@ -13,6 +14,7 @@ import type { ToolMeta } from "@/lib/model";
 import type { AgentRuntimeContext } from "./context";
 import { ownFreeBlocks } from "./calendar";
 import { commitMessage } from "./inbound";
+import { describeCandidates, groupCandidates, planForContext } from "./group";
 import { newId, otherAgent } from "./ids";
 import { closesThread, isForcedClose, nextThreadState } from "./thread";
 import { summarizeToolCall } from "@/lib/tool-summary";
@@ -32,14 +34,22 @@ function fail(error: string): SendResult {
   return { error };
 }
 
-// Models sometimes write the friend's display name instead of the id, or leave it out. There is
-// exactly one friend, so read either as that friend.
+// Who this turn may message: the other phone seat, or the members a group turn names.
+function counterpartsOf(ctx: AgentRuntimeContext): MemberId[] {
+  return ctx.counterparts ?? [otherAgent(ctx.agent)];
+}
+
+// Models sometimes write a friend's display name instead of the id, or leave it out. Read either as the friend
+// it names; with a single possible friend, a missing one is that friend.
 function normalizeArgs(ctx: AgentRuntimeContext, rawArgs: unknown): unknown {
   if (typeof rawArgs !== "object" || rawArgs === null) return rawArgs;
-  const friend = otherAgent(ctx.agent);
+  const candidates = counterpartsOf(ctx);
   const given = (rawArgs as { friend?: unknown }).friend;
-  const matches = typeof given === "string" && [friend, getPersona(friend).displayName.toLowerCase()].includes(given.trim().toLowerCase());
-  return given === undefined || matches ? { ...rawArgs, friend } : rawArgs;
+  if (given === undefined && candidates.length === 1) return { ...rawArgs, friend: candidates[0] };
+  if (typeof given !== "string") return rawArgs;
+  const wanted = given.trim().toLowerCase();
+  const match = candidates.find((candidate) => candidate === wanted || getPersona(candidate).displayName.toLowerCase() === wanted);
+  return match ? { ...rawArgs, friend: match } : rawArgs;
 }
 
 export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, meta?: ToolMeta): Promise<SendResult> {
@@ -47,15 +57,20 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
   if (!parsed.success) return fail(`Invalid message. ${z.prettifyError(parsed.error)}`);
   const args = parsed.data;
 
-  const friend = otherAgent(ctx.agent);
-  if (args.friend !== friend) return fail(`You can only message ${getPersona(friend).displayName}'s agent (friend: "${friend}").`);
+  const friend = args.friend;
+  const candidates = counterpartsOf(ctx);
+  if (!candidates.includes(friend)) {
+    return fail(`You can only message ${candidates.map((candidate) => `${getPersona(candidate).displayName}'s agent (friend: "${candidate}")`).join(" or ")}.`);
+  }
+  // A coordinator talks to several friends in one turn, each on its own pair thread.
+  const contextId = ctx.contexts?.[friend] ?? ctx.contextId;
 
   const { store } = ctx;
   const nowMs = ctx.wallNow?.() ?? Date.now();
   const at = toCentralIso(nowMs);
 
-  const thread = await store.getThread(ctx.contextId);
-  const prior = (await store.listMessages(ctx.contextId)).map((record) => record.message);
+  const thread = await store.getThread(contextId);
+  const prior = (await store.listMessages(contextId)).map((record) => record.message);
   if (!thread && !ctx.signalId) return fail("There is no open conversation to send into.");
   if (thread && ENDED.has(thread.state)) return fail("This conversation has already ended. Do not send anything else.");
 
@@ -101,8 +116,20 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
     return fail("You can only accept a window your friend offered. Counter with your own windows instead.");
   }
 
+  // In a group, the coordinator may only accept a window that works for everyone, worked out in code.
+  const isCoordinator = ctx.group !== undefined && ctx.agent === ctx.group.coordinator;
+  if (isCoordinator && type === "accept" && windows?.[0]) {
+    const plan = await planForContext(store, contextId);
+    const everyone = plan ? await groupCandidates(store, plan) : [];
+    if (!isSubsetOfBlocks(windows[0], everyone)) {
+      return fail(`That window is not free for everyone in the group. Accept one of these, copied exactly: ${describeCandidates(everyone)}.`);
+    }
+  }
+  // The coordinator relays windows only: a note could carry one member's availability to another.
+  const note = isCoordinator ? undefined : args.note;
+
   // Do not re-offer a window that was already passed over in this thread.
-  const ledger = new Set(await store.listRejectedWindows(ctx.contextId));
+  const ledger = new Set(await store.listRejectedWindows(contextId));
   const repeated = (windows ?? []).filter((window) => ledger.has(windowHash(window)));
   if (repeated.length > 0) return fail(`These windows were already passed over in this conversation: ${repeated.map(describeWindow).join(", ")}. Offer different ones.`);
 
@@ -112,7 +139,7 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
 
   const draft = {
     id: newId("msg", nowMs),
-    contextId: ctx.contextId,
+    contextId,
     seq,
     from: ctx.agent,
     to: friend,
@@ -121,7 +148,7 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
     activity: args.activity,
     windows,
     reason,
-    note: args.note,
+    note,
     shared,
     at,
   };
