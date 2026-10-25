@@ -1,4 +1,4 @@
-import { CalendarX, Film, MessageCircle, Shield, TriangleAlert, Undo2, Wallet, type LucideIcon } from "lucide-react";
+import { CalendarX, Film, MessageCircle, Shield, ShieldAlert, TriangleAlert, Undo2, Wallet, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
 
@@ -7,6 +7,7 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string }> = {
   thread_opened: { icon: MessageCircle, title: "Opened a thread" },
   policy_changed: { icon: Shield, title: "Changed sharing" },
   busy_added: { icon: CalendarX, title: "Marked a time busy" },
+  message_rejected: { icon: ShieldAlert, title: "Inbox rejected a message" },
   reel_source: { icon: Film, title: "Where the reel came from" },
   payment_sent: { icon: Wallet, title: "Sent money" },
   payment_received: { icon: Wallet, title: "Money received" },

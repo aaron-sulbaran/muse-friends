@@ -15,6 +15,7 @@ import { ownFreeBlocks } from "./calendar";
 import { commitMessage } from "./inbound";
 import { newId, otherAgent } from "./ids";
 import { closesThread, isForcedClose, nextThreadState } from "./thread";
+import { summarizeToolCall } from "@/lib/tool-summary";
 import { describeWindow, isSubsetOfBlocks, toCentralIso, toMs, windowHash } from "./windows";
 
 // send_to_friend_agent. Every check here is code, not prompt: the thread cap and turn taking, windows
@@ -147,6 +148,8 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, m
           inputTokens: meta.call.inputTokens,
           outputTokens: meta.call.outputTokens,
           reasoningTokens: meta.call.reasoningTokens,
+          // The tools called on the way here, ending with this send, so the drawer can list them.
+          toolCalls: [...meta.toolCalls, summarizeToolCall({ name: "send_to_friend_agent", args, output: { seq, state: final.data.state }, ok: true })].slice(-10),
         }
       : undefined,
   };
