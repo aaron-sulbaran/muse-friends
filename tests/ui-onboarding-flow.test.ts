@@ -40,7 +40,7 @@ describe("what Done starts", () => {
   });
 });
 
-describe("what Continue starts", () => {
+describe("what Continue writes", () => {
   it("is the room's friend, Michelle, with her Muse", () => {
     expect(ROOM_FRIEND).toMatchObject({ id: "michelle", museModel: "mochi" });
   });
