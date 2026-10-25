@@ -8,6 +8,7 @@
 export const WINDOW_MS = 60 * 60 * 1000;
 export const DEFAULT_ROOM_LIMIT = 30;
 export const DEFAULT_GLOBAL_LIMIT = 60;
+export const DEFAULT_CHAT_LIMIT = 20;
 export const PAUSED_TEXT = "Live runs paused, playing a recording";
 
 const GLOBAL_KEY = "*";
@@ -75,6 +76,46 @@ export function reserveRun(room = "demo", now: number = Date.now()): { ok: true;
 // Gives back a reserved run that never started a model turn (for example a refused follow-up).
 export function refundRun(room = "demo", now: number = Date.now()): void {
   recent(room, now).pop();
+  recent(GLOBAL_KEY, now).pop();
+}
+
+// The chat with a person's own Muse (D31) is cheaper than a run, so it has a count of its own per room, 20 an hour
+// (MAX_CHAT_TURNS_PER_ROOM_PER_HOUR), and still spends from the app-wide hourly total so the whole app stays bounded.
+const chatKey = (room: string) => `chat:${room}`;
+
+export function chatLimit(): number {
+  return limit("MAX_CHAT_TURNS_PER_ROOM_PER_HOUR", DEFAULT_CHAT_LIMIT);
+}
+
+export type ChatBudget = { windowMinutes: number; used: number; limit: number; remaining: number; retryAfterSeconds?: number };
+
+export function chatBudget(room = "demo", now: number = Date.now()): ChatBudget {
+  const max = chatLimit();
+  const turns = recent(chatKey(room), now);
+  return {
+    windowMinutes: WINDOW_MS / 60_000,
+    used: turns.length,
+    limit: max,
+    remaining: Math.max(0, max - turns.length),
+    retryAfterSeconds: turns.length >= max && turns.length > 0 ? Math.max(1, Math.ceil((turns[0] + WINDOW_MS - now) / 1000)) : undefined,
+  };
+}
+
+export const CHAT_PAUSED_TEXT = "That is a lot of questions for one hour. Your Muse will be back to answer in a few minutes.";
+
+export function reserveChat(room = "demo", now: number = Date.now()): { ok: true; budget: ChatBudget } | { ok: false; budget: ChatBudget; reason: PauseReason; text: string } {
+  const before = chatBudget(room, now);
+  if (before.remaining <= 0) return { ok: false, budget: before, reason: "room", text: CHAT_PAUSED_TEXT };
+  const global = runBudget(room, now);
+  if (global.global.remaining <= 0) return { ok: false, budget: before, reason: "global", text: PAUSED_TEXT };
+  recent(chatKey(room), now).push(now);
+  recent(GLOBAL_KEY, now).push(now);
+  return { ok: true, budget: chatBudget(room, now) };
+}
+
+// Gives back a reserved chat turn that never reached the model (a bad question, a side with no chat).
+export function refundChat(room = "demo", now: number = Date.now()): void {
+  recent(chatKey(room), now).pop();
   recent(GLOBAL_KEY, now).pop();
 }
 
