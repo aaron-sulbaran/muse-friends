@@ -197,6 +197,9 @@ export type PaymentsSettings = { enabled: boolean; cap: number };
 /** The demo reel when it was read live from its owner's Instagram; null means the seeded, fictional reel. */
 export type UiReel = { username: string; caption: string; permalink: string; thumbnailUrl: string | null };
 
+/** What Muse Spark read from the reel's caption, field by field; any of them can be missing. */
+export type UiReelRead = { place: string | null; area: string | null; hours: string | null };
+
 /** Which recording a replay frame was built from, so the badge can say what is playing and from when. */
 export type UiRecording = { source: "live" | "scripted"; recordedAt: string };
 
@@ -217,6 +220,8 @@ export type UiSnapshot = {
   plan: UiPlan | null;
   /** The demo reel read live from Instagram, or null for the seeded one. */
   reel: UiReel | null;
+  /** What the caption read found, from the latest reel that has been read; null until Muse Spark has read one. */
+  reelRead: UiReelRead | null;
   followThrough: {
     /** Plans that happened: the only thing the counter counts. */
     events: FollowThroughEvent[];
