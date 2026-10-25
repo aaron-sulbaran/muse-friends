@@ -1,8 +1,8 @@
 import type { RunBudget } from "@/lib/agent/caps";
-import { CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
+import { AGENT_IDS, CATEGORIES, isCategoryAllowed, type AgentId, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
 import { simulatedFriend } from "./tokens";
-import type { Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiSnapshot } from "./types";
+import type { UiReel, Decision, FollowThroughEvent, SharingSettings, UiMessage, UiNote, UiOutcome, UiPlan, UiSnapshot } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -15,7 +15,48 @@ export type UiOverlay = {
   mode: "live" | "replay";
   /** The run caps for the JSON drawer; omit for a recording, which spends nothing. */
   budget?: RunBudget | null;
+  /** The demo reel read live from Instagram before any run has started (lib/instagram.ts). */
+  liveReel?: ReelMedia | null;
 };
+
+/*
+ * The people this build can draw. A store can hold rows written by a newer build (a group plan's third friend,
+ * left in a shared room by a branch run); drawing them would give a row with no name and no avatar, so
+ * everything that names a stranger is left out instead.
+ */
+const KNOWN_AGENTS: ReadonlySet<string> = new Set(AGENT_IDS);
+
+function isKnownAgent(id: string | undefined): boolean {
+  return id !== undefined && KNOWN_AGENTS.has(id);
+}
+
+/** The snapshot without any message, thread, redaction or timeline event that names an agent this build does not know. */
+export function withoutUnknownAgents(state: StateSnapshot): StateSnapshot {
+  const unknownContexts = new Set<string>();
+  for (const thread of state.threads) {
+    if (![thread.initiator, ...thread.participants].every(isKnownAgent)) unknownContexts.add(thread.contextId);
+  }
+  for (const { message } of state.messages) {
+    if (!isKnownAgent(message.from) || !isKnownAgent(message.to)) unknownContexts.add(message.contextId);
+  }
+  const unknownRedaction = (redaction: StateSnapshot["redactions"][number]) => !isKnownAgent(redaction.from) || !isKnownAgent(redaction.to);
+  const staysEvent = (event: StateSnapshot["events"][number]) =>
+    (event.agent === undefined || isKnownAgent(event.agent)) && !(event.contextId !== undefined && unknownContexts.has(event.contextId));
+  if (
+    unknownContexts.size === 0 &&
+    !state.redactions.some(unknownRedaction) &&
+    state.events.every(staysEvent)
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    threads: state.threads.filter((thread) => !unknownContexts.has(thread.contextId)),
+    messages: state.messages.filter(({ message }) => !unknownContexts.has(message.contextId)),
+    redactions: state.redactions.filter((redaction) => !unknownRedaction(redaction) && !unknownContexts.has(redaction.contextId)),
+    events: state.events.filter(staysEvent),
+  };
+}
 
 /** Taps and sends that move a plan along. Not the outcome, so never counted. */
 const humanTapKinds = new Set(["human_decision", "handoff_opened"]);
@@ -116,6 +157,19 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
 
 const noteKinds = new Set<UiNote["kind"]>(["caption_extracted", "thread_opened", "policy_changed", "busy_added"]);
 
+/** One row per reel a run started from, saying honestly whether it came live from Instagram or from the seed. */
+function reelSourceNotes(state: StateSnapshot): UiNote[] {
+  return state.signals.map((signal) => ({
+    id: `note_reel_${signal.id}`,
+    kind: "reel_source" as const,
+    at: signal.receivedAt,
+    text:
+      signal.provenance.source === "instagram_graph_api"
+        ? `Lisa's own reel, read live from @${signal.media.username} through the Instagram Graph API`
+        : "Seeded demo reel, fictional (Instagram was not used for this run)",
+  }));
+}
+
 function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
   return events
     .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]))
@@ -182,7 +236,15 @@ function toFollowThrough(events: StateSnapshot["events"], rename: (text: string)
   return events.filter((event) => event.kind === "followed_through").map((event) => ({ id: event.id, label: rename(event.text), at: event.at }));
 }
 
-export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapshot {
+/** A run's reel when it came live from Instagram, else the one read before the run, else null (the seeded reel). */
+function reelFor(state: StateSnapshot, before: ReelMedia | null): UiReel | null {
+  const media = state.signals.findLast((signal) => signal.provenance.source === "instagram_graph_api")?.media ?? before;
+  if (!media) return null;
+  return { username: media.username, caption: media.caption, permalink: media.permalink, thumbnailUrl: media.thumbnail_url ?? null };
+}
+
+export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnapshot {
+  const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
   const messages = toUiMessages(state);
   return {
@@ -192,7 +254,7 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: toNotes(state.events, renameFor(state)),
+    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state))].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events, renameFor(state)),
@@ -201,6 +263,7 @@ export function toUiSnapshot(state: StateSnapshot, overlay: UiOverlay): UiSnapsh
     },
     inFlight: deriveInFlight(state, plan),
     budget: overlay.budget ?? null,
+    reel: reelFor(state, overlay.liveReel ?? null),
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
   };

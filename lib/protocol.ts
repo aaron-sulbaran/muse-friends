@@ -366,14 +366,15 @@ export const Persona = z.strictObject({
 });
 export type Persona = z.infer<typeof Persona>;
 
-// Shaped like Instagram Graph API media fields. Seeded, never pulled from Instagram.
+// Instagram Graph API media fields: seeded and fictional, or read live from the owner's own account (lib/instagram.ts).
 export const ReelMedia = z.strictObject({
   id: Id,
   media_type: z.enum(["IMAGE", "VIDEO", "CAROUSEL_ALBUM"]),
   media_product_type: z.enum(["REELS", "FEED", "STORY"]),
   caption: z.string().max(2200),
   permalink: z.string().max(200),
-  thumbnail_url: z.string().max(200).optional(),
+  // Instagram's CDN links run about 600 characters.
+  thumbnail_url: z.string().max(2000).optional(),
   timestamp: IsoDateTime,
   username: z.string().max(40),
 });
@@ -398,9 +399,9 @@ export const Signal = z.strictObject({
   dmText: z.string().max(200).optional(),
   media: ReelMedia,
   provenance: z.strictObject({
-    source: z.literal("seeded"),
+    source: z.enum(["seeded", "instagram_graph_api"]),
     shapedLike: z.literal("Instagram Graph API media fields"),
-    fictional: z.literal(true),
+    fictional: z.boolean(),
     note: z.string().max(200),
   }),
   extracted: SignalExtraction.optional(),

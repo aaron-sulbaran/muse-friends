@@ -5,13 +5,17 @@ import { startFollowUp } from "@/lib/agent/followup";
 import { injectSignal, runFollowUpTurn, runSignalTurn } from "@/lib/agent/runtime";
 import { newId } from "@/lib/agent/ids";
 import { httpDeliver } from "@/lib/agent/wire";
+import { getLiveReel } from "@/lib/instagram";
+import type { Signal } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
 
-// Starts a plan. Two ways in, both seeded and fictional:
+// Starts a plan. Two ways in, seeded by default:
 //   {} or { scenario: "shawarma" }               "Lisa sent Aaron a reel": injects the reel and starts the
-//                                                receiving agent's turn after responding. The caption is read
-//                                                by Muse Spark live.
+//                                                receiving agent's turn after responding. The reel is read live
+//                                                from its owner's Instagram (lib/instagram.ts) when a token is
+//                                                set, else the seeded, fictional one; either way the caption is
+//                                                read by Muse Spark live.
 //   { scenario: "follow_up", target: "<id>" }    a person names someone they met and their Muse reaches out.
 //                                                The contact is the person's choice. It starts only if you
 //                                                and the contact follow each other (409 not_mutual otherwise,
@@ -72,7 +76,21 @@ export async function POST(request: Request) {
     return Response.json({ contextId, planId, contactId: contact.id, status: { state: "working" }, budget }, { status: 202 });
   }
 
-  const signal = { ...rawShawarmaSignal(), id: newId("sig") };
+  const seeded = rawShawarmaSignal();
+  const live = await getLiveReel();
+  const signal: Signal = live
+    ? {
+        ...seeded,
+        id: newId("sig"),
+        media: live,
+        provenance: {
+          source: "instagram_graph_api",
+          shapedLike: "Instagram Graph API media fields",
+          fictional: false,
+          note: "Read live through the Instagram Graph API from the reel owner's own account, with their consent.",
+        },
+      }
+    : { ...seeded, id: newId("sig") };
   const { contextId, planId } = await injectSignal(store, signal);
   after(async () => {
     try {
