@@ -60,6 +60,41 @@ describe("the demo reel, read live from its owner's Instagram", () => {
   });
 });
 
+describe("every Instagram failure falls back quietly, and is retried after a minute", () => {
+  beforeEach(() => {
+    resetLiveReelCache();
+    vi.stubEnv("INSTAGRAM_ACCESS_TOKEN", "test-token");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["an expired token (OAuth error 190)", { status: 400, body: { error: { code: 190, message: "Session has expired" } } }],
+    ["a rate limit", { status: 429, body: { error: { code: 4, message: "Application request limit reached" } } }],
+    ["a reel that is not a reel any more", { status: 200, body: { id: "1", media_type: "IMAGE" } }],
+  ])("%s", async (_name, { status, body }) => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: status === 200, status, json: async () => body }) as Response));
+    expect(await getLiveReel(0)).toBeNull();
+  });
+
+  it("a timeout", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError"))));
+    expect(await getLiveReel(0)).toBeNull();
+  });
+
+  it("asks again a minute after a failure, not ten", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) }) as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    await getLiveReel(0);
+    await getLiveReel(30_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await getLiveReel(61_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("the chat shows the live reel when there is one", () => {
   it("swaps the seeded reel card for the owner's reel, labeled as live", async () => {
     const live = { ...rawShawarmaSignal().media, username: "owner.account", caption: "real caption", permalink: "https://www.instagram.com/reel/Abc123/" };

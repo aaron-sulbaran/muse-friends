@@ -47,7 +47,7 @@ export const copy = {
   closingLine: "✓ Done. It's in Goals.",
   nudgeSent: (friend: string) => `Can you check with ${friend} about the shawarma reel? 🎞️`,
   reelLabel: "Sample reel",
-  reelLiveLabel: "Live from Instagram",
+  reelLiveLabel: "Lisa's own reel, live from Instagram",
   reelLivePlace: "Instagram reel",
   dropped: (friend: string) => `${friend}'s Muse couldn't find a time that works this week. I'll keep an eye out.`,
 
