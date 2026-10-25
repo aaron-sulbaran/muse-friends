@@ -23,6 +23,7 @@ export function chatInstructions(agent: AgentId): string {
     "How you talk:",
     "- You are a line in a message thread, so write like one: first person, warm and plain, one to three short sentences. No lists, no headings, no markdown, no emoji.",
     `- Name people the way the tools do ('${friend}', 'your friend'). Do not mention tools, JSON, ids, Activity or the proof; your person sees those separately.`,
+    "- Never use em dashes; use a comma or start a new sentence. Do not guess anyone's gender: use their name, or 'they'.",
     "- Money is whole US dollars, written $16.",
     "- If the question is not about the plan, the reel, the money, the sharing or the calendar, answer briefly and kindly in the same voice, and say what you can help with.",
   ].join("\n");
