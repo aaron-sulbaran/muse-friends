@@ -15,6 +15,8 @@ import { getRoom } from "@/lib/ui/room";
 import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
 import { useFriendReplied } from "@/lib/ui/use-friend-reply";
 import { useOnboarding } from "@/lib/ui/use-onboarding";
+import { AFTER_SKIP_IDS, SKIP_AFTER_MS, SKIP_SEPARATOR_IDS, skipTarget } from "@/lib/ui/time-skip";
+import { useSkipReveal, useTimeSkip } from "@/lib/ui/use-time-skip";
 import type { Role, UiPayment, UiSnapshot } from "@/lib/ui/types";
 import { DaySeparator, TypingDots } from "./ChatBubble";
 import { AgreedLine } from "./AgreedLine";
@@ -44,6 +46,7 @@ import { ReplayBadge } from "./ReplayBadge";
 import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
 import { ThreadBubble } from "./ThreadBubble";
+import { TimeSkipCard } from "./TimeSkipCard";
 import { TabBar, type Tab } from "./TabBar";
 import { WalletChip } from "./WalletChip";
 
@@ -150,8 +153,20 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   const shownItems: ChatItem[] = onboardingOn
     ? [...onboardingItems(onboardingState, view.friendHumanName), ...(onboardingActive ? [] : friendsOff ? view.items.filter((item) => item.kind !== "start-card" && item.kind !== "contact-entry") : view.items)]
     : view.items;
-  const chatItems = withReelArrival(shownItems, arrival, snapshot.plan !== null);
+  const allItems = withReelArrival(shownItems, arrival, snapshot.plan !== null);
+  // Skips land one at a time, even on a phone that hears of two at once.
+  const chatItems = useSkipReveal(allItems);
   const composerOn = role === "a" && !readOnly && !onboardingActive;
+  // Adding the hold to a calendar skips ahead to the reminder; from there the clock moves to the next morning by itself.
+  // Side a moves it first; side b waits a little longer, so it moves the clock only when no side a phone is open.
+  const timeSkip = useTimeSkip({
+    plan: snapshot.plan,
+    items: chatItems,
+    enabled: !readOnly && snapshot.mode !== "replay",
+    delayMs: role === "a" ? SKIP_AFTER_MS : SKIP_AFTER_MS + 2_500,
+    onChanged,
+  });
+  const pendingSkip = timeSkip.pending && snapshot.plan ? skipTarget(snapshot.plan, timeSkip.pending) : null;
   const goalContext: GoalContext = {
     friend: view.group ? listOf(view.group.others.map((other) => other.name)) : view.friendHumanName,
     reelOwner: role === "a" ? `${view.friendHumanName}'s` : "your",
@@ -260,7 +275,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     if (isGroupItem(item)) return <GroupItem item={item} readOnly={readOnly} onChanged={onChanged} />;
     switch (item.kind) {
       case "separator":
-        return <DaySeparator day={item.day} time={item.time} />;
+        return SKIP_SEPARATOR_IDS.has(item.id) ? <TimeSkipCard day={item.day} time={item.time} /> : <DaySeparator day={item.day} time={item.time} />;
       case "onboarding-friends":
         return <FriendsOptInCard state={onboardingState} dispatch={dispatchOnboarding} />;
       case "onboarding-optout":
@@ -330,7 +345,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "outcome-replies":
         return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
-        return <HoldRow planId={item.planId} role={role} title={item.title} when={item.when} googleUrl={item.googleUrl} disabled={readOnly} />;
+        return <HoldRow planId={item.planId} role={role} title={item.title} when={item.when} googleUrl={item.googleUrl} disabled={readOnly} onAdded={timeSkip.skipNow} />;
       case "payment-card":
         return <PaymentCard payment={item.payment} side={item.side} friendName={item.friendName} friendMuse={item.friendMuse} onOpen={onOpenPayment} />;
       case "settle-card":
@@ -441,7 +456,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 const previous = chatItems[index - 1];
                 const line = lineOf(item);
                 return (
-                  <div key={item.id} className={spacingBefore(previous, item, lineOf)}>
+                  <div key={item.id} className={`${spacingBefore(previous, item, lineOf)} ${AFTER_SKIP_IDS.has(item.id) ? "animate-after-skip" : ""}`}>
                     {line ? (
                       <ThreadBubble line={line} showSender={startsRun(lineOf(previous), line)} showPicture={endsRun(line, lineOf(chatItems[index + 1]))} />
                     ) : (
@@ -450,6 +465,11 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                   </div>
                 );
               })}
+              {pendingSkip ? (
+                <div className="mt-4">
+                  <TimeSkipCard day={pendingSkip.day} time={pendingSkip.time} />
+                </div>
+              ) : null}
               {thinking ? (
                 <div className="mt-3.5">
                   <TypingDots />
