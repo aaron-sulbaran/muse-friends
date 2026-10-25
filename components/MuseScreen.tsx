@@ -28,6 +28,8 @@ type Props = {
   onChanged: () => void;
   /** True while a recording is on screen: nothing here may touch live state. */
   readOnly?: boolean;
+  /** A run could not start because the live-run caps are reached; the page falls back to a recording. */
+  onPaused?: (text: string) => void;
 };
 
 function StatusBar({ time }: { time: string }) {
@@ -50,7 +52,7 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
 }
 
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
-export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false }: Props) {
+export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused }: Props) {
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
   const [replanError, setReplanError] = useState<string | null>(null);
@@ -86,7 +88,8 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     setReplanError(null);
     const result = await postReplan(planId, role);
     setPending(false);
-    if (!result.ok) setReplanError(result.message);
+    if (!result.ok && result.paused) onPaused?.(result.message);
+    else if (!result.ok) setReplanError(result.message);
     onChanged();
   }
 
@@ -124,7 +127,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
       case "draft-card":
         return <DraftCard draft={item.draft} onHandoff={(via) => handoff(item.plan.id, via)} />;
       case "start-card":
-        return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} />;
+        return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} onPaused={onPaused} />;
       case "hold-row":
         return <HoldRow planId={item.planId} role={role} title={item.title} googleUrl={item.googleUrl} disabled={readOnly} />;
     }

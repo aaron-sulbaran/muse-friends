@@ -1,8 +1,8 @@
 import type { Category, Role } from "./types";
 
-export type Result = { ok: true } | { ok: false; message: string };
+export type Result = { ok: true } | { ok: false; message: string; paused?: boolean };
 
-type ErrorBody = { error?: string | { message?: string } | null };
+type ErrorBody = { error?: string | { message?: string } | null; paused?: boolean; text?: string };
 
 async function post(url: string, body: unknown): Promise<Result> {
   try {
@@ -15,6 +15,8 @@ async function post(url: string, body: unknown): Promise<Result> {
     const payload = (await response.json().catch(() => null)) as ErrorBody | null;
     const error = payload?.error;
     const message = typeof error === "string" ? error : error?.message;
+    // A paused budget (429) is not a failure: the page falls back to a recording and says why.
+    if (response.status === 429 && payload?.paused === true) return { ok: false, message: payload.text ?? "Live runs paused, playing a recording", paused: true };
     return { ok: false, message: message ?? `Request failed with ${response.status}` };
   } catch {
     return { ok: false, message: "Could not reach the server" };

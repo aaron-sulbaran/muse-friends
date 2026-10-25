@@ -5,10 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { THREAD_CAP } from "@/lib/protocol";
 import { copy } from "@/lib/ui/copy";
 import { formatLatency, formatTimeWithSeconds, type Names } from "@/lib/ui/format";
-import type { UiMessage } from "@/lib/ui/types";
+import type { UiMessage, UiSnapshot } from "@/lib/ui/types";
 
 type Props = {
   message: UiMessage | null;
+  /** The live-run caps, shown beside the message so a judge can see the credits are bounded. */
+  budget: UiSnapshot["budget"];
   names: Names;
   onClose: () => void;
 };
@@ -23,7 +25,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** Raw protocol JSON for Q&A. Collapsed by default; the consumer view never shows it. */
-export function JsonDrawer({ message, names, onClose }: Props) {
+export function JsonDrawer({ message, budget, names, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -105,6 +107,11 @@ export function JsonDrawer({ message, names, onClose }: Props) {
               <span className="font-sans text-[13px] text-muted">{copy.drawerNoModelCall}</span>
             )}
           </Section>
+          {budget ? (
+            <Section title={copy.drawerBudget}>
+              <pre className="whitespace-pre-wrap">{JSON.stringify(budget, null, 2)}</pre>
+            </Section>
+          ) : null}
           <footer className="mt-6">
             <button
               type="button"
