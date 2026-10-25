@@ -41,15 +41,16 @@ Check it by pointing a phone camera at the file opened on screen; it must open t
 
 ### H1. Push the secrets into Vercel (Aaron, 3 minutes)
 
-Production needs `MODEL_API_KEY` (the agents) and the two MCP tokens (the connector front door). One script copies them from `code/.env` to the Vercel project for Production and Preview, stored as Sensitive, and never prints a value. It generates `MCP_TOKEN_A` and `MCP_TOKEN_B` into `.env` first if they are missing.
+Production needs `MODEL_API_KEY` for the agents (and, later, the Supabase variables, see H3), plus the two MCP tokens once the connector test is on. One script copies what is set in `code/.env` to the Vercel project for Production and Preview, stored as Sensitive, and never prints a value. Do this before the P1 checkpoint (Sun 12:00am).
 
-1. In a terminal, from the `code` folder (the checkout that holds your real `.env`): `./scripts/push-env-to-vercel.sh --dry-run`. Expect a list of names with character counts and `dry run only; nothing was changed.`
-2. Run `./scripts/push-env-to-vercel.sh`. Expect `pushed MODEL_API_KEY`, `pushed MCP_TOKEN_A`, `pushed MCP_TOKEN_B`. If the Vercel CLI asks which Git branch a Preview variable is for, press Enter (all branches).
-3. Check: `vercel env ls` lists the three names for Production and Preview.
-4. Redeploy so the running deployment picks them up: open https://vercel.com/aaron-sulbaran-projects/muse-friends, **Deployments**, the latest production deployment, **...**, **Redeploy**, confirm. Expect Ready in about 30 seconds. (Any merge to `main` also redeploys.)
-5. Check the front door: `./scripts/mcp-smoke.sh`. Expect four `PASS` lines and `all checks passed.`
+1. In a terminal, from the `code` folder (the checkout that holds your real `.env`): `./scripts/push-env-to-vercel.sh --dry-run`. Expect names with character counts and `dry run only; nothing was changed.`
+2. Run `./scripts/push-env-to-vercel.sh`. Expect `pushed MODEL_API_KEY (49 characters, secret)`. If the Vercel CLI asks which Git branch a Preview variable is for, press Enter (all branches).
+3. Check: `vercel env ls` lists `MODEL_API_KEY` for Production and Preview.
+4. Redeploy so the running deployment picks it up: open https://vercel.com/aaron-sulbaran-projects/muse-friends, **Deployments**, the latest production deployment, **...**, **Redeploy**, confirm. Expect Ready in about 30 seconds. (Any merge to `main` also redeploys.)
 
-Dashboard fallback if the script fails: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables, **Add Environment Variable**, one per name, value from `.env` (the text after the `=`, no quotes), Environments **Production** and **Preview**, **Sensitive** on, **Save**; then redeploy as in step 4.
+If the connector test (H4) is on: add `--with-mcp-tokens` to step 2 (it generates `MCP_TOKEN_A` and `MCP_TOKEN_B` into `.env` first), and after the redeploy run `./scripts/mcp-smoke.sh`; expect four `PASS` lines and `all checks passed.`
+
+Dashboard fallback if the script fails: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables, **Add Environment Variable**, key `MODEL_API_KEY`, value from `.env` (the text after the `=`, no quotes), Environments **Production** and **Preview**, **Sensitive** on, **Save**; then redeploy as in step 4. Re-run the script (or repeat the dashboard steps) whenever a new variable is added to `.env`.
 
 ### H2. Connect musefriends.tech (Aaron, 10 minutes, after claiming the domain)
 

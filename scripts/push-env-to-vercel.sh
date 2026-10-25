@@ -3,18 +3,26 @@
 # Production and Preview environments. Secrets are stored as Sensitive. Values are piped to the
 # Vercel CLI and never printed; the output shows names and lengths only.
 #
-#   ./scripts/push-env-to-vercel.sh            push everything that is set in .env
-#   ./scripts/push-env-to-vercel.sh --dry-run  show what would be pushed, change nothing
+#   ./scripts/push-env-to-vercel.sh                    push everything that is set in .env
+#   ./scripts/push-env-to-vercel.sh --dry-run          show what would be pushed, change nothing
+#   ./scripts/push-env-to-vercel.sh --with-mcp-tokens  first generate MCP_TOKEN_A and MCP_TOKEN_B
+#                                                      into .env if they are missing, then push
 #
-# MCP_TOKEN_A and MCP_TOKEN_B are generated into .env first when they are missing. Safe to re-run:
-# it overwrites the same variables. Environment variables only reach deployments made after the push,
-# so redeploy afterwards (Deployments, the latest production deployment, Redeploy).
+# Safe to re-run: it overwrites the same variables. Environment variables only reach deployments made
+# after the push, so redeploy afterwards (Deployments, the latest production deployment, Redeploy).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 dry_run=false
-[ "${1:-}" = "--dry-run" ] && dry_run=true
+with_mcp_tokens=false
+for argument in "$@"; do
+  case "$argument" in
+    --dry-run) dry_run=true ;;
+    --with-mcp-tokens) with_mcp_tokens=true ;;
+    *) echo "unknown option: $argument" >&2; exit 1 ;;
+  esac
+done
 
 env_file=".env"
 if [ ! -f "$env_file" ]; then
@@ -66,8 +74,10 @@ if ! $dry_run && [ ! -f .vercel/project.json ]; then
   vercel link --yes --project muse-friends --scope aaron-sulbaran-projects
 fi
 
-ensure_token MCP_TOKEN_A
-ensure_token MCP_TOKEN_B
+if $with_mcp_tokens; then
+  ensure_token MCP_TOKEN_A
+  ensure_token MCP_TOKEN_B
+fi
 
 push MODEL_API_KEY secret
 push MCP_TOKEN_A secret
