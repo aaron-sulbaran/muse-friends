@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { liveShawarmaRun } from "@/lib/seed/live";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { buildReplay } from "@/lib/ui/replay";
+import { EXCHANGE_FRESH_MS, EXCHANGE_HOLD_MS, exchangeHoldFor } from "@/lib/ui/use-exchange";
 
 // Replay is built from the recorded run, one frame per beat, with the same in-flight call each frame would have had live.
 // So the typing bubble and the fold must play in Replay with nothing recorded for them.
@@ -32,5 +33,23 @@ describe("the live exchange in Replay", () => {
     expect(talk(folded)).toEqual([]);
     expect(kindsOf(folded)).toContain("agreed-line");
     expect(kindsOf(folded)).not.toContain("thread-typing");
+  });
+});
+
+describe("how long the finished exchange stays", () => {
+  const agreed = "2026-10-25T10:00:00-05:00";
+  const at = (ms: number) => Date.parse(agreed) + ms;
+
+  it("is the full hold, about two seconds, for an agreement the phone is watching happen", () => {
+    expect(EXCHANGE_HOLD_MS).toBe(2000);
+    expect(exchangeHoldFor(agreed, at(0))).toBe(EXCHANGE_HOLD_MS);
+    expect(exchangeHoldFor(agreed, at(EXCHANGE_FRESH_MS - 1))).toBe(EXCHANGE_HOLD_MS);
+  });
+
+  it("is none for an old agreement, so a reload or a recording starts folded", () => {
+    expect(exchangeHoldFor(agreed, at(EXCHANGE_FRESH_MS))).toBe(0);
+    expect(exchangeHoldFor(agreed, at(60 * 60 * 1000))).toBe(0);
+    const recorded = replay.frames.at(-1)!.snapshot.plan!.history.find((entry) => entry.state === "awaiting_humans")!;
+    expect(exchangeHoldFor(recorded.at, Date.now())).toBe(0);
   });
 });
