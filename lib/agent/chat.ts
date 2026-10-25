@@ -86,6 +86,7 @@ export async function runChatTurn(options: ChatOptions): Promise<ChatOutcome> {
   const last = result.calls.at(-1);
   const proof: ModelProof = {
     model: last?.model ?? "",
+    ...(last?.fallbackFrom ? { fallbackFrom: last.fallbackFrom } : {}),
     responseId: last?.responseId ?? "",
     latencyMs: result.totalMs,
     inputTokens: result.calls.reduce((sum, call) => sum + call.inputTokens, 0),

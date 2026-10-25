@@ -70,6 +70,7 @@ function proofFrom(meta: ToolMeta | undefined, current: { name: string; args: un
   return meta
     ? {
         model: meta.model,
+        ...(meta.call.fallbackFrom ? { fallbackFrom: meta.call.fallbackFrom } : {}),
         responseId: meta.responseId,
         latencyMs: meta.call.ms,
         inputTokens: meta.call.inputTokens,

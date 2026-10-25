@@ -361,7 +361,9 @@ export const ToolCallProof = z.strictObject({
 export type ToolCallProof = z.infer<typeof ToolCallProof>;
 
 export const ModelProof = z.strictObject({
+  // The model that answered. `fallbackFrom` is the configured model that answered 404 when a fallback answered instead.
   model: z.string().max(40),
+  fallbackFrom: z.string().max(40).optional(),
   responseId: z.string().max(80),
   latencyMs: z.number().int().min(0),
   inputTokens: z.number().int().min(0),
