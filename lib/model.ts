@@ -139,10 +139,15 @@ export type ToolCallTrace = {
   error?: string;
 };
 
+// One hosted web search the model ran during a turn: the query it chose and the hits it got (title and address only).
+export type WebSearch = { query: string; results: Array<{ title: string; url: string }> };
+
 export type TurnResult = {
   status: "completed" | "failed";
   failure?: TurnFailure;
   finalText: string;
+  // The hosted web searches this turn ran, in order. Only when a hosted web_search tool was offered and used.
+  searches?: WebSearch[];
   nudged: boolean;
   toolCalls: ToolCallTrace[];
   calls: ModelCallTrace[];
@@ -172,6 +177,14 @@ function defaultEffort(): Effort {
   return configured === "low" || configured === "medium" || configured === "high" ? configured : "minimal";
 }
 
+// A tool the model API runs itself (no handler here): today only the hosted web search of the Responses API
+// (dev.meta.ai/docs/search-grounding). The model decides whether to search; its hits come back on the response.
+export type HostedTool = {
+  type: "web_search";
+  search_context_size?: "low" | "medium" | "high";
+  user_location?: { type: "approximate"; country?: string; region?: string; city?: string; timezone?: string };
+};
+
 export type AgentTurnOptions = {
   instructions: string;
   // The thread history and the new message, as the user turn. A friend agent's words go here,
@@ -179,6 +192,8 @@ export type AgentTurnOptions = {
   input: string | ResponseInput;
   tools: ToolDefinition[];
   handlers: Record<string, ToolHandler>;
+  // Tools the API runs itself, offered next to the function tools above.
+  hostedTools?: HostedTool[];
   // The turn is only done once one of these succeeded (for example send_to_friend_agent). A reply
   // with no tool call before that gets one nudge, then the turn fails. Omit when prose is fine.
   requiredTools?: string[];
@@ -199,6 +214,29 @@ export type AgentTurnOptions = {
 function toFunctionTool(tool: ToolDefinition): FunctionTool {
   // `strict` stays false: optional fields cannot satisfy strict mode, and zod is the enforcement.
   return { type: "function", name: tool.name, description: tool.description, parameters: tool.parameters, strict: false };
+}
+
+// The text of the answer: the last message of the response. A response that searched the web carries a message before the
+// search ("I'll look that up") and the answer after it; the SDK's concatenated output_text would glue the two together.
+function answerText(response: Response): string {
+  const messages = response.output.filter((item) => item.type === "message");
+  const last = messages.at(-1);
+  if (last && last.type === "message") {
+    const text = last.content.flatMap((part) => (part.type === "output_text" ? [part.text] : [])).join("");
+    if (text !== "" || messages.length > 1) return text;
+  }
+  return response.output_text ?? "";
+}
+
+// The hosted searches in a response: the query the model chose and each hit's title and address.
+function searchesOf(response: Response): WebSearch[] {
+  return response.output.flatMap((item): WebSearch[] => {
+    if ((item as { type?: string }).type !== "web_search_call") return [];
+    const call = item as unknown as { action?: { query?: unknown }; results?: Array<{ title?: unknown; url?: unknown }> };
+    const query = typeof call.action?.query === "string" ? call.action.query : "";
+    const results = (call.results ?? []).flatMap((hit) => (typeof hit.url === "string" ? [{ title: typeof hit.title === "string" ? hit.title : "", url: hit.url }] : []));
+    return [{ query, results }];
+  });
 }
 
 function statusOf(error: unknown): number | undefined {
@@ -350,7 +388,11 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
   const started = Date.now();
   const cap = options.maxToolCalls ?? MAX_TOOL_CALLS_PER_TURN;
   const required = new Set(options.requiredTools ?? []);
-  const tools = options.tools.map(toFunctionTool);
+  const hosted = options.hostedTools ?? [];
+  const tools = [...options.tools.map(toFunctionTool), ...(hosted as unknown as FunctionTool[])];
+  // With a hosted search on, ask for its hits too (they come back on the response, not in the model's words).
+  const searchInclude = hosted.some((tool) => tool.type === "web_search") ? (["web_search_call.results"] as const) : ([] as const);
+  const searches: WebSearch[] = [];
   const calls: ModelCallTrace[] = [];
   const toolCalls: ToolCallTrace[] = [];
   // The same calls as one-line summaries for the message proof; kept beside the traces, never sent to the model.
@@ -375,6 +417,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
     status,
     failure,
     finalText,
+    ...(searches.length > 0 ? { searches } : {}),
     nudged,
     toolCalls,
     calls,
@@ -391,12 +434,13 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
       tools,
       reasoning: { effort: options.effort ?? defaultEffort() },
       max_output_tokens: options.maxOutputTokens ?? 4096,
+      ...(searchInclude.length > 0 ? { include: [...searchInclude] } : {}),
     } satisfies Partial<ResponseCreateParamsNonStreaming>;
     try {
       if (mode === "chain") {
         ({ response, chainRetries, ...answeredBy } = await createResponse({ ...shared, input: pending, previous_response_id: previousResponseId }, route));
       } else {
-        const stateless = { ...shared, store: false, include: ["reasoning.encrypted_content" as const] };
+        const stateless = { ...shared, store: false, include: ["reasoning.encrypted_content" as const, ...searchInclude] };
         try {
           ({ response, chainRetries, ...answeredBy } = await createResponse({ ...stateless, input: history }, route));
         } catch (error) {
@@ -423,7 +467,8 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
       cachedTokens: response.usage?.input_tokens_details?.cached_tokens ?? 0,
     };
     calls.push(trace);
-    finalText = response.output_text ?? "";
+    finalText = answerText(response);
+    searches.push(...searchesOf(response));
 
     if (response.status !== "completed") {
       return finish("failed", {

@@ -1,6 +1,6 @@
 import { copy } from "./copy";
 import { messageTitle, namesFor, policyStampFor } from "./format";
-import type { AgentId, MemberId, MessageType, Role, UiPlan, UiSnapshot } from "./types";
+import type { AgentId, MemberId, MessageType, Role, UiPlan, UiSnapshot, UiSource } from "./types";
 
 /*
  * The phone thread as people read it (D32): the person and their friend still talking, with both Muses in the same
@@ -29,6 +29,8 @@ export type ThreadLine = {
   /** For your own private question: the Muse it went to, named above the bubble. */
   to?: string;
   at?: string;
+  /** On a Muse's answer that used a web search: the pages it found, shown as "Source" chips under the bubble. */
+  sources?: UiSource[];
   /**
    * Where in the chat it belongs: "talk" with the Muses' turns before the offer, "after" once the person has decided, and
    * "reply" for the friend's answer to the message the person sent her, which sits right after the draft and its handoff.
@@ -101,7 +103,7 @@ export function threadLines(snapshot: UiSnapshot, role: Role, options: ThreadOpt
   if (role === "a") {
     for (const entry of snapshot.chat) {
       const sender: Sender = entry.from === "user" ? { kind: "you", name: names.human[me] } : muse(me);
-      lines.push({ id: `thread-chat-${entry.id}`, sender, text: entry.text, onlyYou: true, ...(entry.from === "user" ? { to: snapshot.sides[me] } : {}), at: entry.at, phase: "after" });
+      lines.push({ id: `thread-chat-${entry.id}`, sender, text: entry.text, onlyYou: true, ...(entry.from === "user" ? { to: snapshot.sides[me] } : {}), ...(entry.sources && entry.sources.length > 0 ? { sources: entry.sources } : {}), at: entry.at, phase: "after" });
     }
     lines.sort((first, second) => Date.parse(first.at ?? "") - Date.parse(second.at ?? ""));
   }

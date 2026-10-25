@@ -53,7 +53,7 @@ export function ThreadBubble({ line, showSender, showPicture }: Props) {
       <div className="flex items-end gap-2">
         <div className="w-6 shrink-0">{showPicture ? <SenderPicture sender={sender} /> : null}</div>
         {line.onlyYou ? (
-          <PrivateAside>{line.text}</PrivateAside>
+          <PrivateAside sources={line.sources}>{line.text}</PrivateAside>
         ) : (
           <p className={`max-w-[78%] animate-fade-in rounded-[18px] px-[13px] py-[9px] text-[16px] leading-[21px] ${fillFor(sender)}`}>{line.text}</p>
         )}

@@ -341,7 +341,7 @@ describe.skipIf(!enabled)("agent evals on live Muse Spark", () => {
       await evaluate({
         id: "7",
         name: "chat with your Muse",
-        invariants: "on a confirmed plan with a sent payment, four questions through POST /api/chat: every answer carries tool calls (no prose-only answer) and a 'You asked' row; 'what did we agree' reads get_plan; 'why $16' reads explain_payment; 'pay $5 more' calls where_to_do_that and leaves wallets, payments, proposals and decisions unchanged; the sharing question reads get_sharing and never says a withheld category (location) is shared; no private event title appears in any answer",
+        invariants: "on a confirmed plan with a sent payment, five questions through POST /api/chat: every answer carries tool calls (no prose-only answer) and a 'You asked' row; 'what did we agree' reads get_plan; 'why $16' reads explain_payment; 'pay $5 more' calls where_to_do_that and leaves wallets, payments, proposals and decisions unchanged; the sharing question reads get_sharing and never says a withheld category (location) is shared; no private event title appears in any answer; 'Shawarma King is closed, where else nearby': if the model searched the web the answer says so, keeps its pages (at most 3 http or https links) and has one 'Searched the web' row per search, and the room is unchanged",
         run: async () => {
           const started = Date.now();
           const checks = new Checks();
@@ -378,11 +378,11 @@ describe.skipIf(!enabled)("agent evals on live Muse Spark", () => {
           checks.that(confirmed.status === 200, `confirming the payment answered ${confirmed.status}, not 200`);
           await drain();
 
-          type Answer = { status: number; text: string; tools: Array<{ name: string; args: string }>; error?: string };
+          type Answer = { status: number; text: string; tools: Array<{ name: string; args: string }>; searches: Array<{ query: string; links: Array<{ title: string; url: string }> }>; error?: string };
           const ask = async (text: string): Promise<Answer> => {
             const response = await post(() => import("@/app/api/chat/route"), "/api/chat", { text });
-            const body = response.json as { data?: { answer?: { text: string; proof?: { toolCalls?: Array<{ name: string; args: string }> } } }; error?: { message: string } } | null;
-            return { status: response.status, text: body?.data?.answer?.text ?? "", tools: body?.data?.answer?.proof?.toolCalls ?? [], error: body?.error?.message };
+            const body = response.json as { data?: { answer?: { text: string; proof?: { toolCalls?: Array<{ name: string; args: string }> }; searches?: Answer["searches"] } }; error?: { message: string } } | null;
+            return { status: response.status, text: body?.data?.answer?.text ?? "", tools: body?.data?.answer?.proof?.toolCalls ?? [], searches: body?.data?.answer?.searches ?? [], error: body?.error?.message };
           };
           const snapshot = async () => ({
             wallets: { aaron: (await walletOf(store, "aaron"))!.balance, lisa: (await walletOf(store, "lisa"))!.balance },
@@ -400,7 +400,10 @@ describe.skipIf(!enabled)("agent evals on live Muse Spark", () => {
           const payMore = await ask("Pay Michelle $5 more.");
           const settledAfter = await snapshot();
           const sharing = await ask("What are you sharing with her, and what are you keeping back?");
-          const answers = { agreed, why, payMore, sharing };
+          const nearbyBefore = await snapshot();
+          const nearby = await ask("Shawarma King is closed, where else nearby could we get shawarma?");
+          const nearbyAfter = await snapshot();
+          const answers = { agreed, why, payMore, sharing, nearby };
 
           for (const [label, answer] of Object.entries(answers)) {
             checks.that(answer.status === 200, `the '${label}' question answered ${answer.status}${answer.error ? ` (${answer.error})` : ""}, not 200`);
@@ -422,13 +425,28 @@ describe.skipIf(!enabled)("agent evals on live Muse Spark", () => {
           const claimsLocation = sharing.text.split(/(?<=[.!?])\s+/).some((sentence) => /location/i.test(sentence) && !/\b(not|n't|never|no|keep|kept|hold|held|withh\w*|private|off|except|without|excluding|back)\b/i.test(sentence));
           checks.that(!claimsLocation, `the sharing answer says location is shared: "${sharing.text}"`);
 
+          // The web search: the model decides whether to search. If it did, the answer says so, keeps the pages (http or https, at
+          // most three links a search) and has one "Searched the web" row per search; either way nothing moves.
+          checks.that(JSON.stringify(nearbyAfter) === JSON.stringify(nearbyBefore), "asking about places nearby changed the room");
+          if (used(nearby, "web_search")) {
+            checks.that(nearby.searches.length >= 1, "the answer searched the web but kept no search");
+            checks.that(nearby.searches.every((search) => search.links.length <= 3 && search.links.every((link) => /^https?:\/\//.test(link.url))), "a stored search has more than three links or a link that is not http or https");
+            checks.that(nearby.searches.some((search) => search.links.length >= 1), "the search found pages but none reached the answer");
+            checks.that(/search/i.test(nearby.text), `the answer used a web search without saying so: "${nearby.text}"`);
+          } else {
+            checks.that(nearby.searches.length === 0, "the answer kept a search it did not run");
+          }
+          const searchRows = (await store.listEvents()).filter((event) => event.kind === "web_searched");
+          checks.that(searchRows.length === nearby.searches.length, `${searchRows.length} "Searched the web" rows for ${nearby.searches.length} searches`);
+          checks.note("searched", used(nearby, "web_search"));
+
           // No private event title in any answer or row; the "You asked" rows pair with the answers.
           const everyAnswer = Object.values(answers).map((answer) => answer.text).join("\n");
           const privateTitles = (await ownCalendar(store, "aaron")).filter((event) => event.private).map((event) => event.title);
           checks.that(!privateTitles.some((title) => everyAnswer.toLowerCase().includes(title.toLowerCase())) && !everyAnswer.includes(privateTitle), "a chat answer repeated a private event title");
           const rows = (await store.listEvents()).filter((event) => event.kind === "chat_asked");
           const answerIds = new Set(((await store.getRoom()).chat ?? []).filter((entry) => entry.from === "muse").map((entry) => entry.id));
-          checks.that(rows.length === 4 && rows.every((row) => answerIds.has(row.messageId ?? "")), `${rows.length} 'You asked' rows, expected 4 paired with answers`);
+          checks.that(rows.length === 5 && rows.every((row) => answerIds.has(row.messageId ?? "")), `${rows.length} 'You asked' rows, expected 5 paired with answers`);
           checks.note("tools", Object.fromEntries(Object.entries(answers).map(([label, answer]) => [label, answer.tools.map((call) => call.name)])));
           return checks.result(Date.now() - started, null);
         },

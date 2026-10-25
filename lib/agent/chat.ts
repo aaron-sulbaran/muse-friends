@@ -1,8 +1,8 @@
-import { runAgentTurn, type ToolHandler } from "@/lib/model";
-import { CHAT_KEPT, CHAT_QUESTION_MAX, ChatEntry, type ActivityEvent, type AgentId, type ModelProof } from "@/lib/protocol";
+import { runAgentTurn, type HostedTool, type ToolHandler, type WebSearch } from "@/lib/model";
+import { CHAT_KEPT, CHAT_QUESTION_MAX, ChatEntry, type ActivityEvent, type AgentId, type ModelProof, type SearchLink } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
-import { summarizeToolCall } from "@/lib/tool-summary";
+import { summarizeSearch, summarizeToolCall } from "@/lib/tool-summary";
 import { buildChatTools, CHAT_TOOL_NAMES } from "./chat-tools";
 import { chatInstructions, chatTurnInput } from "./chat-prompts";
 import { newId } from "./ids";
@@ -24,6 +24,36 @@ export type ChatOptions = { store: Store; agent?: AgentId; text: string; wallNow
 export type ChatOutcome =
   | { ok: true; question: ChatEntry; answer: ChatEntry }
   | { ok: false; status: 400 | 503; error: string };
+
+// The hosted web search of the Responses API (dev.meta.ai/docs/search-grounding), offered to the chat next to the read tools.
+// The model decides when to search; the instructions limit it to places and facts outside the plan. "low" context keeps it quick.
+export const WEB_SEARCH: HostedTool = {
+  type: "web_search",
+  search_context_size: "low",
+  user_location: { type: "approximate", country: "US", region: "Texas", city: "Austin", timezone: "America/Chicago" },
+};
+
+// The pages a search found, as small links: http(s) only, one per site first, three at most. Third-party data.
+export function linksOf(search: WebSearch): SearchLink[] {
+  const seen = new Set<string>();
+  const links: SearchLink[] = [];
+  for (const hit of search.results) {
+    if (hit.url.length > 300) continue;
+    let host: string;
+    try {
+      const url = new URL(hit.url);
+      if (url.protocol !== "https:" && url.protocol !== "http:") continue;
+      host = url.hostname.replace(/^www\./, "");
+    } catch {
+      continue;
+    }
+    if (seen.has(host)) continue;
+    seen.add(host);
+    links.push({ title: (hit.title.trim() || host).slice(0, 120), url: hit.url });
+    if (links.length === 3) break;
+  }
+  return links;
+}
 
 const unavailable = (agent: AgentId) => `${displayName(agent)}'s Muse could not answer just now: the model is not responding. Your question was not sent; try again in a moment.`;
 
@@ -65,6 +95,7 @@ export async function runChatTurn(options: ChatOptions): Promise<ChatOutcome> {
     input: chatTurnInput({ agent, text, earlier, nowIso: clock.now }),
     tools,
     handlers: recording(handlers, summaries),
+    hostedTools: [WEB_SEARCH],
     // Prose is the answer. More than a handful of lookups for one question is a loop, so the cap stays low.
     maxToolCalls: 5,
   });
@@ -83,6 +114,8 @@ export async function runChatTurn(options: ChatOptions): Promise<ChatOutcome> {
     return { ok: false, status: 503, error: unavailable(agent) };
   }
 
+  // The searches the model ran: what it asked, and the pages that came back. Kept on the answer and one row each in Activity.
+  const searched = (result.searches ?? []).slice(0, 3).map((search) => ({ query: (search.query.replace(/\s+/g, " ").trim() || "the web").slice(0, 120), links: linksOf(search), summary: summarizeSearch(search) }));
   const last = result.calls.at(-1);
   const proof: ModelProof = {
     model: last?.model ?? "",
@@ -92,11 +125,11 @@ export async function runChatTurn(options: ChatOptions): Promise<ChatOutcome> {
     inputTokens: result.calls.reduce((sum, call) => sum + call.inputTokens, 0),
     outputTokens: result.calls.reduce((sum, call) => sum + call.outputTokens, 0),
     reasoningTokens: result.calls.reduce((sum, call) => sum + call.reasoningTokens, 0),
-    ...(summaries.length > 0 ? { toolCalls: summaries.slice(-10) } : {}),
+    ...(summaries.length + searched.length > 0 ? { toolCalls: [...summaries, ...searched.map((entry) => entry.summary)].slice(-10) } : {}),
   };
   const at = toCentralIso(nowMs(options));
   const question = ChatEntry.parse({ id: newId("chat", nowMs(options)), from: "user", text, at });
-  const answer = ChatEntry.parse({ id: newId("chat", nowMs(options) + 1), from: "muse", text: answerText.slice(0, 1500), at: toCentralIso(nowMs(options) + 1), replyTo: question.id, proof });
+  const answer = ChatEntry.parse({ id: newId("chat", nowMs(options) + 1), from: "muse", text: answerText.slice(0, 1500), at: toCentralIso(nowMs(options) + 1), replyTo: question.id, proof, ...(searched.length > 0 ? { searches: searched.map(({ query, links }) => ({ query, links })) } : {}) });
 
   await withLock("room-chat", async () => {
     const room = await store.getRoom();
@@ -114,5 +147,18 @@ export async function runChatTurn(options: ChatOptions): Promise<ChatOutcome> {
     text: `You asked: ${text.length > 200 ? `${text.slice(0, 199)}…` : text}`,
   };
   await store.appendEvent(row);
+  for (const [index, entry] of searched.entries()) {
+    await store.appendEvent({
+      id: newId("evt", nowMs(options) + 2 + index),
+      at,
+      kind: "web_searched",
+      actor: "agent",
+      agent,
+      ...(plan ? { planId: plan.id, contextId: plan.contextId } : {}),
+      messageId: answer.id,
+      text: `Searched the web: ${entry.query}`.slice(0, 240),
+      ...(entry.links.length > 0 ? { links: entry.links } : {}),
+    });
+  }
   return { ok: true, question, answer };
 }

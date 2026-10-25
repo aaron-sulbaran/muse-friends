@@ -183,8 +183,9 @@ describe("a request to act", () => {
     const outcome = await runChatTurn({ store, text: "send Mochi fifteen dollars", wallNow });
     expect(outcome.ok).toBe(true);
 
-    const offered = (fake.calls[0].tools as Array<{ name: string }>).map((tool) => tool.name).sort();
-    expect(offered).toEqual([...CHAT_TOOL_NAMES].sort());
+    // The function tools are the read tools; the one other tool is the API's own hosted web search (no handler here, it only reads the web).
+    const offered = (fake.calls[0].tools as Array<{ name?: string; type: string }>).map((tool) => tool.name ?? tool.type).sort();
+    expect(offered).toEqual([...CHAT_TOOL_NAMES, "web_search"].sort());
     for (const forbidden of ["send_money", "send_to_friend_agent", "accept_payment", "decline_payment", "record_reel_details", "read_receipt"]) expect(offered).not.toContain(forbidden);
     expect(toolOutputs(fake.calls)[0]).toMatchObject({ error: expect.any(String) });
     expect(await walletOf(store, "aaron")).toMatchObject({ balance: 120 });

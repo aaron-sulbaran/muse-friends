@@ -9,7 +9,7 @@ import { SEEDED_LABEL, TRIP_PEOPLE } from "@/lib/seed/trip";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
-import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiRefusal, UiSnapshot, UiTrip, UiWallet } from "./types";
+import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiBreakdownLine, UiChatMessage, UiSource, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiReelRead, UiRefusal, UiSnapshot, UiTrip, UiWallet } from "./types";
 
 /*
  * The one place the Store's StateSnapshot becomes what the UI renders. When the
@@ -251,7 +251,7 @@ function dropReasonText(reason: Plan["dropReason"], turnFailed: boolean): string
   }
 }
 
-const noteKinds = new Set<string>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed", "chat_asked"]);
+const noteKinds = new Set<string>(["payment_proposed", "payment_cancelled", "receipt_read", "caption_extracted", "thread_opened", "policy_changed", "busy_added", "message_rejected", "payment_sent", "payment_received", "payment_declined", "payment_failed", "chat_asked", "web_searched"]);
 
 /**
  * An inbox that refuses a message for what it carries (422) or who sent it (403) is the code saying no, which is
@@ -307,6 +307,7 @@ function toNotes(state: StateSnapshot, rename: (text: string) => string, payment
       return [{ id: event.id, kind: "message_rejected", at: event.at, text: privacySentence(event.text, event.agent ?? "lisa", muse), detail: text }];
     }
     const base = { id: event.id, kind: event.kind as UiNote["kind"], at: event.at, text };
+    if (event.kind === "web_searched") return [{ ...base, ...(event.links && event.links.length > 0 ? { links: event.links.map(toSource) } : {}) }];
     if (event.kind !== "chat_asked" || !event.messageId) return [base];
     // A "You asked" row carries the tools the Muse used, read from the proof on its answer.
     const toolCalls = toolCallsOf(chat.find((entry) => entry.id === event.messageId)?.proof);
@@ -326,15 +327,31 @@ function refusalOf(state: StateSnapshot, plan: Plan | null, rename: (text: strin
   };
 }
 
+/** A page a search found, with the site's host for the chip ("www." dropped). The address was checked when it was stored. */
+function toSource(link: { title: string; url: string }): UiSource {
+  let host = link.url;
+  try {
+    host = new URL(link.url).hostname.replace(/^www\./, "");
+  } catch {
+    // keep the address itself as the label
+  }
+  return { title: link.title, url: link.url, host };
+}
+
 function toChat(state: StateSnapshot, rename: (text: string) => string): UiChatMessage[] {
-  return (state.room.chat ?? []).map((entry) => ({
-    id: entry.id,
-    from: entry.from,
-    text: rename(entry.text),
-    at: entry.at,
-    ...(entry.replyTo ? { replyTo: entry.replyTo } : {}),
-    ...(entry.proof ? { proof: withToolCalls(entry.proof) } : {}),
-  }));
+  return (state.room.chat ?? []).map((entry) => {
+    // The chips under an answer: the pages of its searches, one per address, three at most.
+    const links = [...new Map((entry.searches ?? []).flatMap((search) => search.links).map((link) => [link.url, link] as const)).values()].slice(0, 3);
+    return {
+      id: entry.id,
+      from: entry.from,
+      text: rename(entry.text),
+      at: entry.at,
+      ...(entry.replyTo ? { replyTo: entry.replyTo } : {}),
+      ...(entry.proof ? { proof: withToolCalls(entry.proof) } : {}),
+      ...(links.length > 0 ? { sources: links.map(toSource) } : {}),
+    };
+  });
 }
 
 /** The message's proof, with its recorded tool calls tidied for display when there are any. */
@@ -439,7 +456,8 @@ export const CHAT_SIDE = "a";
 
 export function forRole(snapshot: UiSnapshot, role: string | null | undefined): UiSnapshot {
   if (role === undefined || role === null || role === CHAT_SIDE) return snapshot;
-  return { ...snapshot, chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked") };
+  // The "You asked" rows and the searches the chat ran (what side a asked about) go with the chat.
+  return { ...snapshot, chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked" && note.kind !== "web_searched") };
 }
 
 /** The latest caption read: what the model found, not the sentence the timeline says about it. */
