@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { StateSnapshot } from "@/lib/protocol";
 import { recordedSnapshot, shawarmaRun } from "@/lib/seed/fixtures";
+import { getStore } from "@/lib/store";
 import { createSupabaseStore } from "@/lib/store/supabase";
 
 // Round trip against the real project. Opt in with:
@@ -73,6 +74,26 @@ describe.skipIf(!live)("supabase store against the real project", () => {
     await cleanup();
     console.log(`supabase store latency per call (ms), run ${runId}`);
     console.table(timings);
+  });
+
+  it("starts seeded: a room, a clock, and the default policies, whether or not anyone ran a reset", async () => {
+    expect((await timed("getRoom (first call seeds)", () => store.getRoom())).id).toBe("demo");
+    expect((await timed("listPolicies", () => store.listPolicies())).length).toBeGreaterThanOrEqual(2);
+    expect(await timed("getPolicy", () => store.getPolicy("lisa", "aaron"))).toMatchObject({ owner: "lisa", friend: "aaron" });
+  });
+
+  it("is what getStore returns when STORE=supabase", async () => {
+    const shared = globalThis as typeof globalThis & { __museStore?: unknown };
+    const previous = shared.__museStore;
+    vi.stubEnv("STORE", "supabase");
+    delete shared.__museStore;
+    try {
+      const viaFactory = await getStore();
+      expect((await timed("getRoom via getStore", () => viaFactory.getRoom())).id).toBe("demo");
+    } finally {
+      vi.unstubAllEnvs();
+      shared.__museStore = previous;
+    }
   });
 
   it("round trips a thread, its messages, plan, cards, and events", async () => {

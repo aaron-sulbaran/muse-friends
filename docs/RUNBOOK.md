@@ -39,6 +39,14 @@ Check it by pointing a phone camera at the file opened on screen; it must open t
 
 ## Human steps
 
+**H1 and H3 in one sitting (Aaron, 5 minutes).** Everything production needs from your keys, in order:
+
+1. Add two lines to `code/.env` (values from the Supabase dashboard, see H3 step 2): `SUPABASE_URL=https://egzeidhihiimurkinzyb.supabase.co` and `SUPABASE_SERVICE_ROLE_KEY=<the secret key>`. `MODEL_API_KEY` is already there.
+2. From the `code` folder: `./scripts/push-env-to-vercel.sh --dry-run`. Expect four names with character counts: `MODEL_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`, and `STORE` (set to `supabase` in Vercel only), and `dry run only; nothing was changed.` If it complains that only one Supabase variable is set, fix `.env` first.
+3. `./scripts/push-env-to-vercel.sh`, then Redeploy the production deployment (H1 step 4).
+4. Tell the platform lane; it runs the live round trip and reports latency.
+
+
 ### H1. Push the secrets into Vercel (Aaron, 3 minutes)
 
 Production needs `MODEL_API_KEY` for the agents (and, later, the Supabase variables, see H3). One script copies what is set in `code/.env` to the Vercel project for Production and Preview, stored as Sensitive, and never prints a value. Do this before the P1 checkpoint (Sun 12:00am).
@@ -83,10 +91,11 @@ Added when the MCP front door is deployed; see the next section of this runbook 
 
 Who: anyone with a phone. Time: 5 minutes. Run it on venue Wi-Fi and again on mobile data, in a private tab.
 
-0. Optional first pass from a laptop on the same network: `./scripts/smoke-production.sh`. Expect seven `PASS` lines (health, home, both phones, the QR file, the stylesheet, the state JSON), none over 3 seconds, none redirected to a Vercel login. It does not run the negotiation; that is step 2 on a phone.
+0. Optional first pass from a laptop on the same network: `./scripts/smoke-production.sh`. Expect seven `PASS` lines (health, home, both phones, the QR file, the stylesheet, the state JSON), none over 3 seconds, none redirected to a Vercel login. It does not run the negotiation; the negotiation itself is step 3, on a phone.
 1. Scan `/qr.svg` (open https://muse-friends.vercel.app/qr.svg on another screen) or type the URL.
-2. Pass: the page loads with no Vercel login, `/api/health` shows `ok: true`, and once the agents are merged, one negotiation runs end to end inside 300 seconds with the timeline updating live.
-3. Fail: write down which network, what you saw, and the time, and send it to the orchestrator.
+2. Use the public alias only: `https://muse-friends.vercel.app` (or `https://musefriends.tech` once it is live). The agents post to each other at the origin of the request that started them, so a preview or the team-scoped alias, which sit behind a Vercel login, would put a login wall in front of the second hop and the negotiation would stall.
+3. Pass: the page loads with no Vercel login, `/api/health` shows `ok: true`, and once the agents are merged, one negotiation runs end to end inside 300 seconds with the timeline updating live.
+4. Fail: write down which network, what you saw, and the time, and send it to the orchestrator.
 
 ## If production shows old styles after a deploy
 

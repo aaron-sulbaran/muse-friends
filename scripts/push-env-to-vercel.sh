@@ -75,6 +75,16 @@ if [ -z "$(read_value MODEL_API_KEY)" ]; then
   exit 1
 fi
 
+# The store switch needs both halves; pushing only one would leave production half configured.
+supabase_url_set=false
+supabase_key_set=false
+[ -n "$(read_value SUPABASE_URL)" ] && supabase_url_set=true
+[ -n "$(read_value SUPABASE_SERVICE_ROLE_KEY)" ] && supabase_key_set=true
+if [ "$supabase_url_set" != "$supabase_key_set" ]; then
+  echo "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be set in $env_file, and only one is." >&2
+  $dry_run || exit 1
+fi
+
 if ! $dry_run && [ ! -f .vercel/project.json ]; then
   vercel link --yes --project muse-friends --scope aaron-sulbaran-projects
 fi

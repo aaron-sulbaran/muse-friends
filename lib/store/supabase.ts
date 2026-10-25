@@ -11,10 +11,10 @@ import type {
   Room,
   SharePolicy,
   Signal,
-  StateSnapshot,
   Thread,
 } from "@/lib/protocol";
-import { DEFAULT_ROOM, DEMO_START } from "@/lib/seed/fixtures";
+import { StateSnapshot } from "@/lib/protocol";
+import { DEFAULT_ROOM, DEMO_START, seedSnapshot } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 
 // The production Store. Every collection is a table of JSONB documents (supabase/migrations), read
@@ -49,7 +49,41 @@ function requiredEnvironment(name: string): string {
   return value;
 }
 
-export type SupabaseStoreOptions = { client?: SupabaseClient };
+export type SupabaseStoreOptions = {
+  client?: SupabaseClient;
+  // Load the seed (room, clock, default policies) into an empty database on first use, like the
+  // JSON store does. On by default; tests that script the client turn it off.
+  seedDefaults?: boolean;
+};
+
+const appendOnly = { ignoreDuplicates: true } as const;
+
+// A fresh database has no room row. The first process to notice writes the seed with idempotent
+// upserts, so two instances starting at once cannot clobber each other and a later reset
+// (replaceAll) is never undone: once a room exists, nothing here runs again.
+async function seedIfEmpty(db: SupabaseClient): Promise<void> {
+  const existing = unwrap("seed", await db.from("room").select("id").eq("id", "demo").maybeSingle());
+  if (existing) return;
+  const seed = seedSnapshot();
+  unwrap("seed", await db.from("room").upsert({ id: seed.room.id, data: seed.room }, appendOnly));
+  unwrap("seed", await db.from("clock").upsert({ id: 1, data: seed.clock }, appendOnly));
+  unwrap(
+    "seed",
+    await db
+      .from("policies")
+      .upsert(
+        seed.policies.map((policy) => ({ owner: policy.owner, friend: policy.friend, data: policy })),
+        { onConflict: "owner,friend", ...appendOnly },
+      ),
+  );
+}
+
+// Same order the JSON store returns: contextId, then position in the thread.
+function inThreadOrder(records: MessageRecord[]): MessageRecord[] {
+  return [...records].sort(
+    (a, b) => a.message.contextId.localeCompare(b.message.contextId) || a.message.seq - b.message.seq,
+  );
+}
 
 export function createSupabaseStore(options: SupabaseStoreOptions = {}): Store {
   const db =
@@ -60,9 +94,7 @@ export function createSupabaseStore(options: SupabaseStoreOptions = {}): Store {
       global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
     });
 
-  const appendOnly = { ignoreDuplicates: true } as const;
-
-  const store: Store = {
+  const raw: Store = {
     async getThread(contextId) {
       return document<Thread>(
         "getThread",
@@ -92,7 +124,7 @@ export function createSupabaseStore(options: SupabaseStoreOptions = {}): Store {
     async listMessages(contextId) {
       let query = db.from("messages").select("data");
       if (contextId) query = query.eq("context_id", contextId);
-      return documents<MessageRecord>("listMessages", await query.order("context_id").order("seq"));
+      return inThreadOrder(documents<MessageRecord>("listMessages", await query));
     },
 
     async getPlan(id) {
@@ -249,12 +281,45 @@ export function createSupabaseStore(options: SupabaseStoreOptions = {}): Store {
       const snapshot = unwrap("snapshot", await db.rpc("store_snapshot"));
       if (!snapshot) throw new StoreError("snapshot", "empty reply");
       const state = snapshot as StateSnapshot;
-      return { ...state, room: state.room ?? DEFAULT_ROOM, clock: state.clock ?? { now: DEMO_START } };
+      return {
+        ...state,
+        room: state.room ?? DEFAULT_ROOM,
+        clock: state.clock ?? { now: DEMO_START },
+        messages: inThreadOrder(state.messages),
+      };
     },
     async replaceAll(snapshot) {
-      unwrap("replaceAll", await db.rpc("store_replace_all", { snapshot }));
+      // Same gate as the JSON store: a malformed snapshot never reaches the database.
+      const valid = StateSnapshot.parse(snapshot);
+      unwrap("replaceAll", await db.rpc("store_replace_all", { snapshot: valid }));
     },
   };
 
+  let seeding: Promise<void> | null = null;
+  const ensureReady = (): Promise<void> => {
+    if (options.seedDefaults === false) return Promise.resolve();
+    seeding ??= seedIfEmpty(db).catch((error) => {
+      seeding = null;
+      throw error;
+    });
+    return seeding;
+  };
+
+  // Every method waits for the one-time seed check, then runs unchanged.
+  const store = Object.fromEntries(
+    Object.entries(raw).map(([name, method]) => [
+      name,
+      async (...args: unknown[]) => {
+        await ensureReady();
+        return (method as (...inner: unknown[]) => unknown)(...args);
+      },
+    ]),
+  ) as unknown as Store;
+
   return store;
+}
+
+// The entry point lib/store/index.ts loads when STORE=supabase.
+export function createStore(): Store {
+  return createSupabaseStore();
 }
