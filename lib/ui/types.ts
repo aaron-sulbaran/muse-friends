@@ -4,33 +4,23 @@
  * schemas directly and a contract change lands in one adapter.
  */
 
-import type { AgentId } from "@/lib/protocol";
+import type {
+  AgentId,
+  Category,
+  Decision,
+  MessageType,
+  PlanState,
+  Reason as MessageReason,
+  TaskState as ThreadState,
+  Window as TimeWindow,
+} from "@/lib/protocol";
 
-export type { AgentId };
+// The wire vocabulary comes from the protocol, never a copy, so a new reason or
+// category cannot silently break the adapter's types.
+export type { AgentId, Category, Decision, MessageReason, MessageType, PlanState, ThreadState, TimeWindow };
 
 /** Phone roles: "a" is Aaron's Muse (Sprout), "b" is Lisa's Muse (Mochi) or the simulated friend. */
 export type Role = "a" | "b";
-
-export type Category = "food" | "events" | "availability" | "location" | "interests";
-
-export type MessageType = "intent" | "propose" | "counter" | "accept" | "decline";
-
-export type ThreadState = "working" | "input-required" | "completed" | "rejected" | "failed";
-
-export type MessageReason = "both_free" | "interest_match" | "no_overlap" | "cap_reached";
-
-export type PlanState =
-  | "detected"
-  | "negotiating"
-  | "awaiting_humans"
-  | "confirmed"
-  | "scheduled"
-  | "reminded"
-  | "happened"
-  | "followed_up"
-  | "dropped";
-
-export type TimeWindow = { start: string; end: string };
 
 export type ModelProof = {
   model: string;
@@ -63,8 +53,6 @@ export type UiMessage = {
   /** The message as delivered, shown only in the JSON drawer. */
   raw: unknown;
 };
-
-export type Decision = "pending" | "accepted" | "declined";
 
 export type UiPlan = {
   id: string;
