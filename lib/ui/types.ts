@@ -159,6 +159,10 @@ export type UiPayment = {
   to: AgentId;
   amount: number;
   reason: string;
+  /** The reason with the plan's event and day in front ("Shawarma Point, Tue Oct 27, dinner share"); the cards show this when set. */
+  description?: string;
+  /** The plan it belonged to, named by its event and day ("Shawarma Point, Tue Oct 27"); unset when the plan is not known. */
+  planLabel?: string;
   note?: string;
   status: "proposed" | "declined" | "failed" | "sent" | "received" | "refunded";
   source: "nessie" | "local";
