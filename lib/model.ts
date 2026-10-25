@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { summarizeToolCall, type ToolCallSummary } from "./tool-summary";
 import type {
   FunctionTool,
   Response,
@@ -53,7 +54,9 @@ export type ToolDefinition = {
 };
 
 // What a handler may know about the model call that asked for it.
-export type ToolMeta = { responseId: string; model: string; call: ModelCallTrace };
+// What a handler is told about the model call that asked for it. `toolCalls` are the calls this turn has already
+// finished, in order, summarized for the proof (never shown to the model).
+export type ToolMeta = { responseId: string; model: string; call: ModelCallTrace; toolCalls: ToolCallSummary[] };
 
 // Receives the parsed JSON arguments, or the raw string when the model sent invalid JSON.
 // Handlers zod-parse their own input; whatever they return (or throw) goes back to the model.
@@ -134,6 +137,8 @@ export type AgentTurnOptions = {
   // End the turn as soon as a required tool succeeded, skipping the closing prose call. Default true.
   finishOnRequired?: boolean;
   nudge?: string;
+  // How a finished tool call is summarized for the proof on the message it leads to. The default keeps content out.
+  summarizeCall?: (call: { name: string; args: unknown; output: unknown; ok: boolean }) => ToolCallSummary;
   maxToolCalls?: number;
   effort?: Effort;
   maxOutputTokens?: number;
@@ -220,6 +225,8 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
   const tools = options.tools.map(toFunctionTool);
   const calls: ModelCallTrace[] = [];
   const toolCalls: ToolCallTrace[] = [];
+  // The same calls as one-line summaries for the message proof; kept beside the traces, never sent to the model.
+  const performed: ToolCallSummary[] = [];
 
   const mode = options.mode ?? contextMode();
   const initial: ResponseInput =
@@ -314,6 +321,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
     const outputs: ResponseInput = [];
     for (const call of functionCalls) {
       const handler = options.handlers[call.name];
+      const args = parseArguments(call.arguments);
       let output: unknown;
       let ok = true;
       if (!handler) {
@@ -321,7 +329,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
         ok = false;
       } else {
         try {
-          output = await handler(parseArguments(call.arguments), { responseId: trace.responseId, model: trace.model, call: trace });
+          output = await handler(args, { responseId: trace.responseId, model: trace.model, call: trace, toolCalls: [...performed] });
           if (typeof output === "object" && output !== null && "error" in output) ok = false;
         } catch (error) {
           output = { error: describeError(error) };
@@ -334,6 +342,7 @@ export async function runAgentTurn(options: AgentTurnOptions): Promise<TurnResul
         ok,
         error: ok ? undefined : JSON.stringify(output).slice(0, 200),
       });
+      performed.push((options.summarizeCall ?? summarizeToolCall)({ name: call.name, args, output, ok }));
       if (ok && required.has(call.name)) {
         successes += 1;
         if (successes >= needed) requiredSatisfied = true;

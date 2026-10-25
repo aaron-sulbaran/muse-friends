@@ -163,13 +163,31 @@ async function recordHandoffLocked(
 
 export type ClockStep = "next" | "reminder" | "end" | "next_day";
 
-const ORDER: Array<Exclude<ClockStep, "next">> = ["reminder", "end", "next_day"];
-const STEP_FOR_STATE: Partial<Record<Plan["state"], Exclude<ClockStep, "next">>> = {
+type RealStep = Exclude<ClockStep, "next">;
+
+const ORDER: RealStep[] = ["reminder", "end", "next_day"];
+const STEP_FOR_STATE: Partial<Record<Plan["state"], RealStep>> = {
   confirmed: "reminder",
   scheduled: "reminder",
   reminded: "end",
   happened: "next_day",
 };
+
+// When each step happens: the reminder is two hours before the plan, "end" is when it finishes, and
+// the follow-up is the next morning.
+function momentOf(step: RealStep, window: NonNullable<Plan["window"]>): number {
+  if (step === "reminder") return toMs(window.start) - REMINDER_LEAD_HOURS * HOUR_MS;
+  if (step === "end") return toMs(window.end);
+  return toMs(window.end) + FOLLOW_UP_AFTER_HOURS * HOUR_MS;
+}
+
+// The step the clock would run next for this plan, if its moment has already passed in real time.
+// The scheduled sweep (app/api/cron/sweep) asks this, so it never decides a time of its own.
+export function nextStepDue(plan: Plan, nowMs: number): RealStep | null {
+  const step = STEP_FOR_STATE[plan.state];
+  if (!step || !plan.window) return null;
+  return nowMs >= momentOf(step, plan.window) ? step : null;
+}
 
 // Moves the demo clock forward through the plan's life and runs what happens at each moment.
 // "reminder" is two hours before the plan, "end" is when it finishes, "next_day" is the following
@@ -209,13 +227,11 @@ async function advanceClockLocked(
   return last;
 }
 
-async function runStep(store: Store, plan: Plan, step: Exclude<ClockStep, "next">): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan }>> {
+async function runStep(store: Store, plan: Plan, step: RealStep): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan }>> {
   if (!plan.window) return { ok: false, status: 409, error: "the plan has no time yet" };
 
-  const startMs = toMs(plan.window.start);
-  const endMs = toMs(plan.window.end);
   const current = toMs((await store.getClock()).now);
-  const targetMs = step === "reminder" ? startMs - REMINDER_LEAD_HOURS * HOUR_MS : step === "end" ? endMs : endMs + FOLLOW_UP_AFTER_HOURS * HOUR_MS;
+  const targetMs = momentOf(step, plan.window);
   const at = toCentralIso(Math.max(current, targetMs));
   const clock = { now: at };
   await store.setClock(clock);
