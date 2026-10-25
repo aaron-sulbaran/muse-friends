@@ -14,7 +14,7 @@ A friend sends you a reel of a place, you reply "we should go!", and nothing eve
 
 1. Your friend sends the reel. Your Muse reads the caption and sees a place worth a plan.
 2. Your Muse and your friend's Muse compare notes. Each sees only its own person's calendar and sharing rules.
-3. They settle on a time, and each of you gets one card: "You and Lisa both want to try this place, and you're both free Tuesday 6 to 8. Reach out?"
+3. They settle on a time, and each of you gets one card: "You and Michelle both want to try this place, and you're both free Tuesday 6 to 8. Reach out?"
 4. You say yes. Muse drafts the message and opens WhatsApp; you press send. The agents draft, the human sends.
 5. The plan lives on: a calendar hold, a reminder on the day, and "again next month?" afterward.
 
@@ -26,10 +26,10 @@ Live now at https://musefriends.tech (also https://muse-friends.vercel.app).
 
 <img src="public/qr.svg" alt="QR code for the live demo" width="140">
 
-Scan the code and tap through it in about 90 seconds. Two people can each open a side: `/a` is Sprout (Aaron's Muse), `/b` is Mochi (Lisa's).
+Scan the code and tap through it in about 90 seconds. On a phone it opens straight into your Muse, Sprout; tap Invite to bring a real friend in on a second phone. On a laptop, `/a` is Sprout and `/b` is Mochi, your friend's Muse.
 
-1. Send the shawarma reel from Mochi's side. On your own, tap "Play with a simulated friend" and Michelle sends it.
-2. Open Activity. The two Muses trade offers and agree in about 15 seconds, and every message shows what privacy let through.
+1. Play alone: tap "Play with a simulated friend" and Michelle, fictional and played by a model, sends the shawarma reel.
+2. Open Activity. The two Muses trade offers and agree in about 20 seconds, and every message shows what privacy let through.
 3. Tap "Reach out". Muse opens WhatsApp with a draft; you send it.
 4. Open Goals for the plan and its calendar hold, then jump the clock to the reminder and follow-up.
 5. Open an avatar and turn location sharing off. The place drops out of what the other side sees, and Activity logs the removal.
@@ -46,7 +46,7 @@ Two separate Muse Spark agents, one per person, each given only that person's ca
 
 | Real | Seeded or simulated |
 |---|---|
-| Two Muse Spark agents negotiating over real HTTP | People, calendars, and friendship: fictional, with personas named Aaron and Lisa (teammates who consented) |
+| Two Muse Spark agents negotiating over real HTTP | People, calendars, and friendship: fictional. You are Sprout, your friend's Muse is Mochi, and the friend is Michelle |
 | The place and time, read from the caption by the model, live | The reel: seeded and fictional today. Once INSTAGRAM_ACCESS_TOKEN is set it is a teammate's own reel, read live through the Instagram API with Instagram Login, and Activity says which one a run used |
 | The sharing gate on every message | Michelle: a fictional friend played by a model, labeled on screen |
 | The WhatsApp draft and calendar file | The clock for reminders, labeled as simulated |
