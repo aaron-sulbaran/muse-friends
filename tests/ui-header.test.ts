@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MomentChips } from "@/components/MomentChips";
+import { Subline } from "@/components/Subline";
 import { TopBar } from "@/components/TopBar";
 import { snapshotAtPlanState } from "@/lib/seed/states";
 import { copy } from "@/lib/ui/copy";
@@ -50,12 +52,38 @@ describe("the three moments", () => {
 describe("the stage header", () => {
   const html = renderToStaticMarkup(createElement(TopBar, { snapshot: at("scheduled") }));
 
-  it("is the text lockup with a one-string subline and no Meta mark", () => {
+  it("is the text lockup, with the subline a proposal for Muse by and the Meta lockup after it (D33)", () => {
     expect(text(html)).toContain("Muse Friends");
     expect(copy.tagline).toBe("a proposal for Muse");
-    expect(text(html)).toContain(copy.tagline);
-    expect(html).not.toMatch(/meta/i);
+    expect(copy.taglineBy).toBe("a proposal for Muse by");
+    expect(text(html)).toContain("a proposal for Muse by");
     expect(html).not.toContain("<svg");
+  });
+
+  it("shows the primary lockup at a 12 pixel symbol, 4 pixels after by, with Meta as its alt text", () => {
+    const image = /<img [^>]*>/.exec(html)?.[0] ?? "";
+    expect(image).toContain('alt="Meta"');
+    expect(image).toContain('src="/brand/meta-lockup-primary-12px@3x.png"');
+    expect(image).toContain('srcSet="/brand/meta-lockup-primary-12px@2x.png 2x, /brand/meta-lockup-primary-12px@3x.png 3x"');
+    expect(image).toContain('height="12"');
+    expect(image).toContain('width="59"');
+    expect(html).toMatch(/<span class="[^"]*\bgap-1\b[^"]*\bitems-end\b|<span class="[^"]*\bitems-end\b[^"]*\bgap-1\b/);
+    expect(html).not.toMatch(/<img [^>]*>[^<]*<(?!\/span)/);
+  });
+
+  it("keeps the files the lockup points at, rasterized at 2x and 3x of a 12 pixel symbol", () => {
+    for (const [file, width, height] of [["@2x", 119, 24], ["@3x", 178, 36]] as const) {
+      const png = readFileSync(`public/brand/meta-lockup-primary-12px${file}.png`);
+      expect(png.subarray(1, 4).toString()).toBe("PNG");
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([width, height]);
+    }
+  });
+
+  it("falls back to the plain text subline when the image does not load", () => {
+    const failed = renderToStaticMarkup(createElement(Subline, { imageFailed: true }));
+    expect(text(failed)).toBe("a proposal for Muse");
+    expect(failed).not.toContain("<img");
+    expect(failed).not.toMatch(/meta/i);
   });
 
   it("links How it works to /how, top right", () => {

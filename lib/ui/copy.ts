@@ -12,8 +12,11 @@ export function recordingDate(iso: string): string {
 
 export const copy = {
   brand: "Muse Friends",
-  // One string, so swapping in the Meta lockup later (once Meta clears it) is this line and nothing else.
+  // The plain subline: what the header shows when the Meta lockup image does not load.
   tagline: "a proposal for Muse",
+  // The subline before the Meta lockup (D33); the image carries the rest, and its alt text is the name.
+  taglineBy: "a proposal for Muse by",
+  metaAlt: "Meta",
   howItWorks: "How it works",
   // The stage header's three moments, in the order they happen. The lines are the CDO's (header-activity README).
   momentSaidYes: "Said yes",
