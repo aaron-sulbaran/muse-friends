@@ -13,12 +13,14 @@ vi.mock("next/server", async (importOriginal) => ({
 
 import { converse, chooseRoom, freshRoomSnapshot, maxPhoneRooms, phoneRoomKey, withRoom, withoutRoom, type RoomDeps } from "@/app/api/_lib/room";
 import { GET as stateGet } from "@/app/api/state/route";
+import { POST as chatPost } from "@/app/api/chat/route";
 import { POST as clockPost } from "@/app/api/clock/route";
 import { clearMemoryRooms, memoryRoomRepo } from "@/app/api/connector/_lib/rooms";
 import { POST as controlsPost } from "@/app/api/controls/route";
 import { POST as signalsPost } from "@/app/api/signals/route";
 import { POST as decisionPost } from "@/app/api/plans/[id]/decision/route";
 import { GET as draftGet, POST as draftPost } from "@/app/api/plans/[id]/draft/route";
+import { GET as holdGet } from "@/app/api/plans/[id]/hold.ics/route";
 import { POST as outcomePost } from "@/app/api/plans/[id]/outcome/route";
 import { POST as settlePost } from "@/app/api/plans/[id]/settle/route";
 import { POST as simulatedFriendPost } from "@/app/api/simulated-friend/route";
@@ -187,12 +189,23 @@ describe("a room is made on its first write, and not before", () => {
       ["settle", await post(settlePost, `/api/plans/p/settle?room=${unknown}`, { role: "a" }, planCtx("p"))],
       ["clock", await post(clockPost, `/api/clock?room=${unknown}`, { action: "advance" })],
       ["simulated friend", await post(simulatedFriendPost, `/api/simulated-friend?room=${unknown}`, { planId: "p" })],
+      ["chat", await post(chatPost, `/api/chat?room=${unknown}`, { text: "what is the plan?" })],
     ];
     for (const [name, response] of calls) {
       expect(response.status, name).toBe(404);
       expect((await response.json()).error.code, name).toBe("no_such_room");
     }
     expect(await stateOf(unknown)).toBeNull();
+  });
+
+  it("answers the calendar hold of a room that does not exist with no plan, and of a room's own plan from that room", async () => {
+    const missing = await holdGet(new Request("https://muse-friends.test/api/plans/p/hold.ics?room=neverseen2"), planCtx("p") as never);
+    expect(missing.status).toBe(404);
+    const planA = (await (await post(signalsPost, `/api/signals?room=${A}`)).json()).planId as string;
+    // The plan exists in room A but has no time yet (the agents have not agreed), so it is found and refused with 409.
+    expect((await holdGet(new Request(`https://muse-friends.test/api/plans/${planA}/hold.ics?room=${A}`), planCtx(planA) as never)).status).toBe(409);
+    expect((await holdGet(new Request(`https://muse-friends.test/api/plans/${planA}/hold.ics?room=${B}`), planCtx(planA) as never)).status).toBe(404);
+    expect((await holdGet(new Request(`https://muse-friends.test/api/plans/${planA}/hold.ics`), planCtx(planA) as never)).status).toBe(404);
   });
 
   it("makes the room on a reel and on a control, with the empty stage, and nobody playing the friend yet", async () => {

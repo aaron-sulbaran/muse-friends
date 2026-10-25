@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readPhoneRoom } from "@/app/api/_lib/room";
 import { namesFor } from "@/lib/ui/format";
 import { buildHoldIcs } from "@/lib/ui/ics";
 import { readSnapshot } from "@/lib/ui/source";
@@ -8,7 +9,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request, ctx: RouteContext<"/api/plans/[id]/hold.ics">) {
   const { id } = await ctx.params;
   const role = new URL(request.url).searchParams.get("role") === "b" ? "b" : "a";
-  const snapshot = await readSnapshot();
+  // The hold of the room the call names (?room=), the demo room when there is none.
+  const phone = new URL(request.url).searchParams.get("room") ? await readPhoneRoom(request) : null;
+  const snapshot = phone ? phone.ui : await readSnapshot();
   const plan = snapshot.plan;
   if (!plan || plan.id !== id) {
     return NextResponse.json({ data: null, error: { message: "No such plan" } }, { status: 404 });
