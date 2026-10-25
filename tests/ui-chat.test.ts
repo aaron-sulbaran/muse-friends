@@ -137,7 +137,22 @@ describe("the journey, phone by phone", () => {
     const reminded = viewForRole(at("reminded"), "a").items;
     expect(reminded.some((item) => item.kind === "bubble" && item.text.startsWith("Shawarma Point with Mochi at 6"))).toBe(true);
     const followed = viewForRole(at("followed_up"), "a").items;
-    expect(followed.some((item) => item.kind === "bubble" && item.text.includes("next month"))).toBe(true);
+    expect(followed.some((item) => item.kind === "bubble" && item.text === "Did you two make it?")).toBe(true);
+    // The recording counted the hangout, so the answer shows and the next idea comes from another shared signal.
+    expect(followed.find((item) => item.id === "outcome-answer")).toMatchObject({ text: "We went!" });
+    const next = followed.find((item) => item.id === "next-idea");
+    expect(next?.kind === "bubble" && !next.text.includes("Shawarma")).toBe(true);
+  });
+
+  it("opens on the stale chat: last week's reel card under Last Saturday, then Muse picks it up today", () => {
+    const items = viewForRole(at("detected"), "a").items;
+    const reel = items.findIndex((item) => item.kind === "reel-card" && item.place === "Shawarma Point");
+    const lastWeek = items.findIndex((item) => item.kind === "separator" && item.day.startsWith("Last "));
+    const today = items.findIndex((item) => item.kind === "separator" && item.day === "Today");
+    expect(lastWeek).toBeGreaterThan(-1);
+    expect(reel).toBeGreaterThan(lastWeek);
+    expect(today).toBeGreaterThan(reel);
+    expect(items[today + 1]).toMatchObject({ kind: "bubble", from: "muse", text: "Mochi sent you this a week ago. Want me to see if you two can make it happen?" });
   });
 
   it("a friend's no reads neutrally on each side", () => {

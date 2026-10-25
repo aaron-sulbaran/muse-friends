@@ -27,6 +27,10 @@ export function postDecision(planId: string, role: Role, choice: "accept" | "dec
   return post(`/api/plans/${planId}/decision`, { role, choice });
 }
 
+export function postOutcome(planId: string, role: Role, result: "went" | "didnt"): Promise<Result> {
+  return post(`/api/plans/${planId}/outcome`, { role, result });
+}
+
 export function postHandoff(planId: string, role: Role, via: "whatsapp" | "copy") {
   return post(`/api/plans/${planId}/draft`, { role, via });
 }

@@ -11,11 +11,14 @@ import { postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
 import type { Role, UiSnapshot } from "@/lib/ui/types";
 import { ChatBubble, DaySeparator, TypingDots } from "./ChatBubble";
+import { AgreedLine } from "./AgreedLine";
 import { AvatarSheet } from "./AvatarSheet";
 import { DraftCard } from "./DraftCard";
 import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
 import { MuseAvatar } from "./MuseAvatar";
+import { OutcomeReplies } from "./OutcomeReplies";
+import { ReelCard } from "./ReelCard";
 import { RecommendationCard } from "./RecommendationCard";
 import { ReplayBadge } from "./ReplayBadge";
 import { StartCard } from "./StartCard";
@@ -109,9 +112,15 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
     muses: [names.muse.aaron, names.muse.lisa],
   };
 
+  // The first scroll lands at the latest message at once; later ones glide.
+  const scrolledOnce = useRef(false);
   useEffect(() => {
-    if (tab !== "chat") return;
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
+    if (tab !== "chat") {
+      scrolledOnce.current = false;
+      return;
+    }
+    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: scrolledOnce.current ? "smooth" : "auto" });
+    scrolledOnce.current = true;
   }, [view.items.length, thinking, tab]);
 
   async function decide(planId: string, choice: "accept" | "decline") {
@@ -168,6 +177,13 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
         return <DraftCard draft={item.draft} onHandoff={(via) => handoff(item.plan.id, via)} />;
       case "start-card":
         return <StartCard variant={item.variant} friendName={item.friendName} onChanged={onChanged} readOnly={readOnly} onPaused={onPaused} />;
+      case "reel-card":
+        return <ReelCard image={item.image} poster={item.poster} caption={item.caption} place={item.place} align={item.align} label={copy.reelLabel} />;
+      case "agreed-line":
+        // On the stage, Activity already sits between the phones; a phone on its own opens it as a sheet.
+        return standalone ? <AgreedLine first={item.first} second={item.second} count={item.count} onOpen={() => setActivityOpen(true)} /> : null;
+      case "outcome-replies":
+        return <OutcomeReplies planId={item.planId} role={role} onChanged={onChanged} readOnly={readOnly} />;
       case "hold-row":
         return <HoldRow planId={item.planId} role={role} title={item.title} googleUrl={item.googleUrl} disabled={readOnly} />;
     }
