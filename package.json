@@ -10,6 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.4.0",
+    "mcp-handler": "^2.3.0",
     "next": "16.4.3",
     "openai": "^7.43.0",
     "react": "19.3.0",
