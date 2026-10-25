@@ -56,7 +56,7 @@ export function ActivityRow({ message, simulatedFriend, names, onOpen }: Props) 
           <PolicyStamp stamp={stamp} animateWithheld />
           {message.proof ? (
             <span className="mt-1.5 block text-[12px] leading-4 text-faint">
-              {message.proof.model}, {formatLatency(message.proof.latencyMs)}, {message.proof.totalTokens} tokens
+              {message.proof.model}, {formatLatency(message.proof.latencyMs)}, {message.proof.inputTokens + message.proof.outputTokens} tokens
             </span>
           ) : null}
         </span>

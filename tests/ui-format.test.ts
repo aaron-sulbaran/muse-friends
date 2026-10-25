@@ -30,7 +30,6 @@ function message(overrides: Partial<UiMessage>): UiMessage {
     shared: [],
     removed: [],
     at: "2026-10-25T01:42:10Z",
-    replayed: false,
     raw: {},
     ...overrides,
   };
@@ -77,9 +76,6 @@ describe("activity titles", () => {
     expect(messageTitle(message({ type: "decline", reason: "no_overlap" }))).toBe("Declined: no time works");
   });
 
-  it("says a replayed propose was proposed again", () => {
-    expect(messageTitle(message({ type: "propose", replayed: true, windows: [tuesday] }))).toBe("Proposed again Tue 6 to 8 PM");
-  });
 });
 
 const sprout = { sides: { aaron: "Sprout", lisa: "Mochi" }, simulatedFriend: false } as const;

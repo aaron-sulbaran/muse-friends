@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { copy } from "@/lib/ui/copy";
 import { namesFor } from "@/lib/ui/format";
+import { timelineOf } from "@/lib/ui/timeline";
 import type { UiMessage, UiSnapshot } from "@/lib/ui/types";
+import { ActivityNote } from "./ActivityNote";
 import { ActivityRow } from "./ActivityRow";
 import { MuseAvatar } from "./MuseAvatar";
 import { ReplayBadge } from "./ReplayBadge";
@@ -45,6 +47,20 @@ function ThinkingRow({ snapshot }: { snapshot: UiSnapshot }) {
   );
 }
 
+function FailureRow({ snapshot }: { snapshot: UiSnapshot }) {
+  if (!snapshot.failure) return null;
+  const names = namesFor(snapshot);
+  const agent = snapshot.failure.agent;
+  return (
+    <li className="animate-row-in">
+      <div className="flex items-center gap-3 rounded-group px-3 py-2.5">
+        <MuseAvatar agent={agent} simulated={snapshot.simulatedFriend && agent === "lisa"} name={names.muse[agent]} size={36} />
+        <span className="text-[15px] leading-5 text-withheld">{copy.modelErrorSecond(names.muse[agent])}</span>
+      </div>
+    </li>
+  );
+}
+
 /** The one new surface: Muse's Activity view, extended from one agent to two. */
 export function ActivityPanel({ snapshot, connected, onOpenMessage }: Props) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -74,13 +90,20 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage }: Props) {
         <StateStepper plan={snapshot?.plan ?? null} />
       </div>
       <div ref={scroller} onScroll={trackScroll} className="quiet-scroll -mx-2 mt-4 min-h-0 flex-1 overflow-y-auto px-2">
-        {snapshot && snapshot.messages.length === 0 && !snapshot.inFlight ? (
+        {snapshot && snapshot.messages.length === 0 && snapshot.notes.length === 0 && !snapshot.inFlight ? (
           <p className="px-1 py-6 text-[15px] leading-5 text-muted">{copy.activityEmpty(snapshot.sides.aaron, snapshot.sides.lisa)}</p>
         ) : null}
         <ul aria-live="polite" className="flex flex-col gap-1">
-          {snapshot?.messages.map((message) => (
-            <ActivityRow key={`${message.id}-${message.at}`} message={message} simulatedFriend={snapshot.simulatedFriend} names={namesFor(snapshot)} onOpen={onOpenMessage} />
-          ))}
+          {snapshot
+            ? timelineOf(snapshot).map((entry) =>
+                entry.kind === "message" ? (
+                  <ActivityRow key={`${entry.message.id}-${entry.message.at}`} message={entry.message} simulatedFriend={snapshot.simulatedFriend} names={namesFor(snapshot)} onOpen={onOpenMessage} />
+                ) : (
+                  <ActivityNote key={entry.note.id} note={entry.note} />
+                ),
+              )
+            : null}
+          {snapshot ? <FailureRow snapshot={snapshot} /> : null}
           {snapshot?.inFlight ? <ThinkingRow key={`${snapshot.inFlight.agent}-${snapshot.messages.length}`} snapshot={snapshot} /> : null}
         </ul>
       </div>

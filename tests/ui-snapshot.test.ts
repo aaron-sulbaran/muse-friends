@@ -68,13 +68,6 @@ describe("toUiSnapshot on Lane A's fixtures", () => {
     expect(toUiSnapshot(state, live).simulatedFriend).toBe(true);
   });
 
-  it("marks a message id that repeats as replayed", () => {
-    const state = recordedSnapshot();
-    state.messages.push(privacyToggleDemo().messageAfter);
-    const messages = toUiSnapshot(state, live).messages;
-    expect(messages.map((message) => message.replayed)).toEqual([false, false, false, false, false, false, true]);
-  });
-
   it("reads Lisa's sharing policy toward Aaron through the policy helper", () => {
     const state = recordedSnapshot();
     expect(toUiSnapshot(state, live).sharing.lisa.categories.location).toBe(true);
