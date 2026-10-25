@@ -142,5 +142,11 @@ export const copy = {
     back: "Back",
     continue: "Continue",
     whoOf: (friend: string) => `Who ${friend} is to you`,
+
+    // Screen 3: what to share with one friend. `tier` is the tier's own label ("Close friend", "Friend").
+    shareTitle: (friend: string) => `What can ${friend}'s Muse see?`,
+    shareLine: (friend: string, tier: string) =>
+      `Set from ${friend}'s group, ${tier}. Change any of them. Off means Muse leaves it out and says so in Activity.`,
+    done: "Done",
   },
 } as const;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { resetDemo, setSharePolicy } from "@/lib/agent/controls";
+import { categoriesForTier, resetDemo, setSharePolicy } from "@/lib/agent/controls";
 import { Category, ShareTier } from "@/lib/protocol";
 import { getStore } from "@/lib/store";
 import { readSnapshot } from "@/lib/ui/source";
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 const privacySchema = z
   .object({
     type: z.literal("privacy"),
-    /** Whose sharing is changing. Only side b's is switchable in the demo. */
-    side: z.literal("b"),
+    /** Whose sharing is changing: b is the friend's Muse, a is the judge's own (onboarding sets it). */
+    side: z.enum(["a", "b"]),
     tier: ShareTier.optional(),
     category: Category.optional(),
     on: z.boolean().optional(),
@@ -26,11 +26,13 @@ const bodySchema = z.union([
   z.object({ type: z.literal("simulated_friend"), on: z.boolean() }),
 ]);
 
+const sharers = { a: { owner: "aaron", friend: "lisa" }, b: { owner: "lisa", friend: "aaron" } } as const;
+
 function refuse(message: string, status: number) {
   return NextResponse.json({ data: null, error: { message } }, { status });
 }
 
-/** The controls: a sharing switch on side b, Reset for the one demo room, and the simulated friend for a judge playing alone. */
+/** The controls: a sharing switch on either side, Reset for the one demo room, and the simulated friend for a judge playing alone. */
 export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return refuse("Expected a privacy change or a reset", 400);
@@ -50,12 +52,14 @@ export async function POST(request: Request) {
   if (body.category === "availability" && body.on === false) {
     return refuse("Free times are how the Muses find a day, so they stay on in this demo", 409);
   }
+  const { owner, friend } = sharers[body.side];
   const result = await setSharePolicy(store, {
-    owner: "lisa",
-    friend: "aaron",
+    owner,
+    friend,
     tier: body.tier,
-    categories: body.category !== undefined && body.on !== undefined ? { [body.category]: body.on } : undefined,
+    // Picking a tier refills every switch from it; flipping one switch changes that category alone.
+    categories: body.category !== undefined && body.on !== undefined ? { [body.category]: body.on } : body.tier !== undefined ? categoriesForTier(body.tier) : undefined,
   });
   if (!result.ok) return refuse(result.error, result.status);
-  return NextResponse.json({ data: { sharing: (await readSnapshot()).sharing.lisa, replayed: result.value.replayed.length }, error: null });
+  return NextResponse.json({ data: { sharing: (await readSnapshot()).sharing[owner], replayed: result.value.replayed.length }, error: null });
 }

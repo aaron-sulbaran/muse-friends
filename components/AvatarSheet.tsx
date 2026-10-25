@@ -4,8 +4,10 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { postPrivacy, type PrivacyChange } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import type { Category, SharingSettings } from "@/lib/ui/types";
+import { SWITCH_ROWS } from "@/lib/ui/categories";
+import type { SharingSettings } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
+import { SwitchRow } from "./SwitchRow";
 import { TierControl } from "./TierControl";
 
 type Props = {
@@ -20,13 +22,8 @@ type Props = {
   onClose: () => void;
 };
 
-const categories: ReadonlyArray<{ value: Category; label: string; fixedOn?: string }> = [
-  { value: "food", label: "Food and places" },
-  { value: "events", label: "Events" },
-  { value: "availability", label: "Free times", fixedOn: "Always on: this is how the Muses find a day" },
-  { value: "location", label: "Location" },
-  { value: "interests", label: "Interests" },
-];
+/** The avatar sheet keeps Free times as a locked-on row; the onboarding's share sheet states it as a line instead. */
+const FREE_TIMES = { label: "Free times", line: "Always included: open windows only, never what is in them" };
 
 /**
  * What this Muse tells its friend's Muse, one switch per category. Changing a
@@ -103,28 +100,17 @@ export function AvatarSheet({ museName, friendMuseName, sharing, onOpenActivity,
         </div>
 
         <ul className="mt-3 divide-y divide-bezel-line">
-          {categories.map(({ value, label, fixedOn }) => (
-            <li key={value}>
-              <label className="flex items-center justify-between gap-4 py-3">
-                <span>
-                  <span className="block text-[16px] leading-[22px]">{label}</span>
-                  {fixedOn ? <span className="block text-[12px] leading-4 text-muted">{fixedOn}</span> : null}
-                </span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={sharing.categories[value]}
-                  disabled={pending || fixedOn !== undefined}
-                  onChange={(event) => change({ category: value, on: event.target.checked })}
-                  className="peer sr-only"
-                />
-                <span
-                  aria-hidden="true"
-                  className="relative h-7 w-12 shrink-0 cursor-pointer rounded-full bg-faint transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-6 after:rounded-full after:bg-surface after:shadow-float after:transition-transform peer-checked:bg-tracking peer-checked:after:translate-x-5 peer-disabled:cursor-default peer-disabled:opacity-60 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
-                />
-              </label>
-            </li>
+          {SWITCH_ROWS.map(({ value, label, line }) => (
+            <SwitchRow
+              key={value}
+              label={label}
+              line={line}
+              checked={sharing.categories[value]}
+              disabled={pending}
+              onChange={(on) => change({ category: value, on })}
+            />
           ))}
+          <SwitchRow label={FREE_TIMES.label} line={FREE_TIMES.line} checked={sharing.categories.availability} disabled />
         </ul>
 
         {error ? (

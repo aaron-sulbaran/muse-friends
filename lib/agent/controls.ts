@@ -2,8 +2,10 @@ import {
   AgentMessage,
   CATEGORIES,
   SharePolicy,
+  TIER_DEFAULTS,
   type AgentId,
   type BusyBlock,
+  type Category,
   type RecordedRun,
   type Redaction,
   type ShareTier,
@@ -21,6 +23,12 @@ import { describeWindow, toCentralIso, toMs } from "./windows";
 type Options = { wallNow?: () => number };
 
 const nowIso = (options: Options) => toCentralIso(options.wallNow?.() ?? Date.now());
+
+// What a tier switches on: the protocol's one tier table. Picking a tier writes all of it as explicit categories, so
+// the switches on screen always follow the tier the person just picked, whichever sheet they picked it in.
+export function categoriesForTier(tier: ShareTier): Record<Category, boolean> {
+  return { ...TIER_DEFAULTS[tier] };
+}
 
 // Changes what one person shares with a friend, then replays that person's messages under the new
 // setting: anything the setting now forbids is removed from the stored message, the stamp turns to

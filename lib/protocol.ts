@@ -215,10 +215,11 @@ export const SharePolicy = z
   .refine((policy) => policy.owner !== policy.friend, { message: "owner and friend must differ", path: ["friend"] });
 export type SharePolicy = z.infer<typeof SharePolicy>;
 
-// Tier defaults; explicit entries in `categories` override these. Tier "off" shares nothing.
+// Tier defaults; explicit entries in `categories` override these. Tier "off" shares nothing. A friend gets restaurants
+// and food, and free times (the one thing the Muses need to find a day); a close friend gets everything.
 export const TIER_DEFAULTS: Record<ShareTier, Record<Category, boolean>> = {
   close: { food: true, events: true, availability: true, location: true, interests: true },
-  friend: { food: true, events: true, availability: true, location: false, interests: true },
+  friend: { food: true, events: false, availability: true, location: false, interests: false },
   off: { food: false, events: false, availability: false, location: false, interests: false },
 };
 
