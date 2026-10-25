@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { converse, withRoom, withoutRoom } from "@/app/api/_lib/room";
+import { chooseRoom, converse, withRoom, withoutRoom } from "@/app/api/_lib/room";
 import { refundRun, reserveRun, runBudget } from "@/lib/agent/caps";
 import { startFollowUp } from "@/lib/agent/followup";
 import { startGroup } from "@/lib/agent/group";
@@ -52,12 +52,13 @@ export async function POST(request: Request) {
   const body = Body.safeParse(withoutRoom(raw));
   if (!body.success) return Response.json({ error: z.prettifyError(body.error) }, { status: 400 });
 
-  return withRoom(request, raw, { mint: true }, async (room) => {
-    // A coordinator with three seats, and the trip's model-played people, are not run in a phone room yet.
-    if ((body.data.scenario === "group" || body.data.scenario === "trip") && !room.isDemo) {
-      return Response.json({ error: `A ${body.data.scenario === "trip" ? "trip" : "plan for three"} runs in the demo room for now, not in a phone room.` }, { status: 409 });
-    }
+  // A coordinator with three seats, and the trip's model-played people, are not run in a phone room yet. Refused before
+  // a room is made, so a refusal costs no room.
+  if ((body.data.scenario === "group" || body.data.scenario === "trip") && chooseRoom(request, raw).kind === "phone") {
+    return Response.json({ error: `A ${body.data.scenario === "trip" ? "trip" : "plan for three"} runs in the demo room for now, not in a phone room.` }, { status: 409 });
+  }
 
+  return withRoom(request, raw, { mint: true }, async (room) => {
     // The public URL spends model credits on every live run. Take a slot first; nothing is started without one.
     const reserved = reserveRun(room.id);
     if (!reserved.ok) {

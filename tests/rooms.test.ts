@@ -178,6 +178,28 @@ describe("the demo room is left alone by a write with a room id", () => {
   });
 });
 
+describe("scenarios in a room", () => {
+  it("refuses the plan of three and the trip in a phone room before making it, and still starts them in the demo room", async () => {
+    for (const scenario of ["group", "trip"]) {
+      const refused = await post(signalsPost, `/api/signals?room=${A}`, { scenario });
+      expect(refused.status, scenario).toBe(409);
+      expect((await refused.json()).error, scenario).toContain("demo room for now");
+    }
+    expect(await stateOf(A)).toBeNull();
+    const demo = await post(signalsPost, "/api/signals", { scenario: "group" });
+    expect(demo.status).toBe(202);
+    expect((await (await getStore()).snapshot()).plans).toHaveLength(1);
+  });
+
+  it("starts a follow-up in a room: the refusal for someone you do not follow each other with is written to that room only", async () => {
+    // An unknown contact writes nothing and gives the slot back; the room is made by the call.
+    const unknown = await post(signalsPost, `/api/signals?room=${A}`, { scenario: "follow_up", target: "nobody-by-that-id" });
+    expect(unknown.status).toBe(404);
+    expect((await stateOf(A))!.plans).toHaveLength(0);
+    expect((await (await getStore()).snapshot()).plans).toHaveLength(0);
+  });
+});
+
 describe("a room is made on its first write, and not before", () => {
   it("answers 404 to every call that cannot make a room, when the room does not exist", async () => {
     const unknown = "neverseen1";
