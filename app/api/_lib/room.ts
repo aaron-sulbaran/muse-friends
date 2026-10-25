@@ -3,12 +3,11 @@ import { after, NextResponse } from "next/server";
 import { judgeKeyConfigured, normalizeCode } from "@/app/api/connector/_lib/keyless";
 import { persistingStore } from "@/app/api/connector/_lib/room-store";
 import { defaultRoomRepo, ROOM_CAP_WINDOW_MS, RoomStorageError, type RoomRepo } from "@/app/api/connector/_lib/rooms";
-import { otherAgent } from "@/lib/agent/ids";
 import { withLock } from "@/lib/agent/lock";
 import { runInboxTurn } from "@/lib/agent/runtime";
 import { httpDeliver, localDeliver } from "@/lib/agent/wire";
 import { toCentralIso } from "@/lib/agent/windows";
-import type { AgentId, StateSnapshot, Wallet } from "@/lib/protocol";
+import type { MemberId, StateSnapshot, Wallet } from "@/lib/protocol";
 import { DEFAULT_ROOM, seedSnapshot } from "@/lib/seed/fixtures";
 import { getStore, type Store } from "@/lib/store";
 import { JsonStore } from "@/lib/store/json";
@@ -42,9 +41,11 @@ export type RoomScope = {
   isDemo: boolean;
   store: Store;
   // The agents' messages: over HTTP to the inbox for the demo room, in this process for any other room.
-  deliver(origin: string, agent: AgentId): Deliver;
-  // Agents that received a message in this process and owe a turn (rooms only; the demo inbox runs those itself).
-  pending: AgentId[];
+  deliver(origin: string, agent: MemberId): Deliver;
+  // Who received a message in this process and owes a turn, and on which thread (rooms only; the demo inbox runs
+  // those itself). It is the message's own recipient and context, so a follow-up with a contact and a plan of
+  // three are carried the same way as a pair.
+  pending: Array<{ agent: MemberId; contextId: string }>;
   // Work to do after the response: `after` as always for the demo room; in a room, under the room's lock, on the
   // room's latest saved state, saving as it goes.
   background(work: (scope: RoomScope) => Promise<void>): void;
@@ -181,10 +182,20 @@ async function openScope(deps: RoomDeps, key: string, id: string, snapshot: Stat
     isDemo: false,
     store: persisted.store,
     pending: [],
-    deliver: (_origin, agent) =>
-      localDeliver(persisted.store, agent, (accepted) => {
-        if (accepted.runTurn) scope.pending.push(otherAgent(agent));
-      }),
+    deliver: (_origin, agent) => {
+      let accepted: { runTurn: boolean } | null = null;
+      const inner = localDeliver(persisted.store, agent, (result) => {
+        accepted = result;
+      });
+      return async (input) => {
+        accepted = null;
+        const result = await inner(input);
+        if (result.ok && (accepted as { runTurn: boolean } | null)?.runTurn) {
+          scope.pending.push({ agent: input.record.message.to, contextId: input.record.message.contextId });
+        }
+        return result;
+      };
+    },
     background: (work) =>
       deps.schedule(() =>
         withLock(`room:${key}`, async () => {
@@ -205,14 +216,15 @@ async function openScope(deps: RoomDeps, key: string, id: string, snapshot: Stat
   return { value: scope, flush: persisted.flush };
 }
 
-// Runs `first` (which sends messages), then, in a room, every turn those messages cause, in this process. In the demo
-// room it only runs `first`: the inbox route takes each message from there.
+// Runs `first` (which sends messages), then, in a room, every turn those messages cause, in this process, each on the
+// thread its message arrived on. In the demo room it only runs `first`: the inbox route takes each message from there.
+// `contextId` is the thread the call is about; a turn owed on another thread (a plan of three) uses its own.
 export async function converse(scope: RoomScope, contextId: string, first: () => Promise<unknown>): Promise<void> {
   await first();
   if (scope.isDemo) return;
   for (let turns = 0; scope.pending.length > 0 && turns < MAX_TURNS; turns += 1) {
-    const agent = scope.pending.shift()!;
-    await runInboxTurn({ store: scope.store, agent, contextId, wallNow: Date.now, deliver: scope.deliver("", agent) });
+    const next = scope.pending.shift()!;
+    await runInboxTurn({ store: scope.store, agent: next.agent, contextId: next.contextId || contextId, wallNow: Date.now, deliver: scope.deliver("", next.agent) });
   }
 }
 
