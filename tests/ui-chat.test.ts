@@ -125,6 +125,14 @@ describe("the journey, phone by phone", () => {
     expect(kinds(viewForRole(confirmed, "b").items)).not.toContain("draft-card");
   });
 
+  it("confirmed already shows the calendar hold row, before any settle-up card", () => {
+    for (const role of ["a", "b"] as Role[]) {
+      const list = kinds(viewForRole(at("confirmed"), role).items);
+      expect(list).toContain("hold-row");
+      if (list.includes("settle-card")) expect(list.indexOf("hold-row")).toBeLessThan(list.indexOf("settle-card"));
+    }
+  });
+
   it("scheduled adds the hold row to both phones", () => {
     for (const role of ["a", "b"] as Role[]) expect(kinds(viewForRole(at("scheduled"), role).items)).toContain("hold-row");
   });
