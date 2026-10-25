@@ -131,32 +131,38 @@ async function declineLocked(ctx: ProposalContext, paymentId: string, by: AgentI
 
   const declined: PaymentProposal = { ...proposal, status: "declined", error: undefined, decidedAt: at(ctx) };
   await putProposal(store, declined);
-  await store.appendEvent({
-    id: newId("evt", nowMs(ctx)),
-    at: at(ctx),
-    kind: "payment_cancelled",
-    actor: "human",
-    agent: proposal.payer,
-    planId: proposal.planId,
-    contextId: `pay_${proposal.paymentId}`,
-    text: `${displayName(proposal.payer)} declined the $${proposal.amount} for ${displayName(proposal.payee)}. Nothing moved.`,
-  });
-  // The friend's Muse is told. If the hop fails the decision still stands: it is the person's, and nothing moved.
+  // The friend's Muse is told, and the message's own Activity row is the record of the decision. If the hop fails the
+  // decision still stands (it is the person's, and nothing moved), so the feed gets a row of its own instead.
   const wallet = await walletOf(store, proposal.payer);
-  if (wallet) {
-    const message = AgentMessage.parse({
-      id: newId("msg", nowMs(ctx)),
-      contextId: `pay_${proposal.paymentId}`,
-      seq: 1,
-      from: proposal.payer,
-      to: proposal.payee,
-      type: "payment_cancelled",
-      state: "rejected",
-      reason: "settle_up",
-      payment: { paymentId: proposal.paymentId, planId: proposal.planId, amount: proposal.amount, currency: "USD", reason: proposal.reason, source: wallet.source, payerAccountId: wallet.accountId },
+  const told = wallet
+    ? await sendPaymentMessage(
+        { store, deliver: ctx.deliver },
+        AgentMessage.parse({
+          id: newId("msg", nowMs(ctx)),
+          contextId: `pay_${proposal.paymentId}`,
+          seq: 1,
+          from: proposal.payer,
+          to: proposal.payee,
+          type: "payment_cancelled",
+          state: "rejected",
+          reason: "settle_up",
+          payment: { paymentId: proposal.paymentId, planId: proposal.planId, amount: proposal.amount, currency: "USD", reason: proposal.reason, source: wallet.source, payerAccountId: wallet.accountId },
+          at: at(ctx),
+        }),
+        undefined,
+      )
+    : ({ ok: false, error: "no wallet" } as const);
+  if (!told.ok) {
+    await store.appendEvent({
+      id: newId("evt", nowMs(ctx)),
       at: at(ctx),
+      kind: "payment_cancelled",
+      actor: "human",
+      agent: proposal.payer,
+      planId: proposal.planId,
+      contextId: `pay_${proposal.paymentId}`,
+      text: `${displayName(proposal.payer)} declined the $${proposal.amount} for ${displayName(proposal.payee)}. Nothing moved. ${displayName(proposal.payee)}'s Muse could not be told: ${told.error}`,
     });
-    await sendPaymentMessage({ store, deliver: ctx.deliver }, message, undefined);
   }
   return { ok: true, already: false, proposal: declined };
 }
