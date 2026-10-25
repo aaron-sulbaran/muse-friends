@@ -30,13 +30,13 @@ describe("decide", () => {
     expect(event).toMatchObject({ kind: "human_decision", actor: "human", agent: "aaron", text: "Sprout said yes to Shawarma Point" });
   });
 
-  it("confirms on two yeses, in either order, and issues the hold", async () => {
+  it("confirms on two yeses, in either order, and waits for the handoff to issue the hold", async () => {
     await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "accept" }, options());
     const { plan } = ok(await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", choice: "accept" }, options()));
-    expect(plan.state).toBe("scheduled");
-    expect(plan.history.map((entry) => entry.state)).toEqual(["detected", "negotiating", "awaiting_humans", "confirmed", "scheduled"]);
-    expect(await store.getThread(SHAWARMA_CONTEXT_ID)).toMatchObject({ state: "completed" });
-    expect((await store.listEvents()).slice(-3).map((event) => event.kind)).toEqual(["human_decision", "plan_state", "hold_issued"]);
+    expect(plan.state).toBe("confirmed");
+    expect(plan.history.map((entry) => entry.state)).toEqual(["detected", "negotiating", "awaiting_humans", "confirmed"]);
+    expect(await store.getThread(SHAWARMA_CONTEXT_ID)).toMatchObject({ state: "input-required" });
+    expect((await store.listEvents()).slice(-2).map((event) => event.kind)).toEqual(["human_decision", "plan_state"]);
   });
 
   it("drops the plan when either person says no", async () => {
@@ -51,7 +51,7 @@ describe("decide", () => {
     expect(await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", choice: "decline" })).toMatchObject({ ok: false, status: 409 });
     expect(await decide(store, { planId: "plan_nope", agent: "aaron", choice: "accept" })).toMatchObject({ ok: false, status: 404 });
     await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "accept" }, options());
-    expect(await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "accept" })).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("scheduled") });
+    expect(await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "accept" })).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("confirmed") });
   });
 });
 
@@ -64,6 +64,23 @@ describe("recordHandoff", () => {
     expect(texts).toEqual(["Sprout opened WhatsApp with the drafted message", "Sprout copied the drafted message"]);
   });
 
+  it("issues the calendar hold once the plan is confirmed, and only then", async () => {
+    const early = ok(await recordHandoff(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", via: "whatsapp" }, options()));
+    expect(early.plan.state).toBe("awaiting_humans");
+
+    await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", choice: "accept" }, options());
+    await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "accept" }, options());
+    const confirmed = ok(await recordHandoff(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", via: "whatsapp" }, options()));
+    expect(confirmed.plan.state).toBe("scheduled");
+    expect(confirmed.plan.history.map((entry) => entry.state).at(-1)).toBe("scheduled");
+    expect(await store.getThread(SHAWARMA_CONTEXT_ID)).toMatchObject({ state: "completed" });
+    expect((await store.listEvents()).slice(-2).map((event) => event.kind)).toEqual(["handoff_opened", "hold_issued"]);
+
+    const again = ok(await recordHandoff(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", via: "copy" }, options()));
+    expect(again.plan.state).toBe("scheduled");
+    expect((await store.listEvents()).filter((event) => event.kind === "hold_issued")).toHaveLength(1);
+  });
+
   it("refuses when there is no draft or no plan", async () => {
     expect(await recordHandoff(store, { planId: "nope", agent: "aaron", via: "copy" })).toMatchObject({ ok: false, status: 404 });
     const plan = (await store.getPlan(SHAWARMA_PLAN_ID))!;
@@ -73,9 +90,13 @@ describe("recordHandoff", () => {
 });
 
 describe("advanceClock", () => {
-  async function scheduled() {
+  async function confirmed() {
     await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", choice: "accept" }, options());
     await decide(store, { planId: SHAWARMA_PLAN_ID, agent: "lisa", choice: "accept" }, options());
+  }
+  async function scheduled() {
+    await confirmed();
+    ok(await recordHandoff(store, { planId: SHAWARMA_PLAN_ID, agent: "aaron", via: "whatsapp" }, options()));
   }
 
   it("walks scheduled to followed_up, one step at a time", async () => {
@@ -106,12 +127,30 @@ describe("advanceClock", () => {
     expect(events.filter((event) => event.text.includes("again next month?")).map((event) => event.agent)).toEqual(["aaron", "lisa"]);
   });
 
-  it("accepts a named step only when it is the next one, and never moves backward", async () => {
+  it("runs the steps in between when a later one is named, so two buttons are enough", async () => {
     await scheduled();
-    expect(await advanceClock(store, { step: "end" })).toMatchObject({ ok: false, status: 409 });
-    expect(await advanceClock(store, { step: "next_day" })).toMatchObject({ ok: false, status: 409 });
-    ok(await advanceClock(store, { step: "reminder" }));
+    const { plan, clock: moved } = ok(await advanceClock(store, { step: "next_day" }, options()));
+    expect(plan.state).toBe("followed_up");
+    expect(moved.now).toBe("2026-10-28T10:00:00-05:00");
+    expect(plan.history.map((entry) => entry.state).slice(-3)).toEqual(["reminded", "happened", "followed_up"]);
+    expect((await store.listEvents()).filter((event) => event.kind === "followed_through")).toHaveLength(1);
+  });
+
+  it("can stop at a named step, and never moves backward or repeats a step", async () => {
+    await scheduled();
+    const end = ok(await advanceClock(store, { step: "end" }));
+    expect(end.plan.state).toBe("happened");
     expect(await advanceClock(store, { step: "reminder" })).toMatchObject({ ok: false, status: 409 });
+    expect(await advanceClock(store, { step: "end" })).toMatchObject({ ok: false, status: 409 });
+    expect(ok(await advanceClock(store, { step: "next_day" })).plan.state).toBe("followed_up");
+  });
+
+  it("issues the hold itself if the plan is confirmed and nobody opened the draft", async () => {
+    await confirmed();
+    const { plan } = ok(await advanceClock(store, {}, options()));
+    expect(plan.state).toBe("reminded");
+    expect(plan.history.map((entry) => entry.state).slice(-3)).toEqual(["confirmed", "scheduled", "reminded"]);
+    expect(await store.getThread(SHAWARMA_CONTEXT_ID)).toMatchObject({ state: "completed" });
   });
 
   it("will not move a plan that is still waiting for people, finished, or missing", async () => {

@@ -246,10 +246,23 @@ export const Redaction = z.strictObject({
 });
 export type Redaction = z.infer<typeof Redaction>;
 
+// Evidence that a model call produced the message: shown on the Activity row so a judge can see the
+// agent link is live. Absent on scripted fixtures, which no model wrote.
+export const ModelProof = z.strictObject({
+  model: z.string().max(40),
+  responseId: z.string().max(80),
+  latencyMs: z.number().int().min(0),
+  inputTokens: z.number().int().min(0),
+  outputTokens: z.number().int().min(0),
+  reasoningTokens: z.number().int().min(0),
+});
+export type ModelProof = z.infer<typeof ModelProof>;
+
 // A message as stored and shown: the wire message plus its policy stamp and delivery outcome.
 export const MessageRecord = z.strictObject({
   message: AgentMessage,
   stamp: PolicyStamp,
+  proof: ModelProof.optional(),
   delivery: z.enum(["delivered", "rejected", "failed"]),
   httpStatus: z.number().int().optional(),
   error: z.string().max(200).optional(),

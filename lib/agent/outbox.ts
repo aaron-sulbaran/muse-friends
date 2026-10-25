@@ -9,6 +9,7 @@ import {
 } from "@/lib/protocol";
 import { enforceSharePolicy, projectShared } from "@/lib/policy";
 import { getPersona } from "@/lib/seed/fixtures";
+import type { ToolMeta } from "@/lib/model";
 import type { AgentRuntimeContext } from "./context";
 import { ownFreeBlocks } from "./calendar";
 import { commitMessage } from "./inbound";
@@ -40,7 +41,7 @@ function normalizeArgs(ctx: AgentRuntimeContext, rawArgs: unknown): unknown {
   return given === undefined || matches ? { ...rawArgs, friend } : rawArgs;
 }
 
-export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown): Promise<SendResult> {
+export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown, meta?: ToolMeta): Promise<SendResult> {
   const parsed = SendToFriendArgs.safeParse(normalizeArgs(ctx, rawArgs));
   if (!parsed.success) return fail(`Invalid message. ${z.prettifyError(parsed.error)}`);
   const args = parsed.data;
@@ -134,7 +135,21 @@ export async function sendToFriend(ctx: AgentRuntimeContext, rawArgs: unknown): 
     );
   }
 
-  const record: MessageRecord = { message: final.data, stamp: outcome.stamp, delivery: "delivered" };
+  const record: MessageRecord = {
+    message: final.data,
+    stamp: outcome.stamp,
+    delivery: "delivered",
+    proof: meta
+      ? {
+          model: meta.model,
+          responseId: meta.responseId,
+          latencyMs: meta.call.ms,
+          inputTokens: meta.call.inputTokens,
+          outputTokens: meta.call.outputTokens,
+          reasoningTokens: meta.call.reasoningTokens,
+        }
+      : undefined,
+  };
   const delivery = ctx.deliver ? await ctx.deliver({ record, redaction: outcome.redaction }) : (await commitMessage(store, record, outcome.redaction), { ok: true as const });
   if (!delivery.ok) return fail(`Your friend's inbox rejected the message (${delivery.status}): ${delivery.error}`);
 

@@ -121,7 +121,7 @@ export function buildTools(ctx: AgentRuntimeContext): { tools: ToolDefinition[];
       return { ok: true, saved: parsed.data, free_hint: plan?.window ? describeWindow(plan.window) : undefined };
     },
 
-    send_to_friend_agent: (raw) => sendToFriend(ctx, raw),
+    send_to_friend_agent: (raw, meta) => sendToFriend(ctx, raw, meta),
   };
 
   return { tools, handlers };

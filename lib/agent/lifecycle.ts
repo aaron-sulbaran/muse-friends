@@ -39,7 +39,9 @@ export async function currentPlan(store: Store): Promise<Plan | null> {
   return [...plans].reverse().find((plan) => plan.state !== "dropped") ?? null;
 }
 
-async function issueHold(store: Store, plan: Plan, at: string): Promise<Plan> {
+// The agents issue the calendar hold: confirmed -> scheduled, thread completed. The people opening the
+// WhatsApp draft triggers it; the clock does it too if nobody has, so the demo cannot stall.
+export async function scheduleHold(store: Store, plan: Plan, at: string): Promise<Plan> {
   const scheduled = transitionPlan(plan, "scheduled", at, { note: "Calendar hold issued" });
   await store.putPlan(scheduled);
   await setThreadState(store, plan.contextId, "completed", at);
@@ -48,7 +50,7 @@ async function issueHold(store: Store, plan: Plan, at: string): Promise<Plan> {
 }
 
 // A person taps yes or no on their card. Either person may go first. A no drops the plan; two yeses
-// confirm it, and the agents issue the calendar hold straight away.
+// confirm it. The hold follows when the draft is opened (recordHandoff) or the clock moves on.
 export async function decide(
   store: Store,
   input: { planId: string; agent: AgentId; choice: "accept" | "decline" },
@@ -84,7 +86,6 @@ export async function decide(
     next = transitionPlan(next, "confirmed", at, { note: "Both people said yes" });
     await store.putPlan(next);
     await store.appendEvent(row(plan, at, "plan_state", "system", "Plan confirmed by both people"));
-    next = await issueHold(store, next, at);
   } else {
     await store.putPlan(next);
   }
@@ -92,11 +93,12 @@ export async function decide(
 }
 
 // A person opened the WhatsApp handoff (or copied the draft). The human sends; the agent only drafts.
+// Once the plan is confirmed, this is also the moment the agents issue the calendar hold.
 export async function recordHandoff(
   store: Store,
   input: { planId: string; agent: AgentId; via: "whatsapp" | "copy" },
   options: Options = {},
-): Promise<LifecycleResult<{ draft: string }>> {
+): Promise<LifecycleResult<{ draft: string; plan: Plan }>> {
   const plan = await store.getPlan(input.planId);
   if (!plan) return { ok: false, status: 404, error: "no such plan" };
   if (!plan.draft) return { ok: false, status: 409, error: "this plan has no drafted message yet" };
@@ -106,31 +108,52 @@ export async function recordHandoff(
       ? `${displayName(input.agent)} opened WhatsApp with the drafted message`
       : `${displayName(input.agent)} copied the drafted message`;
   await store.appendEvent(row(plan, at, "handoff_opened", "human", text, { agent: input.agent }));
-  return { ok: true, value: { draft: plan.draft } };
+  const current = plan.state === "confirmed" ? await scheduleHold(store, plan, at) : plan;
+  return { ok: true, value: { draft: plan.draft, plan: current } };
 }
 
 export type ClockStep = "next" | "reminder" | "end" | "next_day";
 
+const ORDER: Array<Exclude<ClockStep, "next">> = ["reminder", "end", "next_day"];
 const STEP_FOR_STATE: Partial<Record<Plan["state"], Exclude<ClockStep, "next">>> = {
+  confirmed: "reminder",
   scheduled: "reminder",
   reminded: "end",
   happened: "next_day",
 };
 
-// Moves the demo clock to the next moment of the plan's life and runs what happens there. The clock
-// only moves forward. "reminder" is two hours before the plan, "end" is when it finishes, "next_day"
-// is the following morning.
+// Moves the demo clock forward through the plan's life and runs what happens at each moment.
+// "reminder" is two hours before the plan, "end" is when it finishes, "next_day" is the following
+// morning; "next" (the default) is whichever comes next. Naming a later step runs the ones in
+// between, so a two-button control can jump from scheduled straight to the follow-up. A confirmed
+// plan that never had its hold issued gets it first. The clock only moves forward.
 export async function advanceClock(
   store: Store,
   input: { step?: ClockStep; planId?: string } = {},
+  options: Options = {},
 ): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan }>> {
-  const plan = input.planId ? await store.getPlan(input.planId) : await currentPlan(store);
-  if (!plan) return { ok: false, status: 404, error: "no plan to move forward" };
-  if (!plan.window) return { ok: false, status: 409, error: "the plan has no time yet" };
+  const found = input.planId ? await store.getPlan(input.planId) : await currentPlan(store);
+  if (!found) return { ok: false, status: 404, error: "no plan to move forward" };
+  if (!found.window) return { ok: false, status: 409, error: "the plan has no time yet" };
 
-  const wanted = STEP_FOR_STATE[plan.state];
-  const step = !input.step || input.step === "next" ? wanted : input.step;
-  if (!step || step !== wanted) return { ok: false, status: 409, error: `the plan is ${plan.state}; the clock cannot move to ${input.step ?? "next"} from here` };
+  const wanted = STEP_FOR_STATE[found.state];
+  const requested = !input.step || input.step === "next" ? wanted : input.step;
+  if (!wanted || !requested || ORDER.indexOf(requested) < ORDER.indexOf(wanted)) {
+    return { ok: false, status: 409, error: `the plan is ${found.state}; the clock cannot move to ${input.step ?? "next"} from here` };
+  }
+
+  let plan = found.state === "confirmed" ? await scheduleHold(store, found, toCentralIso(options.wallNow?.() ?? Date.now())) : found;
+  let last: LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan }> = { ok: false, status: 409, error: "nothing to do" };
+  for (let index = ORDER.indexOf(STEP_FOR_STATE[plan.state]!); index <= ORDER.indexOf(requested); index += 1) {
+    last = await runStep(store, plan, ORDER[index]);
+    if (!last.ok) return last;
+    plan = last.value.plan;
+  }
+  return last;
+}
+
+async function runStep(store: Store, plan: Plan, step: Exclude<ClockStep, "next">): Promise<LifecycleResult<{ clock: StateSnapshot["clock"]; plan: Plan }>> {
+  if (!plan.window) return { ok: false, status: 409, error: "the plan has no time yet" };
 
   const startMs = toMs(plan.window.start);
   const endMs = toMs(plan.window.end);
