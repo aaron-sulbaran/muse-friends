@@ -1,9 +1,10 @@
 import type { Contact } from "@/lib/seed/contacts";
-import { MAX_WINDOW_HOURS, THREAD_CAP, type ActivityEvent, type AgentMessage, type SendToFriendArgs, type Signal, type Window } from "@/lib/protocol";
+import { MAX_WINDOW_HOURS, THREAD_CAP, type ActivityEvent, type AgentMessage, type MemberId, type Plan, type PlanGroup, type SendToFriendArgs, type Signal, type Window } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/fixtures";
 import type { AgentRuntimeContext } from "./context";
 import { ownFreeBlocks } from "./calendar";
-import { newId, otherAgent } from "./ids";
+import { memberContexts, planForContext } from "./group";
+import { newId, otherAgent, seatOf } from "./ids";
 import { sendToFriend } from "./outbox";
 import { describeWindow, intersectWindows, isSubsetOfBlocks, toCentralIso, toMs, windowHash } from "./windows";
 
@@ -69,19 +70,21 @@ export function activityFromSignal(signal: Signal | null): { kind: "food"; title
   return { kind: "food", title: (name ?? "this spot").slice(0, TITLE_MAX), ...(area ? { place: area.slice(0, 60) } : {}) };
 }
 
-async function send(ctx: AgentRuntimeContext, args: Omit<SendToFriendArgs, "friend">, summary: string): Promise<FallbackOutcome> {
-  const result = await sendToFriend(ctx, { friend: otherAgent(ctx.agent), ...args });
+// `friend` is the other phone seat unless the turn names one (a coordinator answering each member of a group).
+async function send(ctx: AgentRuntimeContext, args: Omit<SendToFriendArgs, "friend">, summary: string, friend: MemberId = otherAgent(ctx.agent)): Promise<FallbackOutcome> {
+  const result = await sendToFriend(ctx, { friend, ...args });
   if ("error" in result) return { sent: false, reason: "send_failed", error: result.error };
   const nowMs = ctx.wallNow?.() ?? Date.now();
-  const plan = await ctx.store.getPlanByContext(ctx.contextId);
-  const sent = (await ctx.store.listMessages(ctx.contextId)).map((record) => record.message).filter((message) => message.from === ctx.agent).at(-1);
+  const contextId = ctx.contexts?.[friend] ?? ctx.contextId;
+  const plan = await planForContext(ctx.store, contextId);
+  const sent = (await ctx.store.listMessages(contextId)).map((record) => record.message).filter((message) => message.from === ctx.agent).at(-1);
   const event: ActivityEvent = {
     id: newId("evt", nowMs),
     at: toCentralIso(nowMs),
     kind: "plan_state",
     actor: "agent",
-    agent: ctx.agent,
-    contextId: ctx.contextId,
+    agent: seatOf(ctx.agent),
+    contextId,
     planId: plan?.id,
     messageId: sent?.id,
     text: `Fallback: the model could not reply, so ${displayName(ctx.agent)} sent ${summary}`.slice(0, 240),
@@ -103,18 +106,36 @@ export async function fallbackOpening(ctx: AgentRuntimeContext): Promise<Fallbac
   );
 }
 
+function byLength(a: Window, b: Window): number {
+  return toMs(b.end) - toMs(b.start) - (toMs(a.end) - toMs(a.start)) || toMs(a.start) - toMs(b.start);
+}
+
+// The longest window of a list (the earliest of equals): a plan needs room more than it needs a day.
+function longestOf(windows: Window[]): Window | undefined {
+  return [...windows].sort(byLength)[0];
+}
+
 // The receiving agent could not reply: close on a window that works for both when there is one, otherwise
 // offer its own free windows, and decline when it has nothing left to offer or this is the closing message.
-export async function fallbackReply(ctx: AgentRuntimeContext, input: { thread: AgentMessage[]; mutualWindows: Window[]; ledger: Set<string> }): Promise<FallbackOutcome> {
+// A member of a group plan never closes first: the coordinator needs every member's windows before it picks
+// one, so it answers its intent with a counter of every window that works, and accepts only what the
+// coordinator then accepts.
+export async function fallbackReply(
+  ctx: AgentRuntimeContext,
+  input: { thread: AgentMessage[]; mutualWindows: Window[]; ledger: Set<string>; group?: boolean },
+): Promise<FallbackOutcome> {
   const { thread, mutualWindows, ledger } = input;
   const friendLast = [...thread].reverse().find((message) => message.from !== ctx.agent);
   const seq = thread.length + 1;
   const free = await ownFreeBlocks(ctx.store, ctx.agent);
 
+  if (input.group && friendLast?.type !== "accept" && mutualWindows.length > 0) {
+    const worked = [...mutualWindows].sort(byLength).slice(0, MAX_OFFERED).sort((a, b) => toMs(a.start) - toMs(b.start));
+    return send(ctx, { type: "counter", reason: "both_free", windows: worked, note: "Those times work for me." }, "the windows that work for it");
+  }
+
   const accepted = friendLast?.type === "accept" ? friendLast.windows?.[0] : undefined;
-  // The longest window that works for both (the earliest of equals): a plan needs room more than it needs a day.
-  const longest = [...mutualWindows].sort((a, b) => toMs(b.end) - toMs(b.start) - (toMs(a.end) - toMs(a.start)) || toMs(a.start) - toMs(b.start))[0];
-  const closeOn = accepted && isSubsetOfBlocks(accepted, free) ? accepted : longest;
+  const closeOn = accepted && isSubsetOfBlocks(accepted, free) ? accepted : input.group ? undefined : longestOf(mutualWindows);
   if (closeOn) {
     return send(ctx, { type: "accept", reason: "both_free", windows: [closeOn], note: "That works for me." }, `an accept of ${describeWindow(closeOn)}`);
   }
@@ -138,4 +159,40 @@ export async function fallbackFollowUp(ctx: AgentRuntimeContext, contact: Contac
     { type: "intent", reason: "interest_match", activity: { kind: "events", title: "Coffee" }, windows, note: "Good meeting you. Want to grab a coffee?", share: ["interests"] },
     `its free windows for a coffee with ${contact.displayName}`,
   );
+}
+
+// The coordinator of a group could not open it: the same intent to every member that has not heard from it yet,
+// each on its own pair thread. A member that already got a message from the model keeps it.
+export async function fallbackGroupOpening(ctx: AgentRuntimeContext, group: PlanGroup): Promise<FallbackOutcome> {
+  const free = await ownFreeBlocks(ctx.store, ctx.agent);
+  const windows = fallbackWindows(free);
+  if (windows.length === 0) return { sent: false, reason: "no_windows" };
+  const signal = ctx.signalId ? await ctx.store.getSignal(ctx.signalId) : null;
+  for (const { member, contextId } of memberContexts(group)) {
+    const prior = await ctx.store.listMessages(contextId);
+    if (prior.some((record) => record.message.from === ctx.agent)) continue;
+    const outcome = await send(
+      ctx,
+      { type: "intent", reason: "interest_match", activity: activityFromSignal(signal), windows, note: "Want to go? Here are times I am free.", share: ["food"] },
+      "its free windows",
+      member,
+    );
+    if (!outcome.sent) return outcome;
+  }
+  return { sent: true };
+}
+
+// The coordinator could not finish round 2: accept the longest window that works for everyone with each member
+// that has not been answered yet, or decline them all when no window works for all three.
+export async function fallbackGroupConfirm(ctx: AgentRuntimeContext, plan: Plan, candidates: Window[]): Promise<FallbackOutcome> {
+  const best = longestOf(candidates);
+  for (const { member, contextId } of memberContexts(plan.group!)) {
+    const prior = await ctx.store.listMessages(contextId);
+    if (prior.at(-1)?.message.from === ctx.agent) continue;
+    const outcome = best
+      ? await send(ctx, { type: "accept", reason: "both_free", windows: [best], note: "That works for me." }, `an accept of ${describeWindow(best)} for all three`, member)
+      : await send(ctx, { type: "decline", reason: "no_overlap", note: "I cannot find a time that works for all three." }, "a decline, no time works for all three", member);
+    if (!outcome.sent) return outcome;
+  }
+  return { sent: true };
 }

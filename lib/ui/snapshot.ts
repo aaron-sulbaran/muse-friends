@@ -226,8 +226,9 @@ function toUiMessages(state: StateSnapshot): UiMessage[] {
       id: message.id,
       contextId: message.contextId,
       seq: message.seq,
-      from: message.from,
-      to: message.to,
+      // A group plan's third member has no phone seat yet; Lane B renders them (see the group PR).
+      from: message.from as AgentId,
+      to: message.to as AgentId,
       type: message.type,
       state: message.state,
       activity: message.activity ? { title: message.activity.title, place: message.activity.place } : undefined,
@@ -251,7 +252,7 @@ function deriveInFlight(state: StateSnapshot, plan: Plan | null): UiSnapshot["in
   if (!thread) return plan.state === "detected" ? { agent: plan.initiator } : null;
   if (thread.state !== "working") return null;
   const last = state.messages.filter((record) => record.message.contextId === thread.contextId).at(-1);
-  return { agent: last ? last.message.to : thread.initiator };
+  return { agent: (last ? last.message.to : thread.initiator) as AgentId };
 }
 
 /** An agent's turn that produced no message ends the thread as failed and leaves a turn_failed event naming the agent. */

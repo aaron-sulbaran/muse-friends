@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { refundRun, reserveRun, runBudget } from "@/lib/agent/caps";
 import { startFollowUp } from "@/lib/agent/followup";
+import { startGroup } from "@/lib/agent/group";
 import { injectSignal, runFollowUpTurn, runSignalTurn } from "@/lib/agent/runtime";
 import { newId } from "@/lib/agent/ids";
 import { httpDeliver } from "@/lib/agent/wire";
@@ -10,7 +11,7 @@ import type { Signal } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
 
-// Starts a plan. Two ways in, seeded by default:
+// Starts a plan. Three ways in, seeded by default:
 //   {} or { scenario: "shawarma" }               "Lisa sent Aaron a reel": injects the reel and starts the
 //                                                receiving agent's turn after responding. The reel is read live
 //                                                from its owner's Instagram (lib/instagram.ts) when a token is
@@ -25,10 +26,13 @@ import { getStore } from "@/lib/store";
 // (lib/agent/caps.ts). Past either, the answer is 429 { paused: true, text: "Live runs paused, playing a
 // recording" }: the room is meant to fall back to Replay. A start that writes nothing (an unknown contact) gives its slot back; a refusal keeps it.
 // GET returns the counters for the JSON drawer.
+//
+// scenario "group" is the same reel, but Sprout makes it a plan for three (Mochi and Pebble): one pair thread per
+// friend, the protocol unchanged, a groupId on each thread, one plan with a group on it.
 export const maxDuration = 300;
 
 const Body = z.union([
-  z.strictObject({ scenario: z.literal("shawarma").default("shawarma") }),
+  z.strictObject({ scenario: z.enum(["shawarma", "group"]).default("shawarma") }),
   z.strictObject({ scenario: z.literal("follow_up"), target: z.string().min(1).max(40) }),
 ]);
 
@@ -91,6 +95,23 @@ export async function POST(request: Request) {
         },
       }
     : { ...seeded, id: newId("sig") };
+
+  if (body.data.scenario === "group") {
+    const started = await startGroup(store, signal);
+    const group = (await store.getPlan(started.planId))?.group;
+    after(async () => {
+      try {
+        await runSignalTurn({ store, agent: signal.to, signalId: signal.id, contextId: started.firstContextId, group, deliver: httpDeliver(origin, signal.to) });
+      } catch (error) {
+        console.error("group signal turn failed", error);
+      }
+    });
+    return Response.json(
+      { signalId: signal.id, contextId: started.firstContextId, planId: started.planId, groupId: started.groupId, contexts: started.contexts, status: { state: "working" }, budget },
+      { status: 202 },
+    );
+  }
+
   const { contextId, planId } = await injectSignal(store, signal);
   after(async () => {
     try {

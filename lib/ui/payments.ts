@@ -34,8 +34,10 @@ export type SettleOffer =
   | { kind: "turn_on"; event?: string | null }
   /** Ready: the person can ask their Muse to settle up. */
   | { kind: "ready"; cap: number; event?: string | null }
-  /** A payment for this plan is still waiting on the friend's Muse. */
-  | { kind: "waiting" };
+  /** A payment for this plan is still waiting on the friend's Muse, or on the person to confirm it. */
+  | { kind: "waiting" }
+  /** The friend kept money for this plan: it is settled, and the ready card does not come back. Not drawn. */
+  | { kind: "settled"; amount: number };
 
 /**
  * Whether a phone offers "Settle up" after a plan is confirmed. A payment already sent and unanswered blocks a
@@ -50,6 +52,9 @@ export function settleOffer(
   if (plan.state === "detected" || plan.state === "negotiating" || plan.state === "awaiting_humans" || plan.state === "dropped") return { kind: "hidden" };
   // A payment waiting on the friend, or a proposal still waiting on the person (or failed and retryable), is the one open payment.
   if (snapshot.payments.some((payment) => payment.planId === plan.id && (payment.status === "sent" || payment.status === "proposed" || payment.status === "failed"))) return { kind: "waiting" };
+  // Money the friend kept settles the plan for both phones; a refund puts the money back, so then it is on offer again.
+  const kept = snapshot.payments.filter((payment) => payment.planId === plan.id && payment.status === "received");
+  if (kept.length > 0) return { kind: "settled", amount: kept.reduce((total, payment) => total + payment.amount, 0) };
   const scope = snapshot.paymentsScope[agent];
   const event = plan.activityTitle ? eventLabel({ activityTitle: plan.activityTitle, window: plan.window ?? null }) : null;
   return scope.enabled && scope.cap > 0 ? { kind: "ready", cap: scope.cap, event } : { kind: "turn_on", event };

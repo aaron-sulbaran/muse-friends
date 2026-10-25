@@ -7,7 +7,7 @@ import {
   SHARED_CATEGORIES,
   categoriesInMessage,
   isCategoryAllowed,
-  type AgentId,
+  type MemberId,
   type Category,
   type Persona,
   type PolicyStamp,
@@ -223,9 +223,9 @@ export type IncomingCheck = { ok: true; message: AgentMessage } | { ok: false; s
 type ValidateInput = {
   raw: unknown;
   // Who the bearer token says is calling.
-  authenticatedSender: AgentId;
+  authenticatedSender: MemberId;
   // Whose inbox this is.
-  recipient: AgentId;
+  recipient: MemberId;
   thread: Thread | null;
   prior: AgentMessage[];
   // The sender's own verified free blocks and sharing policy, read by trusted server code. The

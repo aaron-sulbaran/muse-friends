@@ -4,7 +4,7 @@ import type { ToolDefinition, ToolHandler } from "@/lib/model";
 import { getPersona, displayName } from "@/lib/seed/fixtures";
 import type { AgentRuntimeContext } from "./context";
 import { ownCalendar, ownFreeBlocks } from "./calendar";
-import { newId } from "./ids";
+import { newId, seatOf } from "./ids";
 import { sendToFriend } from "./outbox";
 import { describeWindow, parseWhen, toCentralIso } from "./windows";
 
@@ -112,7 +112,7 @@ export function buildTools(ctx: AgentRuntimeContext): { tools: ToolDefinition[];
         at,
         kind: "caption_extracted",
         actor: "agent",
-        agent,
+        agent: seatOf(agent),
         contextId: ctx.contextId,
         planId: plan?.id,
         text: `${displayName(agent)} read the reel caption: ${parsed.data.place}${parsed.data.area ? `, ${parsed.data.area}` : ""}${parsed.data.hours ? `, ${parsed.data.hours.charAt(0).toLowerCase()}${parsed.data.hours.slice(1)}` : ""} (extracted from caption)`,

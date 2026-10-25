@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { AgentId } from "@/lib/protocol";
+import { MemberId } from "@/lib/protocol";
 import { runInboxTurn } from "@/lib/agent/runtime";
 import { authenticateSender, httpDeliver, receiveMessage } from "@/lib/agent/wire";
 import { getStore } from "@/lib/store";
@@ -9,7 +9,7 @@ import { getStore } from "@/lib/store";
 export const maxDuration = 300;
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const recipient = AgentId.safeParse((await params).id);
+  const recipient = MemberId.safeParse((await params).id);
   if (!recipient.success) return Response.json({ error: "unknown agent" }, { status: 404 });
 
   const sender = authenticateSender(request.headers.get("authorization"));

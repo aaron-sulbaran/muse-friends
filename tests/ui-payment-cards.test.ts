@@ -72,9 +72,19 @@ describe("which card for which state", () => {
     for (const status of ["proposed", "failed", "sent"] as const) {
       expect(settleOffer({ ...base, payments: [payment({ status })] }, plan, "aaron")).toEqual({ kind: "waiting" });
     }
-    for (const status of ["declined", "received", "refunded"] as const) {
+    for (const status of ["declined", "refunded"] as const) {
       expect(settleOffer({ ...base, payments: [payment({ status })] }, plan, "aaron").kind).toBe("ready");
     }
+  });
+
+  it("calls the plan settled once the friend kept the money, on both phones, so the ready card does not come back", () => {
+    const base = { paymentsScope: { aaron: { enabled: true, cap: 30 }, lisa: { enabled: true, cap: 30 } }, sandbox: { enabled: true, connected: true, text: "x" } };
+    const plan = { id: "plan_1", state: "scheduled" as const };
+    const kept = { ...base, payments: [payment({ status: "received", amount: 16 })] };
+    expect(settleOffer(kept, plan, "aaron")).toEqual({ kind: "settled", amount: 16 });
+    expect(settleOffer(kept, plan, "lisa")).toEqual({ kind: "settled", amount: 16 });
+    // Another plan's payment says nothing about this one.
+    expect(settleOffer({ ...base, payments: [payment({ status: "received", planId: "plan_2" })] }, plan, "aaron").kind).toBe("ready");
   });
 });
 
@@ -108,6 +118,23 @@ describe("the breakdown", () => {
   it("lists the tools called once each, in order", () => {
     expect(toolsCalled(payment())).toEqual(["read_receipt", "get_wallet"]);
     expect(toolsCalled(payment({ toolCalls: undefined }))).toEqual([]);
+  });
+
+  it("says send_money only prepared a payment until the person has confirmed it", () => {
+    const calls = [{ name: "get_wallet", args: "", result: "" }, { name: "read_receipt", args: "", result: "" }, { name: "send_money", args: "", result: "" }];
+    expect(toolsCalled(payment({ status: "proposed", toolCalls: calls }))).toEqual(["get_wallet", "read_receipt", "send_money (prepared, waits for you)"]);
+    expect(toolsCalled(payment({ status: "failed", toolCalls: calls })).at(-1)).toBe("send_money (prepared, nothing moved)");
+    expect(toolsCalled(payment({ status: "declined", toolCalls: calls })).at(-1)).toBe("send_money (prepared, not sent)");
+    for (const status of ["sent", "received", "refunded"] as const) expect(toolsCalled(payment({ status, toolCalls: calls })).at(-1)).toBe("send_money");
+  });
+
+  it("shows that label in the sheet's footer while the payment is waiting", () => {
+    const calls = [{ name: "send_money", args: "", result: "" }];
+    const waiting = text(renderToStaticMarkup(createElement(ProvenanceSheet, { payment: payment({ status: "proposed", toolCalls: calls }), onClose: () => {} })));
+    expect(waiting).toContain("Tools called: send_money (prepared, waits for you)");
+    const sent = text(renderToStaticMarkup(createElement(ProvenanceSheet, { payment: payment({ status: "sent", toolCalls: calls }), onClose: () => {} })));
+    expect(sent).toContain("Tools called: send_money");
+    expect(sent).not.toContain("prepared");
   });
 
   it("gives the ledger ids only once something was sent", () => {
