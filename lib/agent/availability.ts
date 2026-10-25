@@ -4,6 +4,7 @@ import {
   AVAILABILITY_MIN_MINUTES,
   FEELS_MAX,
   IsoDateTime,
+  NAME_MAX,
   type AgentId,
   type CalendarEvent,
   type MemberId,
@@ -29,6 +30,7 @@ export const AvailabilityBody = z.strictObject({
   side: z.enum(["a", "b"], { error: 'side must be "a" or "b"' }),
   windows: z.array(z.unknown(), { error: "windows must be a list of { start, end }" }),
   feels: z.string({ error: "feels must be one line of text" }).optional(),
+  name: z.string({ error: "name must be a first name" }).optional(),
 });
 
 const RawWindow = z.strictObject({ start: IsoDateTime, end: IsoDateTime });
@@ -79,12 +81,15 @@ export function checkWindows(raw: unknown[], nowMs: number): Checked<Window[]> {
 }
 
 /** One line: control characters and line breaks become spaces. An empty line is no line; a long one is refused. */
-export function checkFeels(raw: string | undefined): Checked<string | undefined> {
+function oneLine(raw: string | undefined, max: number, tooLong: string): Checked<string | undefined> {
   const line = raw?.replace(/\p{Cc}+/gu, " ").replace(/\s+/g, " ").trim();
   if (!line) return { ok: true, value: undefined };
-  if (line.length > FEELS_MAX) return no(`Keep it to one line of ${FEELS_MAX} characters or fewer.`);
+  if (line.length > max) return no(tooLong);
   return { ok: true, value: line };
 }
+
+export const checkFeels = (raw: string | undefined) => oneLine(raw, FEELS_MAX, `Keep it to one line of ${FEELS_MAX} characters or fewer.`);
+export const checkName = (raw: string | undefined) => oneLine(raw, NAME_MAX, `Keep the name to ${NAME_MAX} characters or fewer.`);
 
 /** Busy blocks over the rest of the calendar the Muses can see: everything outside the typed windows. */
 export function busyAround(agent: AgentId, windows: Window[]): CalendarEvent[] {
@@ -104,8 +109,8 @@ export function availabilityOf(room: Pick<Room, "availability">, member: MemberI
 }
 
 /** Replaces whatever this seat typed before. */
-export async function saveAvailability(store: Store, agent: AgentId, input: { windows: Window[]; feels?: string }, at: string): Promise<TypedAvailability> {
-  const typed: TypedAvailability = { windows: input.windows, ...(input.feels ? { feels: input.feels } : {}), at };
+export async function saveAvailability(store: Store, agent: AgentId, input: { windows: Window[]; feels?: string; name?: string }, at: string): Promise<TypedAvailability> {
+  const typed: TypedAvailability = { windows: input.windows, ...(input.feels ? { feels: input.feels } : {}), ...(input.name ? { name: input.name } : {}), at };
   const room = await store.getRoom();
   await store.putRoom({ ...room, availability: { ...room.availability, [agent]: typed } });
   return typed;

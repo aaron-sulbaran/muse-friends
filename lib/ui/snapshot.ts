@@ -518,6 +518,16 @@ export function forRole(snapshot: UiSnapshot, role: string | null | undefined): 
   return { ...typedFor(snapshot, role === "b" ? "lisa" : null), chat: [], notes: snapshot.notes.filter((note) => note.kind !== "chat_asked") };
 }
 
+/** The first names people gave when they typed their week. Both phones read them: that is what they are for. */
+function humansOf(state: StateSnapshot): UiSnapshot["humans"] {
+  const humans: Partial<Record<AgentId, string>> = {};
+  for (const seat of ["aaron", "lisa"] as const) {
+    const name = state.room.availability?.[seat]?.name;
+    if (name) humans[seat] = name;
+  }
+  return Object.keys(humans).length > 0 ? humans : undefined;
+}
+
 /** Soonest first, the way a person reads them; the stored `at` stays out of the UI. */
 function typedAvailabilityOf(state: StateSnapshot): UiSnapshot["typedAvailability"] {
   const typed: Partial<Record<AgentId, UiTypedAvailability>> = {};
@@ -543,6 +553,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
   const messages = toUiMessages(state, rename);
   const payments = paymentsOf(state);
   const typedAvailability = typedAvailabilityOf(state);
+  const humans = humansOf(state);
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
@@ -580,6 +591,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     payments,
     chat: toChat(state, rename),
     ...(typedAvailability ? { typedAvailability } : {}),
+    ...(humans ? { humans } : {}),
     paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
     sandbox: sandboxFor(state),
   };

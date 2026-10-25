@@ -1,5 +1,6 @@
 import { copy } from "./copy";
 import { messageTitle, namesFor, policyStampFor } from "./format";
+import { describeFree } from "./free-windows";
 import type { AgentId, MemberId, MessageType, Role, UiPlan, UiSnapshot, UiSource } from "./types";
 
 /*
@@ -107,7 +108,16 @@ export function threadLines(snapshot: UiSnapshot, role: Role, options: ThreadOpt
     }
     lines.sort((first, second) => Date.parse(first.at ?? "") - Date.parse(second.at ?? ""));
   }
-  return lines;
+
+  // What this person typed about their week in onboarding comes first, as a note from their own Muse, and when the two
+  // weeks did not meet, the line that says so. Both are private to the person; neither reaches the friend's phone.
+  const mine = snapshot.typedAvailability?.[me];
+  const notes: ThreadLine[] = [];
+  if (mine && mine.windows.length > 0) notes.push({ id: "thread-typed-free", sender: muse(me), text: copy.threadTypedFree(describeFree(mine.windows)), onlyYou: true, phase: "talk" });
+  // The two weeks did not meet: the exchange ended on a decline for no overlap, and this person had typed their times.
+  const noOverlap = plan && snapshot.messages.some((message) => message.contextId === plan.contextId && message.type === "decline" && message.reason === "no_overlap");
+  if (mine && mine.windows.length > 0 && noOverlap) notes.push({ id: "thread-no-shared-free", sender: muse(me), text: copy.threadNoSharedFree, onlyYou: true, phase: "talk" });
+  return [...notes, ...lines];
 }
 
 /**

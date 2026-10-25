@@ -70,3 +70,14 @@ describe("the onboarding store", () => {
     expect(readOnboarding("r1").step).toBe("name");
   });
 });
+
+describe("the two sides of one room", () => {
+  it("keep their own step, so two tabs on a room never share an answer", () => {
+    dispatchOnboarding("r9", { type: "name", name: "Sam" }, "b");
+    dispatchOnboarding("r9", { type: "free" }, "b");
+    expect(readOnboarding("r9", "b")).toMatchObject({ step: "free", name: "Sam" });
+    expect(readOnboarding("r9", "a")).toEqual(initialOnboarding());
+    resetOnboardingStore();
+    expect(readOnboarding("r9", "b")).toMatchObject({ step: "free", name: "Sam" });
+  });
+});

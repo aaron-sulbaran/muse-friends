@@ -45,6 +45,8 @@ export type ChatItem =
   | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend" | "plan-trip"; friendName: string }
   | { kind: "contact-entry"; id: string }
   | { kind: "onboarding-friends"; id: string }
+  | { kind: "onboarding-name"; id: string }
+  | { kind: "onboarding-free"; id: string }
   | { kind: "onboarding-optout"; id: string }
   | { kind: "onboarding-turn-on"; id: string };
 
@@ -404,10 +406,19 @@ function dayWordFor(iso: string): string {
  * judge's answer as their own bubble, and after an opt-out the card that says what it means, then the one way back in.
  * Pure like the rest of this file. `friendName` is the room's friend (Michelle in the demo).
  */
-export function onboardingItems(state: OnboardingState, friendName: string): ChatItem[] {
-  const greeting: ChatItem = { kind: "bubble", id: "onboarding-greeting", from: "muse", text: onboardingCopy.greeting };
+export function onboardingItems(state: OnboardingState, friendName: string, role: Role = "a", museName = "Sprout"): ChatItem[] {
+  const greeting: ChatItem = { kind: "bubble", id: "onboarding-greeting", from: "muse", text: role === "a" ? onboardingCopy.greeting : onboardingCopy.greetingMuse(museName) };
+  // The invited phone: a name, then when the person is free. No Friends choice, no sharing sheets.
+  if (role === "b") {
+    if (state.step === "name") return [greeting, { kind: "onboarding-name", id: "onboarding-name" }];
+    if (state.step === "free") return [greeting, { kind: "onboarding-free", id: "onboarding-free" }];
+    return [greeting];
+  }
   if (state.step === "name") return [greeting, { kind: "onboarding-friends", id: "onboarding-friends" }];
-  if (state.friendsOn) return [greeting, { kind: "bubble", id: "onboarding-answer", from: "user", text: onboardingCopy.turnOn }];
+  if (state.friendsOn) {
+    const answer: ChatItem = { kind: "bubble", id: "onboarding-answer", from: "user", text: onboardingCopy.turnOn };
+    return state.step === "free" ? [greeting, answer, { kind: "onboarding-free", id: "onboarding-free" }] : [greeting, answer];
+  }
   return [
     greeting,
     { kind: "bubble", id: "onboarding-answer", from: "user", text: onboardingCopy.notNow },

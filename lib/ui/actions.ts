@@ -1,9 +1,9 @@
 import { getRoom, withRoom } from "./room";
 import type { Category, MemberId, Role, ShareTier } from "./types";
 
-export type Result = { ok: true } | { ok: false; message: string; paused?: boolean; refused?: boolean };
+export type Result = { ok: true } | { ok: false; message: string; paused?: boolean; refused?: boolean; missing?: boolean };
 
-type ErrorBody = { error?: string | { message?: string } | null; paused?: boolean; refused?: boolean; text?: string };
+type ErrorBody = { error?: string | { message?: string; code?: string } | null; paused?: boolean; refused?: boolean; text?: string };
 
 async function post(url: string, body: unknown): Promise<Result> {
   try {
@@ -18,7 +18,10 @@ async function post(url: string, body: unknown): Promise<Result> {
     const message = typeof error === "string" ? error : error?.message;
     // A paused budget (429) is not a failure: the page falls back to a recording and says why.
     if (response.status === 429 && payload?.paused === true) return { ok: false, message: payload.text ?? "Live runs paused, playing a recording", paused: true };
-    return { ok: false, message: message ?? payload?.text ?? `Request failed with ${response.status}`, ...(payload?.refused === true ? { refused: true } : {}) };
+    // A route that is not there (a 404 or 405 that is not a room that ran out) is a different thing from a refusal: the caller may carry on and retry.
+    const code = typeof error === "object" && error !== null ? error.code : undefined;
+    const missing = (response.status === 404 || response.status === 405) && code !== "no_such_room";
+    return { ok: false, message: message ?? payload?.text ?? `Request failed with ${response.status}`, ...(payload?.refused === true ? { refused: true } : {}), ...(missing ? { missing: true } : {}) };
   } catch {
     return { ok: false, message: "Could not reach the server" };
   }
@@ -130,6 +133,26 @@ export async function postReplan(planId: string, role: Role, followUpTarget?: st
 export function postChat(text: string) {
   return post("/api/chat", { role: "a", text });
 }
+
+/**
+ * What a person typed about their week (onboarding's free step): the windows they are free, one line about what they
+ * feel like doing, and the name they gave. The server sets that side's calendar and interests for the room; it answers
+ * a plain message when a window is not one it can use. Nothing is posted when the person skips the step.
+ */
+export function postAvailability(input: { side: Role; windows: Array<{ start: string; end: string }>; feels: string | null; name: string | null }) {
+  return post("/api/availability", {
+    side: input.side,
+    windows: input.windows,
+    ...(input.feels === null ? {} : { feels: input.feels }),
+    ...(AVAILABILITY_TAKES_NAME && input.name !== null && input.name !== "" ? { name: input.name } : {}),
+  });
+}
+
+/**
+ * Whether the availability route takes the person's first name (it lands in the snapshot's `humans`, so the other phone
+ * and the thread say it). Lane A's route takes it as of its name commit (e7971b2); the flag stays so the body can be changed in one place.
+ */
+export const AVAILABILITY_TAKES_NAME = true;
 
 export type LeakAttempt = { id: string; label: string; status: number; error: string; rejected: boolean };
 

@@ -1,4 +1,5 @@
 import { initialOnboarding, loadOnboarding, reduceOnboarding, saveOnboarding, type OnboardingAction, type OnboardingState } from "./onboarding";
+import type { Role } from "./types";
 
 /*
  * Onboarding state for the screen, outside React so it can be read by a hook and tested in node. The state lives in
@@ -14,22 +15,24 @@ const listeners = new Set<() => void>();
 /** What the server, and the first client render, show. Stable, so React does not see a change. */
 export const serverOnboarding: OnboardingState = initialOnboarding();
 
-/** The room's onboarding state: the session's, else what was saved, else the first step. */
-export function readOnboarding(room: string): OnboardingState {
-  let state = states.get(room);
+const keyOf = (room: string, role: Role) => `${room}|${role}`;
+
+/** The room's onboarding state for a side: the session's, else what was saved, else the first step. */
+export function readOnboarding(room: string, role: Role = "a"): OnboardingState {
+  let state = states.get(keyOf(room, role));
   if (!state) {
-    state = loadOnboarding(room);
-    states.set(room, state);
+    state = loadOnboarding(room, role);
+    states.set(keyOf(room, role), state);
   }
   return state;
 }
 
-export function dispatchOnboarding(room: string, action: OnboardingAction): void {
-  const before = readOnboarding(room);
+export function dispatchOnboarding(room: string, action: OnboardingAction, role: Role = "a"): void {
+  const before = readOnboarding(room, role);
   const after = reduceOnboarding(before, action);
   if (after === before) return;
-  states.set(room, after);
-  saveOnboarding(room, after);
+  states.set(keyOf(room, role), after);
+  saveOnboarding(room, after, role);
   for (const listener of listeners) listener();
 }
 
