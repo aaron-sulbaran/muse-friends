@@ -39,23 +39,17 @@ Check it by pointing a phone camera at the file opened on screen; it must open t
 
 ## Human steps
 
-### H1. Put the Muse key into Vercel (Aaron, 3 minutes)
+### H1. Push the secrets into Vercel (Aaron, 3 minutes)
 
-The agents on production need `MODEL_API_KEY`. Nothing else in the app reads it yet, so this can wait until the first agent code merges, but do it before the P1 checkpoint (Sun 12:00am).
+Production needs `MODEL_API_KEY` (the agents) and the two MCP tokens (the connector front door). One script copies them from `code/.env` to the Vercel project for Production and Preview, stored as Sensitive, and never prints a value. It generates `MCP_TOKEN_A` and `MCP_TOKEN_B` into `.env` first if they are missing.
 
-1. Open https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables.
-2. Click **Add Environment Variable**. Key: `MODEL_API_KEY`. Value: paste the key from `code/.env` (the line after the `=`, no quotes, no spaces). Environments: tick **Production** and **Preview**. Turn **Sensitive** on. Click **Save**.
-3. Expect the variable listed with two environments and the value hidden.
-4. Click **Deployments**, open the latest production deployment, **...**, **Redeploy**, **Redeploy** again in the dialog. Expect the new deployment to turn Ready in about 30 seconds.
+1. In a terminal, from the `code` folder (the checkout that holds your real `.env`): `./scripts/push-env-to-vercel.sh --dry-run`. Expect a list of names with character counts and `dry run only; nothing was changed.`
+2. Run `./scripts/push-env-to-vercel.sh`. Expect `pushed MODEL_API_KEY`, `pushed MCP_TOKEN_A`, `pushed MCP_TOKEN_B`. If the Vercel CLI asks which Git branch a Preview variable is for, press Enter (all branches).
+3. Check: `vercel env ls` lists the three names for Production and Preview.
+4. Redeploy so the running deployment picks them up: open https://vercel.com/aaron-sulbaran-projects/muse-friends, **Deployments**, the latest production deployment, **...**, **Redeploy**, confirm. Expect Ready in about 30 seconds. (Any merge to `main` also redeploys.)
+5. Check the front door: `./scripts/mcp-smoke.sh`. Expect four `PASS` lines and `all checks passed.`
 
-CLI alternative (from a linked checkout, with `.env` in the same folder; the key is piped and never printed):
-
-```bash
-awk '/^MODEL_API_KEY=/{printf "%s", substr($0,index($0,"=")+1)}' .env | vercel env add MODEL_API_KEY --environment production,preview --sensitive --yes
-vercel env ls
-```
-
-Expect `MODEL_API_KEY` listed for Production and Preview.
+Dashboard fallback if the script fails: https://vercel.com/aaron-sulbaran-projects/muse-friends/settings/environment-variables, **Add Environment Variable**, one per name, value from `.env` (the text after the `=`, no quotes), Environments **Production** and **Preview**, **Sensitive** on, **Save**; then redeploy as in step 4.
 
 ### H2. Connect musefriends.tech (Aaron, 10 minutes, after claiming the domain)
 
@@ -77,9 +71,21 @@ Needed for the production store, which has to survive across stateless function 
 3. Open **Project Settings**, **API Keys**. Copy the **service role** key. Do not put it in chat or in git. Paste it as `SUPABASE_SERVICE_ROLE_KEY` in Vercel (same screen and steps as H1, Production and Preview, **Sensitive** on) and in `code/.env`. Also add `SUPABASE_URL` (Project Settings, **Data API**, the project URL) the same way; that one is not sensitive.
 4. Expect the platform lane to apply the schema through the Supabase tooling once it has the ref, then report round trip latency.
 
-### H4. Connect Muse to the endpoint (Lisa, 30 minutes)
+### H4. Try the real Muse connection (Lisa, 30 minutes, after H1)
 
-Added when the MCP front door is deployed; see the next section of this runbook then.
+This is the go or no-go test for the connector segment. It is gated and optional: the web sandbox is the product either way, and if this fails the demo carries a slide instead. The server side is a bearer-protected MCP endpoint with one read-only tool, `get_status`, at https://muse-friends.vercel.app/api/mcp.
+
+Before you start: Aaron has finished H1 and sends you the value of `MCP_TOKEN_A` from his `.env` through the password manager or a direct message (never git, never a shared doc). Use only your own Muse account, and use this key and no other.
+
+1. In your Muse app, in chat, ask Muse to create a custom connector for a remote MCP server at `https://muse-friends.vercel.app/api/mcp` that uses an API key. The exact wording may differ; Muse's own reply decides the next click. Expect a hosted connect link.
+2. Open the link and enter the key (`MCP_TOKEN_A`). Expect Muse to say it connected and to list a tool called `get_status`.
+3. Ask Muse: "Use the Muse Friends connector to call get_status." Expect an approval prompt (read-only, ask each time, or allow); approve it once.
+4. Pass: Muse reports `ok: true`, `service: muse-friends`, and `account: a`.
+5. Report back to the orchestrator, for each of steps 1 to 4: worked or did not, the exact error text if any, and whether your account type (free or paid) blocked a step. No account details, no screenshots of settings that show them.
+
+If it fails, do not retry with other keys. The server logs one line per request (`mcp auth scheme=... accepted=...`, never the key), so the platform lane can tell whether Muse reached the endpoint, which header it sent the key in, and whether the key matched; tell the orchestrator the time of your last attempt. If Muse insists on OAuth and offers no API key field, report that; the connector segment is then off.
+
+Behind the endpoint: both `MCP_TOKEN_A` and `MCP_TOKEN_B` work and map to roles A and B. The key may arrive as `Authorization: Bearer <key>` or `X-API-Key: <key>`. An unset or short token never matches, so the endpoint stays closed until H1 is done. `start_plan`, `check_inbox`, and `respond` are added only if this test passes and the humans pick the connector segment.
 
 ## Smoke test 7: the production URL on a real phone
 
