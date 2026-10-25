@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getRoom } from "./room";
 import { pollIntervalMs } from "./tokens";
 import type { UiSnapshot } from "./types";
 
 /** Returns null on 304: nothing changed since `etag`, so there is nothing to render. */
 async function loadSnapshot(etag: string | null): Promise<{ snapshot: UiSnapshot; etag: string | null } | null> {
-  const response = await fetch("/api/state?room=demo", {
+  const response = await fetch(`/api/state?room=${getRoom()}`, {
     cache: "no-store",
     headers: etag ? { "If-None-Match": etag } : undefined,
   });
