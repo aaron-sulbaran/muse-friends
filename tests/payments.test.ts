@@ -531,7 +531,12 @@ describe("the Nessie client", () => {
     expect(calls.map((call) => `${call.init.method} ${new URL(call.url).pathname}`)).toEqual(["POST /customers", "POST /customers/c1/accounts", "POST /customers", "POST /customers/c2/accounts"]);
     expect(await walletOf(fresh, "aaron")).toMatchObject({ accountId: "a1", source: "nessie", balance: 120 });
     expect((await fresh.getRoom()).localLedger).toEqual({ a1: 120, a2: 80 });
-    expect(toUiSnapshot(await fresh.snapshot(), { mode: "live" }).sandbox).toEqual({ enabled: true, connected: true, text: "Capital One Nessie sandbox, balances kept by Muse" });
+    expect(toUiSnapshot(await fresh.snapshot(), { mode: "live" }).sandbox).toEqual({
+      enabled: true,
+      connected: true,
+      text: "Capital One Nessie sandbox, balances kept by Muse",
+      balanceNote: "The sandbox records each payment but never changes an account's own balance, so Muse keeps the balances shown here.",
+    });
 
     // Reset: our ledger says Sprout spent $12, so the same account is topped back up with a deposit record. No new customers.
     await fresh.putRoom({ ...(await fresh.getRoom()), localLedger: { a1: 108, a2: 80 } });
@@ -607,11 +612,11 @@ describe("NessieWithLedger", () => {
 
   it("reads the transaction records back by id", async () => {
     const http = new NessieHttp({ key: "abc123" });
-    stub((url) => (url.includes("/withdrawals") ? json([{ _id: "w0", amount: 1 }, { _id: "w1", amount: 7, status: "completed", description: "x" }], 200) : json({ _id: "d1", amount: 7 }, 200)));
-    expect(await http.getWithdrawal("acct", "w1")).toEqual({ data: { id: "w1", amount: 7, status: "completed", description: "x" }, error: null });
-    expect(await http.getWithdrawal("acct", "missing")).toEqual({ data: null, error: "no such withdrawal on that account" });
+    stub((url) => (new URL(url).pathname.startsWith("/withdrawal/") ? json({ _id: "w1", amount: 7, status: "completed", description: "x" }, 200) : json({ _id: "d1", amount: 7 }, 200)));
+    expect(await http.getWithdrawal("w1")).toEqual({ data: { id: "w1", amount: 7, status: "completed", description: "x" }, error: null });
     expect(await http.getDeposit("d1")).toEqual({ data: { id: "d1", amount: 7, status: "", description: "" }, error: null });
-    expect(calls.map((call) => new URL(call.url).pathname)).toEqual(["/accounts/acct/withdrawals", "/accounts/acct/withdrawals", "/deposits/d1"]);
+    // The withdrawal route is singular on the real sandbox; the plural 403s.
+    expect(calls.map((call) => new URL(call.url).pathname)).toEqual(["/withdrawal/w1", "/deposits/d1"]);
   });
 
   it("moves the wallet chip's balance through a whole payment on the real sandbox, on our ledger, with one record each side", async () => {
@@ -683,6 +688,30 @@ describe("the settle route", () => {
     } finally {
       delete process.env.MAX_LIVE_RUNS_PER_ROOM_PER_HOUR;
     }
+  });
+
+  it("names the friend the way the Activity feed does when the simulated friend plays side b: Michelle in the refusal and on her wallet", async () => {
+    await store.putPolicy(policy("lisa", 20, false));
+    await store.putRoom({ ...(await store.getRoom()), simulatedFriend: true });
+    const refused = await post(plan.id, { role: "b" });
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error.message).toBe("Payments are off for Michelle's Muse: turn them on and set a cap first.");
+    expect(toUiSnapshot(await store.snapshot(), { mode: "live" }).wallets.lisa?.nickname).toBe("Michelle's wallet");
+    await store.putRoom({ ...(await store.getRoom()), simulatedFriend: false });
+    const real = await post(plan.id, { role: "b" });
+    expect((await real.json()).error.message).toBe("Payments are off for Mochi's Muse: turn them on and set a cap first.");
+    expect(toUiSnapshot(await store.snapshot(), { mode: "live" }).wallets.lisa?.nickname).toBe("Mochi's wallet");
+  });
+
+  it("names the cap when a payments body has a bad one, instead of asking for a privacy change", async () => {
+    const { POST } = await import("@/app/api/controls/route");
+    const send = (body: unknown) => POST(new Request("http://localhost:3001/api/controls", { method: "POST", body: JSON.stringify(body) }));
+    const tooBig = await send({ type: "payments", side: "a", enabled: true, cap: 501 });
+    expect(tooBig.status).toBe(400);
+    expect((await tooBig.json()).error.message).toBe("The cap is whole dollars per plan, from 0 to 500");
+    expect((await (await send({ type: "payments", side: "a", enabled: true, cap: 2.5 })).json()).error.message).toContain("The cap is whole dollars");
+    expect((await (await send({ type: "payments", side: "c", enabled: true })).json()).error.message).toContain("Payments need a side");
+    expect((await (await send({ type: "nonsense" })).json()).error.message).toContain("payments change (side, enabled, cap)");
   });
 
   it("is reachable through the controls route: a person sets the cap", async () => {
