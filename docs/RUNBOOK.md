@@ -52,6 +52,36 @@ vercel api "/v6/deployments?app=muse-friends&since=$(( ($(date +%s) - 86400) * 1
 python3 -c 'import json; d=json.load(open("/tmp/deploys.json"))["deployments"]; print(len(d), "deployments,", sum(1 for x in d if x.get("target")=="production"), "production")'
 ```
 
+## C5 and C6 gates
+
+The merge gate (C5, Sun Oct 25 6:30am: merge reach work only if the merged build passes the core run twice and Replay plays, else revert to the core-green tag) and the freeze check (C6, 8:30am) are one command:
+
+```bash
+pnpm gate:c5 --base https://www.musefriends.tech --expect-sha <first 7 characters of the commit you merged>
+```
+
+Run it against production after the merged `main` has deployed. `--expect-sha` makes the first step fail unless production serves that exact commit, so a deploy that has not landed (or that the deploy cap refused, see "Deploy quota") is reported instead of an old build being tested. Use the `www` address.
+
+**What it runs, in order, one PASS or FAIL line each:**
+
+1. Health answers ok and shows the deployed commit (`/api/health`, `sha`), and matches `--expect-sha` when given.
+2. The demo room is free: no plan, no messages, and no agent turn running. A busy room is refused and nothing is touched.
+3. The simulated friend is off (`demo:http` taps both people itself); if it was on, the gate turns it off.
+4. The shawarma scenario through `scripts/demo-http.mjs` (the existing `pnpm demo:http`), twice by default: signal, agents agree within 4 messages with model proof, both people accept, WhatsApp draft and hold, clock to the reminder and the next day, "We went!", Follow-through counts one human event.
+5. The privacy toggle check `demo:http` already performs, once per run: location off for Mochi, and the redaction shows on the replayed messages.
+6. Replay: `GET /api/replay` parses, every frame is a replay snapshot with a hold time, and the last frame carries messages 1 to N (at least three).
+7. The demo room is left reset: empty, simulated friend off. This step runs even when an earlier one failed, and waits for a running agent turn to finish first.
+
+The last line is `C5 GATE: PASS` or `C5 GATE: FAIL (k of n steps failed)`. Exit code **0** when every step passes, **1** when any fails or the app does not answer, **2** when the room is busy and `--force` was not given (nothing was touched).
+
+**Options:** `--base URL` (default `https://www.musefriends.tech`), `--expect-sha SHA`, `--runs N` (default 2), `--timeout SECONDS` per run (default 120), `--force` (clear a busy room; it waits up to 20 seconds for a running agent turn to finish first), `--verbose` (print every `demo:http` run in full instead of only the last 30 lines of a failing one).
+
+**What it touches.** Only the demo room, the one room the app has, and only through the app's own controls route: `demo:http` resets it at the start and the end of every run. It spends real Muse Spark calls (about 15 to 25 seconds to agreement per run). Do not run it while a judge or a teammate is using the room.
+
+**When a step fails:** the failing `demo:http` run's output follows the FAIL line. Usual causes: the room is paused by a run cap (the output says so; wait or reset), a model call was slow or refused (the scripted fallback sent a message without proof, so "every message carries model proof" fails; look at the Vercel runtime logs), the commit step failed because the deploy has not landed (see "Deploy quota"), or Replay failed because a recorded run in the store is malformed.
+
+**Verified (Sun Oct 25, about 1:15am):** against a local server on the JSON store with live Muse Spark, `pnpm gate:c5 --base http://localhost:3003` passed all 9 steps in 42 seconds (agreement in 3 messages at 19.9 and 14.3 seconds, location redacted on both runs, Replay of 17 frames and 6 messages, room left reset). Exit codes checked: 0 on a pass, 1 for an unreachable server, 2 for a room with an agent turn running; `--force` waited for that turn and then passed. A fake app and fake `demo:http` scripts cover the failure paths in `tests/gate-c5.test.ts`. **Not run against production yet:** its first production run is the real C5.
+
 ## Regenerating the QR code
 
 Run this whenever the production address changes, then commit `public/qr.svg`. It last changed on Sat Oct 24 evening, when `musefriends.tech` went live; before that it encoded the vercel.app address.
