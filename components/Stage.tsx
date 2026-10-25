@@ -15,7 +15,7 @@ import { MuseScreen } from "./MuseScreen";
 import { PausedNotice } from "./PausedNotice";
 import { TopBar } from "./TopBar";
 
-/** The laptop stage: Phone A, the Activity panel, Phone B, with the presenter controls underneath. Home renders it from 1024px up; below that a phone gets the chooser. */
+/** The laptop stage: Phone A, the Activity panel, Phone B, with the presenter controls underneath. Home renders it on every laptop width (scaled down below 1024px) and only a real phone gets the chooser. `--stage-h` pins its height inside the scaled design box; unset, it fills the viewport. */
 export function Stage() {
   const live = useSnapshot();
   const replay = useReplay();
@@ -39,7 +39,7 @@ export function Stage() {
   const names = snapshot ? namesFor(snapshot) : null;
 
   return (
-    <div className="flex min-h-dvh flex-col bg-linear-to-b from-surface to-stage-end">
+    <div className="flex min-h-(--stage-h,100dvh) flex-col bg-linear-to-b from-surface to-stage-end">
       <TopBar snapshot={snapshot} />
       {showPaused ? (
         <PausedNotice
@@ -53,7 +53,7 @@ export function Stage() {
       ) : null}
       <main
         style={{ "--chrome": showPaused ? "152px" : "104px" } as React.CSSProperties}
-        className="grid h-[calc(100dvh-var(--chrome))] flex-none grid-cols-[minmax(0,1fr)_minmax(440px,520px)_minmax(0,1fr)] gap-10 px-12 pb-4">
+        className="grid h-[calc(var(--stage-h,100dvh)-var(--chrome))] flex-none grid-cols-[minmax(0,1fr)_minmax(440px,520px)_minmax(0,1fr)] gap-10 px-12 pb-4">
         <div className="min-h-0">
           {snapshot ? (
             <FitPhone label={`${names?.muse.aaron ?? "Sprout"}'s side`}>
