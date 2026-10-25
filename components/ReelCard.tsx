@@ -1,6 +1,6 @@
 "use client";
 
-import { Clapperboard, MapPin, Play } from "lucide-react";
+import { Clapperboard, Film, MapPin, Play } from "lucide-react";
 import { useCallback, useState } from "react";
 import { instagramEmbedUrl } from "@/lib/ui/reel";
 import { InstagramEmbed } from "./InstagramEmbed";
@@ -66,9 +66,9 @@ function SampleReel({ image, poster, caption, place, align, label = "Sample reel
             <div
               role="img"
               aria-label={`Sample reel of ${place}`}
-              className="flex size-full items-center justify-center bg-gradient-to-br from-amber-200 via-orange-300 to-rose-400 text-[64px]"
+              className="flex size-full items-center justify-center bg-gradient-to-br from-amber-200 via-orange-300 to-rose-400"
             >
-              🎞️
+              <Film aria-hidden className="size-14 text-white/90" strokeWidth={1.5} />
             </div>
           )}
           <span className="absolute left-1/2 top-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45">

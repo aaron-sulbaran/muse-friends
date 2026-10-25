@@ -43,20 +43,22 @@ const decisionLine = { accepted: copy.threadFriendYes, declined: copy.threadFrie
 
 export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
   const plan = snapshot.plan;
-  if (!plan) return [];
   const names = namesFor(snapshot);
   const me = roleAgent[role];
   const muse = (agent: MemberId): Sender => ({ kind: agent === me ? "your-muse" : "friend-muse", name: snapshot.sides[agent], owner: names.human[agent], agent });
 
   const lines: ThreadLine[] = [];
-  for (const message of snapshot.messages) {
-    // A message from another plan's thread, or one the inbox refused, is not part of this conversation.
-    if (message.contextId !== plan.contextId || message.blockedRule !== undefined) continue;
-    const sender = muse(message.from);
-    if (PLAN_CHANGING.has(message.type)) lines.push({ id: `thread-${message.id}`, sender, text: messageTitle(message), at: message.at, phase: "talk" });
-    const { withheld } = policyStampFor(message);
-    if (message.from === me && withheld) {
-      lines.push({ id: `thread-${message.id}-aside`, sender, text: copy.threadKeptOut(withheld, names.muse[message.to]), onlyYou: true, at: message.at, phase: "talk" });
+  // The Muses' turns belong to a plan; the person's own private conversation with their Muse does not need one.
+  if (plan) {
+    for (const message of snapshot.messages) {
+      // A message from another plan's thread, or one the inbox refused, is not part of this conversation.
+      if (message.contextId !== plan.contextId || message.blockedRule !== undefined) continue;
+      const sender = muse(message.from);
+      if (PLAN_CHANGING.has(message.type)) lines.push({ id: `thread-${message.id}`, sender, text: messageTitle(message), at: message.at, phase: "talk" });
+      const { withheld } = policyStampFor(message);
+      if (message.from === me && withheld) {
+        lines.push({ id: `thread-${message.id}-aside`, sender, text: copy.threadKeptOut(withheld, names.muse[message.to]), onlyYou: true, at: message.at, phase: "talk" });
+      }
     }
   }
 
@@ -70,7 +72,7 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
   }
 
   // The simulated friend always sits in the second seat.
-  const decision = plan.decisions.b;
+  const decision = plan?.decisions.b ?? "pending";
   if (snapshot.simulatedFriend && decision !== "pending") {
     const sender: Sender = { kind: role === "a" ? "friend" : "you", name: names.human.lisa, simulated: true };
     lines.push({ id: `thread-friend-${decision}`, sender, text: decisionLine[decision], at: lines.at(-1)?.at, phase: "after" });

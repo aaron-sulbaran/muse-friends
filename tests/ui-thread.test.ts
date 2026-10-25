@@ -162,6 +162,11 @@ describe("your private conversation with your Muse", () => {
     expect(ids.indexOf("thread-chat-chat_1")).toBeLessThan(ids.indexOf("thread-msg_shawarma_005"));
   });
 
+  it("needs no plan: you can ask before anything has started", () => {
+    const lines = threadLines({ ...asked, plan: null, messages: [] }, "a");
+    expect(lines.map((line) => line.id)).toEqual(["thread-chat-chat_1", "thread-chat-chat_2"]);
+  });
+
   it("never shows a chat on the other phone", () => {
     expect(threadLines(asked, "b").some((line) => line.id.startsWith("thread-chat-"))).toBe(false);
   });
