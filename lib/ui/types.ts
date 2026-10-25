@@ -40,8 +40,10 @@ export type ModelProof = {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
-  /** The tools this call used, when the store recorded them; absent otherwise. */
+  /** The tools this call used, when the store recorded them; absent otherwise. A web search is a "web_search" call: args the query, result "n results". */
   toolCalls?: UiToolCall[];
+  /** The pages a web search found for this answer (up to 3), as chips with the site's host. Only on a chat answer that searched. */
+  sources?: UiSource[];
 };
 
 export type UiMessage = {
@@ -195,12 +197,11 @@ export type UiNote = {
     | "payment_proposed"
     | "payment_cancelled"
     | "receipt_read"
-    | "chat_asked"
-    | "web_searched";
+    | "chat_asked";
   at: string;
   text: string;
-  /** On a "Searched the web" row (web_searched): the pages the search found, as links that open in a new tab. */
-  links?: UiSource[];
+  /** On a "You asked" row: the pages the answer's web search found, up to 3, to show as "Source" chips (SourceChips). */
+  sources?: UiSource[];
   /** On a "You asked" row (chat_asked): the read tools the Muse used to answer, from the proof on its answer. */
   toolCalls?: UiToolCall[];
   /** On a "You asked" row: the id of the answer in `chat`, so a screen can pair the row with the answer and its proof. */

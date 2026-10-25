@@ -1,7 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ActivityNote } from "@/components/ActivityNote";
 import { PrivateAside } from "@/components/PrivateAside";
 import { SourceChips } from "@/components/SourceChips";
 import { resetRunBudget } from "@/lib/agent/caps";
@@ -18,8 +17,8 @@ import { threadLines } from "@/lib/ui/thread";
 import { installFakeModel, removeFakeModel } from "./helpers/fakeModel";
 
 // The chat with your Muse can search the web (the hosted web_search tool of the Responses API): the model decides when, the
-// answer says it came from a web search, and the pages it found ride on the answer as "Source" chips and on one Activity row
-// per search. The page contents are somebody else's words: the chips link out, and nothing here follows what a page says.
+// answer says it came from a web search, and the pages it found ride on the answer and its proof as "Source" chips (Activity reads the
+// proof's tool calls). The page contents are somebody else's words: the chips link out, and nothing here follows what a page says.
 
 let store: JsonStore;
 let clock: number;
@@ -76,8 +75,13 @@ describe("the model loop with a hosted web search", () => {
 describe("a searched chat answer", () => {
   const search = { query: "shawarma near East 6th Street Austin", results: HITS };
   const answer = "From a web search: Halal Zone and Chateau Shawarma are two places to check, and I can't tell you if either is open.";
+  const links = [
+    { title: "Halal Zone, Austin's #1 Halal Food Truck", url: "http://halalzoneaustin.com/" },
+    { title: "Chateau Shawarma on Yelp", url: "https://www.yelp.com/biz/chateau-shawarma-austin" },
+    { title: "Zaza Mediterranean", url: "https://www.zazamed.example/menu" },
+  ];
 
-  it("keeps the pages on the answer, in the proof, and one Activity row per search that links to them", async () => {
+  it("keeps the pages on the answer and in the proof, and the search as a web_search line in the proof's tool calls", async () => {
     installFakeModel([{ search, text: answer }]);
     const outcome = await ask("Shawarma King is closed, where else nearby?");
     expect(outcome.ok).toBe(true);
@@ -85,60 +89,48 @@ describe("a searched chat answer", () => {
 
     expect(outcome.answer.text).toBe(answer);
     // Three links at most: http(s) only, one per site, in the order found.
-    expect(outcome.answer.searches).toEqual([
-      {
-        query: "shawarma near East 6th Street Austin",
-        links: [
-          { title: "Halal Zone, Austin's #1 Halal Food Truck", url: "http://halalzoneaustin.com/" },
-          { title: "Chateau Shawarma on Yelp", url: "https://www.yelp.com/biz/chateau-shawarma-austin" },
-          { title: "Zaza Mediterranean", url: "https://www.zazamed.example/menu" },
-        ],
-      },
-    ]);
+    expect(outcome.answer.sources).toEqual(links);
+    expect(outcome.answer.proof?.sources).toEqual(links);
     expect(outcome.answer.proof?.toolCalls).toEqual([{ name: "web_search", args: "shawarma near East 6th Street Austin", result: "6 results" }]);
-
-    const rows = (await store.listEvents()).filter((event) => event.kind === "web_searched");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ actor: "agent", agent: "aaron", messageId: outcome.answer.id, text: "Searched the web: shawarma near East 6th Street Austin" });
-    expect(rows[0].links).toEqual(outcome.answer.searches![0].links);
+    // No row of its own: the "You asked" row is the one place, and it reads the proof.
+    expect((await store.listEvents()).map((event) => event.kind)).not.toContain("web_searched");
   });
 
-  it("reaches the screens: sources on the chat line and the thread line, links on the Activity row, nothing for side b", async () => {
+  it("reaches the screens: sources on the chat line and its proof, the thread line and the 'You asked' row; nothing for side b", async () => {
     installFakeModel([{ search, text: answer }]);
     await ask("Shawarma King is closed, where else nearby?");
     const ui = toUiSnapshot(await store.snapshot(), { mode: "live" });
 
-    expect(ui.chat[1].sources).toEqual([
-      { title: "Halal Zone, Austin's #1 Halal Food Truck", url: "http://halalzoneaustin.com/", host: "halalzoneaustin.com" },
-      { title: "Chateau Shawarma on Yelp", url: "https://www.yelp.com/biz/chateau-shawarma-austin", host: "yelp.com" },
-      { title: "Zaza Mediterranean", url: "https://www.zazamed.example/menu", host: "zazamed.example" },
-    ]);
+    const hosts = ["halalzoneaustin.com", "yelp.com", "zazamed.example"];
+    expect(ui.chat[1].sources).toEqual(links.map((link, index) => ({ ...link, host: hosts[index] })));
+    expect(ui.chat[1].proof?.sources).toEqual(ui.chat[1].sources);
+    expect(ui.chat[1].proof?.toolCalls).toEqual([{ name: "web_search", args: "shawarma near East 6th Street Austin", result: "6 results" }]);
     expect(ui.chat[0].sources).toBeUndefined();
-    const note = ui.notes.find((entry) => entry.kind === "web_searched");
-    expect(note).toMatchObject({ text: "Searched the web: shawarma near East 6th Street Austin" });
-    expect(note?.links?.map((link) => link.host)).toEqual(["halalzoneaustin.com", "yelp.com", "zazamed.example"]);
+    const note = ui.notes.find((entry) => entry.kind === "chat_asked");
+    expect(note?.sources?.map((source) => source.host)).toEqual(hosts);
+    expect(note?.toolCalls).toEqual([{ name: "web_search", args: "shawarma near East 6th Street Austin", result: "6 results" }]);
 
     const line = threadLines(ui, "a").find((candidate) => candidate.id === `thread-chat-${ui.chat[1].id}`);
-    expect(line?.sources?.map((source) => source.host)).toEqual(["halalzoneaustin.com", "yelp.com", "zazamed.example"]);
+    expect(line?.sources?.map((source) => source.host)).toEqual(hosts);
 
     // Side b never receives what side a asked the web about.
     const restricted = forRole(ui, "b");
     expect(restricted.chat).toEqual([]);
-    expect(restricted.notes.some((entry) => entry.kind === "web_searched" || entry.kind === "chat_asked")).toBe(false);
+    expect(restricted.notes.some((entry) => entry.kind === "chat_asked")).toBe(false);
     expect(JSON.stringify(restricted)).not.toContain("shawarma near East 6th Street");
   });
 
-  it("makes no row and no sources when the model did not search, and says 'the web' for a search with no query", async () => {
+  it("keeps no sources when the model did not search, and says 'the web' for a search with no query", async () => {
     installFakeModel([{ text: "We are set for Shawarma Point." }]);
     const plain = await ask("Where are we eating?");
-    expect(plain.ok && plain.answer.searches).toBeFalsy();
-    expect((await store.listEvents()).some((event) => event.kind === "web_searched")).toBe(false);
+    expect(plain.ok && plain.answer.sources).toBeFalsy();
+    expect(plain.ok && plain.answer.proof?.sources).toBeUndefined();
 
     removeFakeModel();
     installFakeModel([{ search: { query: "   ", results: [] }, text: "I found nothing." }]);
     const empty = await ask("anything nearby?");
-    expect(empty.ok && empty.answer.searches).toEqual([{ query: "the web", links: [] }]);
-    expect((await store.listEvents()).filter((event) => event.kind === "web_searched").at(-1)).toMatchObject({ text: "Searched the web: the web" });
+    expect(empty.ok && empty.answer.sources).toBeUndefined();
+    expect(empty.ok && empty.answer.proof?.toolCalls).toEqual([{ name: "web_search", args: "the web", result: "0 results" }]);
   });
 });
 
@@ -214,12 +206,8 @@ describe("the chips", () => {
     expect(renderToStaticMarkup(createElement(SourceChips, { sources: [] }))).toBe("");
   });
 
-  it("sit under the Muse's private answer, and the Activity row carries the same links", () => {
+  it("sit under the Muse's private answer", () => {
     expect(renderToStaticMarkup(createElement(PrivateAside, { sources }, "From a web search: two places to check."))).toContain("halalzoneaustin.com");
     expect(renderToStaticMarkup(createElement(PrivateAside, null, "No search here."))).not.toContain("Source");
-    const row = renderToStaticMarkup(createElement(ActivityNote, { note: { id: "n", kind: "web_searched", at: "2026-10-25T10:00:00-05:00", text: "Searched the web: shawarma near East 6th Street Austin", links: sources.slice(0, 2) } }));
-    expect(row).toContain("Searched the web");
-    expect(row).toContain("yelp.com");
-    expect(row).toContain('target="_blank"');
   });
 });

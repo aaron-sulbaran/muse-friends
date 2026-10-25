@@ -114,8 +114,10 @@ export async function runChatTurn(options: ChatOptions): Promise<ChatOutcome> {
     return { ok: false, status: 503, error: unavailable(agent) };
   }
 
-  // The searches the model ran: what it asked, and the pages that came back. Kept on the answer and one row each in Activity.
-  const searched = (result.searches ?? []).slice(0, 3).map((search) => ({ query: (search.query.replace(/\s+/g, " ").trim() || "the web").slice(0, 120), links: linksOf(search), summary: summarizeSearch(search) }));
+  // The searches the model ran: each is a web_search line in the proof (the query it asked, how many pages came back); the pages
+  // themselves are kept as sources on the proof and the answer, one per site, three at most.
+  const searched = (result.searches ?? []).slice(0, 3).map((search) => ({ links: linksOf(search), summary: summarizeSearch({ query: search.query.replace(/\s+/g, " ").trim() || "the web", results: search.results }) }));
+  const sources = [...new Map(searched.flatMap((entry) => entry.links).map((link) => [link.url, link] as const)).values()].slice(0, 3);
   const last = result.calls.at(-1);
   const proof: ModelProof = {
     model: last?.model ?? "",
@@ -126,10 +128,11 @@ export async function runChatTurn(options: ChatOptions): Promise<ChatOutcome> {
     outputTokens: result.calls.reduce((sum, call) => sum + call.outputTokens, 0),
     reasoningTokens: result.calls.reduce((sum, call) => sum + call.reasoningTokens, 0),
     ...(summaries.length + searched.length > 0 ? { toolCalls: [...summaries, ...searched.map((entry) => entry.summary)].slice(-10) } : {}),
+    ...(sources.length > 0 ? { sources } : {}),
   };
   const at = toCentralIso(nowMs(options));
   const question = ChatEntry.parse({ id: newId("chat", nowMs(options)), from: "user", text, at });
-  const answer = ChatEntry.parse({ id: newId("chat", nowMs(options) + 1), from: "muse", text: answerText.slice(0, 1500), at: toCentralIso(nowMs(options) + 1), replyTo: question.id, proof, ...(searched.length > 0 ? { searches: searched.map(({ query, links }) => ({ query, links })) } : {}) });
+  const answer = ChatEntry.parse({ id: newId("chat", nowMs(options) + 1), from: "muse", text: answerText.slice(0, 1500), at: toCentralIso(nowMs(options) + 1), replyTo: question.id, proof, ...(sources.length > 0 ? { sources } : {}) });
 
   await withLock("room-chat", async () => {
     const room = await store.getRoom();
@@ -147,18 +150,5 @@ export async function runChatTurn(options: ChatOptions): Promise<ChatOutcome> {
     text: `You asked: ${text.length > 200 ? `${text.slice(0, 199)}…` : text}`,
   };
   await store.appendEvent(row);
-  for (const [index, entry] of searched.entries()) {
-    await store.appendEvent({
-      id: newId("evt", nowMs(options) + 2 + index),
-      at,
-      kind: "web_searched",
-      actor: "agent",
-      agent,
-      ...(plan ? { planId: plan.id, contextId: plan.contextId } : {}),
-      messageId: answer.id,
-      text: `Searched the web: ${entry.query}`.slice(0, 240),
-      ...(entry.links.length > 0 ? { links: entry.links } : {}),
-    });
-  }
   return { ok: true, question, answer };
 }
