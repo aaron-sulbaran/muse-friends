@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { postClockAdvance, postReset, postSignal, type Result } from "@/lib/ui/actions";
+import { postClockAdvance, postGroupSignal, postReset, postSignal, type Result } from "@/lib/ui/actions";
+import { copy } from "@/lib/ui/copy";
 import type { UiSnapshot } from "@/lib/ui/types";
 
 type Props = {
@@ -37,12 +38,13 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
     else await replay.start();
   };
   const loadReel = () => run(postSignal);
+  const planForThree = () => run(postGroupSignal);
   const jump = () => run(postClockAdvance);
   const reset = () => run(postReset);
 
-  const actions = useRef({ loadReel, jump, reset, toggleReplay });
+  const actions = useRef({ loadReel, planForThree, jump, reset, toggleReplay });
   useEffect(() => {
-    actions.current = { loadReel, jump, reset, toggleReplay };
+    actions.current = { loadReel, planForThree, jump, reset, toggleReplay };
   });
 
   useEffect(() => {
@@ -53,6 +55,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
       if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
       const key = event.key.toLowerCase();
       if (key === "s") void actions.current.loadReel();
+      else if (key === "g") void actions.current.planForThree();
       else if (key === "f") void actions.current.jump();
       else if (key === "0") void actions.current.reset();
       else if (key === "r") void actions.current.toggleReplay();
@@ -64,6 +67,7 @@ export function DemoControls({ snapshot, onChanged, replay, onPaused }: Props) {
   const replaying = replay.active;
   const items: ReadonlyArray<{ label: string; key: string; run: () => void; disabled?: boolean }> = [
     { label: "Load the shawarma reel", key: "S", run: loadReel, disabled: planIsAlive || replaying },
+    { label: copy.planForThree, key: "G", run: planForThree, disabled: planIsAlive || replaying },
     { label: jumpLabel, key: "F", run: jump, disabled: !canJump || replaying },
     { label: replaying ? "Stop the replay" : "Replay a recorded run", key: "R", run: toggleReplay },
     { label: "Reset", key: "0", run: reset, disabled: replaying },
