@@ -1,6 +1,6 @@
 import { CalendarClock, Clock, Film } from "lucide-react";
 import { copy } from "@/lib/ui/copy";
-import { formatWindowFull } from "@/lib/ui/format";
+import { formatWindowFull, reelRowTitle } from "@/lib/ui/format";
 import type { PhoneView } from "@/lib/ui/chat";
 import type { Role, UiPlan } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
@@ -24,7 +24,7 @@ function Row({ icon, title, detail }: { icon: React.ReactNode; title: string; de
       <span className="grid size-9 shrink-0 place-items-center rounded-tile bg-surface text-ink">{icon}</span>
       <div className="min-w-0">
         <p className="text-[15px] font-semibold leading-5">{title}</p>
-        {detail ? <p className="text-[13px] leading-[18px] text-muted">{detail}</p> : null}
+        {detail ? <p className="text-[15px] leading-5 text-muted">{detail}</p> : null}
       </div>
     </div>
   );
@@ -46,7 +46,7 @@ export function RecommendationCard({ plan, role, view, simulatedFriend, pending,
       <div className="mt-3 rounded-group bg-group px-3">
         <Row
           icon={<Film className="size-5" strokeWidth={1.75} aria-hidden="true" />}
-          title={`${plan.activityTitle} from ${reelOwner} reel`}
+          title={reelRowTitle(plan.activityTitle, reelOwner)}
           detail={plan.place ?? (plan.placeWithheld ? copy.placeKeptPrivate : undefined)}
         />
         {plan.window ? (
@@ -54,7 +54,7 @@ export function RecommendationCard({ plan, role, view, simulatedFriend, pending,
         ) : null}
         <div className="flex items-center gap-3 py-2">
           <MuseAvatar agent={view.friend} simulated={simulatedFriend && view.friend === "lisa"} name={view.friendMuseName} size={36} />
-          <p className="text-[15px] font-semibold leading-5">{copy.friendSaidYes(view.friendMuseName, view.friendHumanName)}</p>
+          <p className="text-[15px] leading-5">{copy.friendIsIn(view.friendMuseName)}</p>
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2.5">
