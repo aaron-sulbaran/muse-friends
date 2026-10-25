@@ -74,6 +74,14 @@ export async function postReplan(planId: string, role: Role): Promise<Result> {
   return postSignal();
 }
 
+/**
+ * The person asks their own Muse a question (D31). The answer is not read from this response: it arrives in the next
+ * snapshot's `chat`, where the thread and the Activity row pick it up. Only side a has a chat.
+ */
+export function postChat(text: string) {
+  return post("/api/chat", { role: "a", text });
+}
+
 export type LeakAttempt = { id: string; label: string; status: number; error: string; rejected: boolean };
 
 /** "Try to leak": asks the server to forge two sends to Mochi's inbox and report what the inbox answered, verbatim. */
