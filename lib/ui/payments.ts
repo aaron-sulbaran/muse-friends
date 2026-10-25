@@ -67,6 +67,25 @@ export function eventLabel(plan: Pick<UiPlan, "activityTitle" | "window">): stri
   return plan.window ? `${plan.activityTitle}, ${formatPlanDay(plan.window)}` : plan.activityTitle;
 }
 
+/** A reason that starts with a name keeps its capital; "Dinner share" reads lower-case after a comma. */
+function afterComma(reason: string): string {
+  const [first = ""] = reason.split(" ");
+  const keepsCapital = first.includes("'") || first.length < 2 || first === first.toUpperCase() || first.slice(1) !== first.slice(1).toLowerCase();
+  return keepsCapital ? reason : `${reason.charAt(0).toLowerCase()}${reason.slice(1)}`;
+}
+
+/**
+ * A payment named for what it was: the plan's event and day first, then what the money was for ("Shawarma Point,
+ * Tue Oct 27, dinner share"). A reason that already names the event is not repeated, only given its day. With no
+ * plan to name, the reason stands alone: nothing is invented.
+ */
+export function describePayment(reason: string, plan: Pick<UiPlan, "activityTitle" | "window"> | null): string {
+  const what = reason.trim();
+  if (!plan) return what;
+  if (what.toLowerCase().includes(plan.activityTitle.toLowerCase())) return plan.window ? `${what}, ${formatPlanDay(plan.window)}` : what;
+  return `${eventLabel(plan)}, ${afterComma(what)}`;
+}
+
 const WAYS = ["", "", "two", "three", "four", "five"];
 
 /** "receipt $30, split two ways", or a pointer to Details when the agent recorded no breakdown. */
@@ -92,4 +111,14 @@ export function paymentSummary(payment: UiPayment, names: Record<AgentId, string
   const standing = payment.status === "sent" ? `Waiting on ${payee}.` : payment.status === "received" ? `${payee} kept it.` : `${payee} sent it back.`;
   const split = payment.breakdown ? ` ${splitText(payment.breakdown).replace(/^./, (first) => first.toUpperCase())}.` : "";
   return `${names[payment.from]} sent ${payee} ${formatDollars(payment.amount)} for ${payment.description ?? payment.reason}. ${standing}${split}`;
+}
+
+/**
+ * The Activity row for a payment that was sent, with the plan's event and day where the agent's own words had only
+ * the reason ("...: dinner share (Nessie sandbox, ...)"). The ids stay in the row for Q&A. A row that cannot be
+ * matched to a payment is left exactly as the agent wrote it.
+ */
+export function describeNote(text: string, payments: UiPayment[]): string {
+  const payment = payments.find((entry) => entry.withdrawalId && text.includes(`withdrawal ${entry.withdrawalId}`) && text.includes(`: ${entry.reason} (`));
+  return payment?.description ? text.replace(`: ${payment.reason} (`, `: ${payment.description} (`) : text;
 }

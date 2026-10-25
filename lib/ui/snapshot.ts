@@ -3,6 +3,7 @@ import { paymentsFrom, type PaymentView } from "@/lib/agent/payment-rules";
 import { paymentsEnabled } from "@/lib/agent/wallets";
 import { AGENT_IDS, CATEGORIES, isCategoryAllowed, isPaymentType, type AgentId, type Plan, type ReelMedia, type SharePolicy, type StateSnapshot } from "@/lib/protocol";
 import { displayName } from "@/lib/seed/personas";
+import { describeNote, describePayment } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
 import type { UiRecording, UiReel, Decision, FollowThroughEvent, PaymentsSettings, SharingSettings, UiMessage, UiNote, UiOutcome, UiPayment, UiPlan, UiSnapshot, UiWallet } from "./types";
@@ -185,10 +186,10 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
   }));
 }
 
-function toNotes(events: StateSnapshot["events"], rename: (text: string) => string): UiNote[] {
+function toNotes(events: StateSnapshot["events"], rename: (text: string) => string, payments: UiPayment[]): UiNote[] {
   return events
     .filter((event): event is typeof event & { kind: UiNote["kind"] } => noteKinds.has(event.kind as UiNote["kind"]) && isWorthARow(event))
-    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(event.text) }));
+    .map((event) => ({ id: event.id, kind: event.kind, at: event.at, text: rename(describeNote(event.text, payments)) }));
 }
 
 /** The message's proof, with its recorded tool calls tidied for display when there are any. */
@@ -270,6 +271,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
   const state = withoutUnknownAgents(stored);
   const plan = latestPlan(state.plans);
   const messages = toUiMessages(state);
+  const payments = paymentsFrom(state.messages).map((view) => toUiPayment(view, planNamed(view.planId, state)));
   return {
     now: state.clock.now,
     clockSimulated: state.events.some((event) => event.kind === "clock_advanced"),
@@ -278,7 +280,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     simulatedFriend: state.room.simulatedFriend,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa") },
     messages,
-    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state))].sort((first, second) => first.at.localeCompare(second.at)),
+    notes: [...reelSourceNotes(state), ...toNotes(state.events, renameFor(state), payments)].sort((first, second) => first.at.localeCompare(second.at)),
     plan: plan ? toUiPlan(plan, state) : null,
     followThrough: {
       events: toFollowThrough(state.events, renameFor(state)),
@@ -291,7 +293,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     failure: failureOf(state, plan),
     sharing: { aaron: sharingFor("aaron", state), lisa: sharingFor("lisa", state) },
     wallets: { aaron: walletFor("aaron", state), lisa: walletFor("lisa", state) },
-    payments: paymentsFrom(state.messages).map(toUiPayment),
+    payments,
     paymentsScope: { aaron: paymentsScopeFor("aaron", state), lisa: paymentsScopeFor("lisa", state) },
     sandbox: sandboxFor(state),
   };
@@ -314,7 +316,13 @@ function sandboxFor(state: StateSnapshot): UiSnapshot["sandbox"] {
   return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, using a local ledger" };
 }
 
-function toUiPayment(view: PaymentView): UiPayment {
+/** The plan a payment belongs to, as far as naming it goes: its title and window. */
+function planNamed(planId: string, state: StateSnapshot): Pick<UiPlan, "activityTitle" | "window"> | null {
+  const plan = state.plans.find((candidate) => candidate.id === planId);
+  return plan ? { activityTitle: plan.activity?.title ?? "the plan", window: plan.window ?? null } : null;
+}
+
+function toUiPayment(view: PaymentView, plan: Pick<UiPlan, "activityTitle" | "window"> | null): UiPayment {
   return {
     id: view.paymentId,
     planId: view.planId,
@@ -322,6 +330,7 @@ function toUiPayment(view: PaymentView): UiPayment {
     to: view.payee,
     amount: view.amount,
     reason: view.reason,
+    description: describePayment(view.reason, plan),
     ...(view.note ? { note: view.note } : {}),
     status: view.status,
     source: view.source,
