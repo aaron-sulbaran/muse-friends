@@ -308,7 +308,7 @@ function sandboxFor(state: StateSnapshot): UiSnapshot["sandbox"] {
   const wallets = Object.values(state.room.wallets ?? {});
   const connected = wallets.length > 0 && wallets.every((wallet) => wallet.source === "nessie");
   const enabled = paymentsEnabled();
-  return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox" : "Sandbox not connected, using a local ledger" };
+  return { enabled, connected, text: !enabled ? "Payments are switched off" : connected ? "Capital One Nessie sandbox, balances kept by Muse" : "Sandbox not connected, using a local ledger" };
 }
 
 function toUiPayment(view: PaymentView): UiPayment {

@@ -16,6 +16,12 @@ export function isJudge(account: McpAccount | string | null | undefined): boolea
   return account === "judge";
 }
 
+// Whether the judge station is switched on: the shared key is set and long enough to be one. Everything that
+// a judge can reach (the three tools, /connect, the /j links) stays closed while this is false.
+export function judgeKeyConfigured(env: TokenEnv = process.env): boolean {
+  return (env.MCP_TOKEN_JUDGE?.length ?? 0) >= MIN_TOKEN_LENGTH;
+}
+
 function tokensMatch(presented: string, expected: string | undefined): boolean {
   if (!expected || expected.length < MIN_TOKEN_LENGTH) return false;
   const presentedBytes = Buffer.from(presented);

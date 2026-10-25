@@ -54,7 +54,7 @@ const mcpHandler = createMcpHandler(
       {
         title: "Start a plan with Mochi",
         description:
-          "Start a plan between the person's Sprout agent and Mochi, a fictional friend played by a model. Send 1 to 3 free windows, whole hours between 09:00 and 22:00 US Central, inside the next 7 days and Oct 25 to Oct 31, as { day: 'YYYY-MM-DD', start: 'HH:00', end: 'HH:00' }, and optionally reel_hint, one line (at most 140 characters) about what they would like to do. Only those windows and the hint are used: no calendar, contacts, or messages are read. Returns a planId; then call check_plan.",
+          "Write: creates a plan in a room of its own that expires in 2 hours. Starts a plan between the person's Sprout agent and Mochi, a fictional friend played by a model. The only input is slots, one of evenings, lunches or weekend: each is a fixed, fictional set of free times (listed on the /connect page). Free text and windows of your own are refused. No calendar, contacts, messages or location are read. Returns a planId; then call check_plan.",
         inputSchema: StartPlanInput,
       },
       async (args, ctx) => (isJudge(ctx.http?.authInfo?.clientId) ? reply(await startPlan(args, productionDeps())) : notForThisKey),
@@ -64,7 +64,7 @@ const mcpHandler = createMcpHandler(
       {
         title: "Check a plan",
         description:
-          "Where the plan stands: negotiating, awaiting_you (Sprout and Mochi agreed; shows the agreed window and a drafted WhatsApp message), waiting_for_mochi, confirmed, dropped, or stalled, with the messages so far (who, type, note, and what the sharing policy let through or withheld). Read-only.",
+          "Write (only to that plan's own room): where the plan stands, which can also record the fictional friend's pending answer. Returns negotiating, awaiting_you (Sprout and Mochi agreed; shows the agreed window and a drafted WhatsApp message), waiting_for_mochi, confirmed, dropped, or stalled, with the messages so far (who, type, note, and what the sharing policy let through or withheld). Takes only a planId.",
         inputSchema: CheckPlanInput,
       },
       async (args, ctx) => (isJudge(ctx.http?.authInfo?.clientId) ? reply(await checkPlan(args, productionDeps())) : notForThisKey),
@@ -74,7 +74,7 @@ const mcpHandler = createMcpHandler(
       {
         title: "Answer for the person",
         description:
-          "The person's own decision on the plan, only after check_plan says awaiting_you and the person has said so: accept or decline. Accepting lets Mochi answer her card; the drafted message is for the person to send themselves in WhatsApp (nothing is sent for them).",
+          "Write: the person's own decision on the plan, only after check_plan says awaiting_you and the person has said so: accept or decline. Accepting lets Mochi answer her card; the drafted message is for the person to send themselves in WhatsApp (nothing is sent for them).",
         inputSchema: RespondInput,
       },
       async (args, ctx) => (isJudge(ctx.http?.authInfo?.clientId) ? reply(await respond(args, productionDeps())) : notForThisKey),

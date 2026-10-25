@@ -11,8 +11,6 @@ import { PaymentsSection } from "./PaymentsSection";
 type Props = {
   /** Which phone this sheet is on: side b has the sharing switches, and either side has its payments. */
   role: Role;
-  /** True when this Muse's person is the simulated friend: the avatar is the grey initial disc. */
-  simulated: boolean;
   /** The Muse whose sharing this is, and the friend it is shared with. */
   museName: string;
   friendMuseName: string;
@@ -46,7 +44,7 @@ const categories: ReadonlyArray<{ value: Category; label: string; fixedOn?: stri
  * switch is checked in code on the next message and replays the propose, so
  * the withheld stamp shows up in Activity.
  */
-export function AvatarSheet({ role, simulated, museName, friendMuseName, sharing, payments, onOpenActivity, onChanged, onClose }: Props) {
+export function AvatarSheet({ role, museName, friendMuseName, sharing, payments, onOpenActivity, onChanged, onClose }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -88,7 +86,7 @@ export function AvatarSheet({ role, simulated, museName, friendMuseName, sharing
               <img src="/wordmark/muse-friends-wordmark.svg" alt="Muse Friends" className="h-[22px] w-auto" />
             </h2>
             <div className="mt-3 flex items-center gap-3">
-              <MuseAvatar agent={role === "a" ? "aaron" : "lisa"} simulated={simulated && role === "b"} name={museName} size={40} />
+              <MuseAvatar agent={role === "a" ? "aaron" : "lisa"} name={museName} size={40} />
               <div>
                 <p className="text-[15px] font-semibold leading-5">{museName}</p>
                 <p className="text-[13px] leading-[18px] text-muted">{sharing ? `Sharing with ${friendMuseName}` : copy.paymentsSection}</p>

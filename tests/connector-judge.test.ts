@@ -18,7 +18,7 @@ const NOW = Date.parse("2026-10-25T15:00:00-05:00");
 const tokenA = "a".repeat(48);
 const tokenB = "b".repeat(48);
 const tokenJudge = "j".repeat(48);
-const goodWindows = { free_windows: [{ day: "2026-10-29", start: "19:00", end: "21:00" }] };
+const goodSlots = { slots: "evenings" };
 
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
 const post = (route: typeof startPost, body: unknown, headers: Record<string, string> = {}) =>
@@ -49,7 +49,7 @@ afterEach(() => {
 
 function routesWith(headers: Record<string, string>) {
   return [
-    ["start_plan", () => post(startPost, goodWindows, headers)],
+    ["start_plan", () => post(startPost, goodSlots, headers)],
     ["check_plan GET", () => get("?planId=room_x", headers)],
     ["check_plan POST", () => post(checkPost, { planId: "room_x" }, headers)],
     ["respond", () => post(respondPost, { planId: "room_x", decision: "accept" }, headers)],
@@ -83,13 +83,13 @@ describe("the judge routes are closed unless MCP_TOKEN_JUDGE is set", () => {
   });
 
   it("accepts the judge key as a bearer or as x-api-key", async () => {
-    expect((await post(startPost, goodWindows, bearer(tokenJudge))).status).toBe(202);
-    expect((await post(startPost, goodWindows, { "x-api-key": tokenJudge })).status).toBe(202);
+    expect((await post(startPost, goodSlots, bearer(tokenJudge))).status).toBe(202);
+    expect((await post(startPost, goodSlots, { "x-api-key": tokenJudge })).status).toBe(202);
   });
 
   it("never writes a key into the logs", async () => {
-    await post(startPost, goodWindows, bearer(tokenJudge));
-    await post(startPost, goodWindows, bearer("w".repeat(48)));
+    await post(startPost, goodSlots, bearer(tokenJudge));
+    await post(startPost, goodSlots, bearer("w".repeat(48)));
     const logged = JSON.stringify(vi.mocked(console.log).mock.calls);
     expect(logged).not.toContain(tokenJudge);
     expect(logged).not.toContain("w".repeat(48));
@@ -102,33 +102,35 @@ describe("REST: start_plan, check_plan, respond", () => {
   const judge = bearer(tokenJudge);
 
   it("start_plan answers 202 with { data: { planId, contextId, how_to_check } } and schedules the agents", async () => {
-    const response = await post(startPost, { reel_hint: "ramen near campus", ...goodWindows }, judge);
+    const response = await post(startPost, goodSlots, judge);
     expect(response.status).toBe(202);
     const body = await response.json();
     expect(body.error).toBeNull();
-    expect(body.data).toMatchObject({ state: "negotiating", you: "Sprout", expires_in_minutes: 120 });
+    expect(body.data).toMatchObject({ state: "negotiating", you: "Sprout", slots: "evenings", expires_in_minutes: 120 });
+    expect(Object.keys(body.data).sort()).toEqual(["contextId", "expires_in_minutes", "free_windows", "friend", "how_to_check", "planId", "slots", "state", "you"]);
     expect(body.data.planId).toMatch(/^room_/);
     expect(body.data.how_to_check).toContain("check_plan");
     expect(scheduled).toHaveLength(1);
   });
 
-  it("start_plan refuses what it cannot use: not JSON, 4 windows, minutes, a time Mochi cannot do", async () => {
+  it("start_plan refuses what it cannot use: not JSON, an unknown preset, free text, windows of your own", async () => {
     expect((await post(startPost, "not json", judge)).status).toBe(400);
-    const four = Array.from({ length: 4 }, (_, index) => ({ day: `2026-10-${26 + index}`, start: "18:00", end: "20:00" }));
-    const tooMany = await post(startPost, { free_windows: four }, judge);
-    expect(tooMany.status).toBe(400);
-    expect((await tooMany.json()).error.message).toContain("at most 3");
-    expect((await post(startPost, { free_windows: [{ day: "2026-10-29", start: "18:30", end: "20:00" }] }, judge)).status).toBe(400);
-    const noOverlap = await post(startPost, { free_windows: [{ day: "2026-10-27", start: "10:00", end: "12:00" }] }, judge);
-    expect(noOverlap.status).toBe(422);
-    expect((await noOverlap.json()).error).toMatchObject({ code: "no_overlap_with_mochi", hint: { mochi_is_free: expect.any(Array) } });
+    expect((await post(startPost, { slots: "mornings" }, judge)).status).toBe(400);
+    expect((await post(startPost, {}, judge)).status).toBe(400);
+    const freeText = await post(startPost, { slots: "evenings", reel_hint: "anything at all" }, judge);
+    expect(freeText.status).toBe(400);
+    const message = (await freeText.json()).error.message as string;
+    expect(message).toContain("reel_hint");
+    expect(message).not.toContain("anything at all");
+    const ownWindows = await post(startPost, { free_windows: [{ day: "2026-10-29", start: "19:00", end: "21:00" }] }, judge);
+    expect(ownWindows.status).toBe(400);
     expect(scheduled).toHaveLength(0);
   });
 
   it("start_plan answers 429 with Retry-After once the cap on rooms per hour is reached", async () => {
     vi.stubEnv("BYOM_ROOMS_PER_HOUR", "1");
-    expect((await post(startPost, goodWindows, judge)).status).toBe(202);
-    const second = await post(startPost, goodWindows, judge);
+    expect((await post(startPost, goodSlots, judge)).status).toBe(202);
+    const second = await post(startPost, goodSlots, judge);
     expect(second.status).toBe(429);
     expect(second.headers.get("retry-after")).toBe("300");
     expect((await second.json()).error.code).toBe("room_cap");
@@ -142,7 +144,7 @@ describe("REST: start_plan, check_plan, respond", () => {
   });
 
   it("check_plan on a started plan says negotiating; respond is refused until the agents agree", async () => {
-    const { data } = await (await post(startPost, goodWindows, judge)).json();
+    const { data } = await (await post(startPost, goodSlots, judge)).json();
     const checked = await (await get(`?planId=${data.planId}`, judge)).json();
     expect(checked.data).toMatchObject({ planId: data.planId, state: "negotiating", messages: [], whatsapp_draft: null });
     const early = await post(respondPost, { planId: data.planId, decision: "accept" }, judge);
@@ -175,7 +177,7 @@ describe("MCP: start_plan, check_plan, respond beside get_status", () => {
 
   it("is closed to the team's keys for the new tools, and to everyone when the judge token is unset", async () => {
     for (const name of ["start_plan", "check_plan", "respond"]) {
-      const args = name === "start_plan" ? goodWindows : { planId: "room_x", decision: "accept" };
+      const args = name === "start_plan" ? goodSlots : { planId: "room_x", decision: "accept" };
       const result = await tool(bearer(tokenA), name, args);
       expect(result.isError, name).toBe(true);
       expect(JSON.parse(result.content[0].text).error.code).toBe("forbidden");
@@ -186,7 +188,7 @@ describe("MCP: start_plan, check_plan, respond beside get_status", () => {
   });
 
   it("start_plan returns the room, check_plan reads it, and an unknown plan is an error result", async () => {
-    const started = await tool(bearer(tokenJudge), "start_plan", goodWindows);
+    const started = await tool(bearer(tokenJudge), "start_plan", goodSlots);
     expect(started.isError).toBeUndefined();
     const view = JSON.parse(started.content[0].text);
     expect(view).toMatchObject({ state: "negotiating", you: "Sprout" });
@@ -201,10 +203,24 @@ describe("MCP: start_plan, check_plan, respond beside get_status", () => {
     expect(JSON.parse(unknown.content[0].text).error.code).toBe("no_such_plan");
   });
 
-  it("start_plan with more than 3 windows is refused, as a tool error or a protocol error, and starts nothing", async () => {
-    const four = Array.from({ length: 4 }, (_, index) => ({ day: `2026-10-${26 + index}`, start: "18:00", end: "20:00" }));
-    const response = await message(await call(bearer(tokenJudge), "tools/call", { name: "start_plan", arguments: { free_windows: four } }));
-    expect(Boolean(response.error) || response.result?.isError === true).toBe(true);
+  it("start_plan with free text, windows of your own, or an unknown preset is refused, as a tool error or a protocol error, and starts nothing", async () => {
+    for (const args of [
+      { slots: "evenings", reel_hint: "anything at all" },
+      { free_windows: [{ day: "2026-10-29", start: "19:00", end: "21:00" }] },
+      { slots: "mornings" },
+      {},
+    ]) {
+      const response = await message(await call(bearer(tokenJudge), "tools/call", { name: "start_plan", arguments: args }));
+      expect(Boolean(response.error) || response.result?.isError === true, JSON.stringify(args)).toBe(true);
+    }
     expect(scheduled).toHaveLength(0);
+  });
+
+  it("start_plan's schema allows exactly one property, slots, an enum of the three presets", async () => {
+    const result = (await message(await call(bearer(tokenJudge), "tools/list"))).result;
+    const startPlanTool = result.tools.find((entry: { name: string }) => entry.name === "start_plan");
+    expect(Object.keys(startPlanTool.inputSchema.properties)).toEqual(["slots"]);
+    expect(startPlanTool.inputSchema.properties.slots.enum).toEqual(["evenings", "lunches", "weekend"]);
+    expect(startPlanTool.inputSchema.additionalProperties).toBe(false);
   });
 });

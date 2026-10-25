@@ -1,5 +1,5 @@
 import { AGENT_IDS, type AgentId, type Room, type Wallet } from "@/lib/protocol";
-import { LocalLedger, nessieFromEnvironment, type LedgerStorage, type NessieClient, type NessieResult, fail, ok } from "@/lib/nessie";
+import { LocalLedger, NessieWithLedger, nessieFromEnvironment, type LedgerStorage, type NessieClient, type NessieResult, fail, ok } from "@/lib/nessie";
 import { WALLET_SEEDS } from "@/lib/seed/wallets";
 import type { Store } from "@/lib/store";
 import { withLock } from "./lock";
@@ -32,7 +32,8 @@ export function roomLedger(store: Store): LedgerStorage {
 // weight and the caller reports a sandbox error.
 export function clientFor(store: Store, source: Wallet["source"]): NessieClient | null {
   if (source === "local") return new LocalLedger(roomLedger(store));
-  return nessieFromEnvironment();
+  const http = nessieFromEnvironment();
+  return http ? new NessieWithLedger(http, roomLedger(store)) : null;
 }
 
 export async function walletOf(store: Store, agent: AgentId): Promise<Wallet | null> {
@@ -65,7 +66,7 @@ export async function ensureWallets(store: Store, now: () => number = Date.now):
   const errors: string[] = [];
   const key = nessieFromEnvironment();
   const source: Wallet["source"] = key ? "nessie" : "local";
-  const client: NessieClient = key ?? new LocalLedger(roomLedger(store));
+  const client: NessieClient = key ? new NessieWithLedger(key, roomLedger(store)) : new LocalLedger(roomLedger(store));
 
   for (const agent of AGENT_IDS) {
     const seed = WALLET_SEEDS[agent];

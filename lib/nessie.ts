@@ -1,11 +1,15 @@
 import { z } from "zod";
 
-// Capital One's Nessie sandbox, the way this app uses it. Two implementations behind one interface:
+// Capital One's Nessie sandbox, the way this app uses it. Three clients behind one interface:
 //
-//   NessieHttp   the real sandbox (https://api.nessieisreal.com), key from NESSIE_KEY sent as ?key=. The key is
-//                never logged, echoed, or put in an error message.
-//   LocalLedger  the same calls against balances kept in the room (see lib/agent/wallets.ts), so everything runs
-//                locally and on production before a key exists. Same shapes, whole dollars, same ids.
+//   NessieHttp        the real sandbox (https://api.nessieisreal.com), key from NESSIE_KEY sent as ?key=. The key is
+//                     never logged, echoed, or put in an error message. Its writes land, but the sandbox never moves
+//                     an account's `balance` field (checked live with a real key), so it is not used for balances.
+//   NessieWithLedger  what the app runs with a key: the transactions are real Nessie records (withdrawals and
+//                     deposits with their ids), and the balance is ours, kept in the room's ledger and moved by the
+//                     same writes. The wallet chip and the payment cards read this balance, never the sandbox's.
+//   LocalLedger       the same calls against balances kept in the room (see lib/agent/wallets.ts), so everything
+//                     runs locally and on production before a key exists. Same shapes, whole dollars, same ids.
 //
 // Everything we write to the real sandbox is readable by every team: fictional names and addresses only. Dollars
 // are whole numbers. The API does not validate for us, so callers act only on account ids this app created, and
@@ -52,7 +56,13 @@ export function checkAmount(amount: number): string | null {
 // The real sandbox
 // ---------------------------------------------------------------------------
 
+// What a transaction is recorded as. The sandbox stores it either way and does not move the account balance.
+export const TRANSACTION_STATUS = "completed";
+
+export type NessieTransaction = { id: string; amount: number; status: string; description: string };
+
 const Created = z.object({ objectCreated: z.object({ _id: z.string().min(1) }) });
+const TransactionBody = z.object({ _id: z.string().min(1), amount: z.number(), status: z.string().optional(), description: z.string().optional() });
 const AccountBody = z.object({ _id: z.string().min(1), balance: z.number(), nickname: z.string().optional() });
 const ErrorBody = z.object({ message: z.string().optional(), error: z.string().optional() }).passthrough();
 
@@ -109,23 +119,45 @@ export class NessieHttp implements NessieClient {
     return this.create("/customers", input);
   }
 
+  // The account record only. Its `balance` is whatever it was created with and never moves.
+  createAccountRecord(customerId: string, input: { nickname: string; balance: number }): Promise<NessieResult<{ id: string }>> {
+    return this.create(`/customers/${encodeURIComponent(customerId)}/accounts`, { type: "Checking", nickname: input.nickname, rewards: 0, balance: input.balance });
+  }
+
   async createAccount(customerId: string, input: { nickname: string; balance: number }): Promise<NessieResult<NessieAccount>> {
-    const created = await this.create(`/customers/${encodeURIComponent(customerId)}/accounts`, { type: "Checking", nickname: input.nickname, rewards: 0, balance: input.balance });
+    const created = await this.createAccountRecord(customerId, input);
     if (created.error !== null) return fail(created.error);
     // Read it back: the balance on the account is what the sandbox says it is.
     return this.getAccount(created.data.id);
   }
 
-  withdraw(accountId: string, input: { amount: number; description: string }): Promise<NessieResult<{ id: string }>> {
+  // `status` is what the transaction is recorded as; "completed" unless a check is probing another value.
+  withdraw(accountId: string, input: { amount: number; description: string; status?: string }): Promise<NessieResult<{ id: string }>> {
     const invalid = checkAmount(input.amount);
     if (invalid) return Promise.resolve(fail(invalid));
-    return this.create(`/accounts/${encodeURIComponent(accountId)}/withdrawals`, { medium: "balance", transaction_date: today(), status: "completed", amount: input.amount, description: input.description.slice(0, 120) });
+    return this.create(`/accounts/${encodeURIComponent(accountId)}/withdrawals`, { medium: "balance", transaction_date: today(), status: input.status ?? TRANSACTION_STATUS, amount: input.amount, description: input.description.slice(0, 120) });
   }
 
-  deposit(accountId: string, input: { amount: number; description: string }): Promise<NessieResult<{ id: string }>> {
+  deposit(accountId: string, input: { amount: number; description: string; status?: string }): Promise<NessieResult<{ id: string }>> {
     const invalid = checkAmount(input.amount);
     if (invalid) return Promise.resolve(fail(invalid));
-    return this.create(`/accounts/${encodeURIComponent(accountId)}/deposits`, { medium: "balance", transaction_date: today(), status: "completed", amount: input.amount, description: input.description.slice(0, 120) });
+    return this.create(`/accounts/${encodeURIComponent(accountId)}/deposits`, { medium: "balance", transaction_date: today(), status: input.status ?? TRANSACTION_STATUS, amount: input.amount, description: input.description.slice(0, 120) });
+  }
+
+  // The transaction records, read back by id: what the sandbox actually stored.
+  getWithdrawal(id: string): Promise<NessieResult<NessieTransaction>> {
+    return this.readTransaction(`/withdrawals/${encodeURIComponent(id)}`);
+  }
+
+  getDeposit(id: string): Promise<NessieResult<NessieTransaction>> {
+    return this.readTransaction(`/deposits/${encodeURIComponent(id)}`);
+  }
+
+  private async readTransaction(path: string): Promise<NessieResult<NessieTransaction>> {
+    const result = await this.request("GET", path);
+    if (result.error !== null) return fail(result.error);
+    const parsed = TransactionBody.safeParse(result.data);
+    return parsed.success ? ok({ id: parsed.data._id, amount: parsed.data.amount, status: parsed.data.status ?? "", description: parsed.data.description ?? "" }) : fail("the sandbox answered in a shape we do not know");
   }
 
   async getAccount(accountId: string): Promise<NessieResult<NessieAccount>> {
@@ -163,8 +195,11 @@ function localId(prefix: string): string {
 export class LocalLedger implements NessieClient {
   readonly source = "local" as const;
   private readonly nicknames = new Map<string, string>();
+  private readonly storage: LedgerStorage;
 
-  constructor(private readonly storage: LedgerStorage) {}
+  constructor(storage: LedgerStorage) {
+    this.storage = storage;
+  }
 
   async createCustomer(input: NessieCustomerInput): Promise<NessieResult<{ id: string }>> {
     if (!input.first_name || !input.last_name) return fail("a customer needs a first and last name");
@@ -203,6 +238,65 @@ export class LocalLedger implements NessieClient {
     return this.move(accountId, input.amount, "in", "dp");
   }
 
+  async getAccount(accountId: string): Promise<NessieResult<NessieAccount>> {
+    const balance = (await this.storage.read())[accountId];
+    return balance === undefined ? fail("no such account") : ok({ id: accountId, balance, nickname: this.nicknames.get(accountId) ?? "" });
+  }
+}
+
+// The client the app runs with a key: real Nessie transactions, balances kept in our own ledger (the sandbox never
+// moves its balance field). A write goes to the sandbox first; the ledger moves only when the sandbox took it, so a
+// refused write leaves the balance alone. The balance check is ours too, so an overdraft never reaches the sandbox.
+export class NessieWithLedger implements NessieClient {
+  readonly source = "nessie" as const;
+  private readonly http: NessieHttp;
+  private readonly storage: LedgerStorage;
+  private readonly nicknames = new Map<string, string>();
+
+  constructor(http: NessieHttp, storage: LedgerStorage) {
+    this.http = http;
+    this.storage = storage;
+  }
+
+  createCustomer(input: NessieCustomerInput): Promise<NessieResult<{ id: string }>> {
+    return this.http.createCustomer(input);
+  }
+
+  async createAccount(customerId: string, input: { nickname: string; balance: number }): Promise<NessieResult<NessieAccount>> {
+    if (!Number.isInteger(input.balance) || input.balance < 0) return fail("balance must be a whole number of dollars");
+    const created = await this.http.createAccountRecord(customerId, input);
+    if (created.error !== null) return fail(created.error);
+    this.nicknames.set(created.data.id, input.nickname);
+    return this.storage.exclusive(async () => {
+      await this.storage.write({ ...(await this.storage.read()), [created.data.id]: input.balance });
+      return ok({ id: created.data.id, balance: input.balance, nickname: input.nickname });
+    });
+  }
+
+  private move(accountId: string, input: { amount: number; description: string }, direction: "in" | "out"): Promise<NessieResult<{ id: string }>> {
+    const invalid = checkAmount(input.amount);
+    if (invalid) return Promise.resolve(fail(invalid));
+    return this.storage.exclusive(async () => {
+      const ledger = await this.storage.read();
+      const balance = ledger[accountId];
+      if (balance === undefined) return fail("no such account");
+      if (direction === "out" && balance < input.amount) return fail("insufficient funds");
+      const written = direction === "out" ? await this.http.withdraw(accountId, input) : await this.http.deposit(accountId, input);
+      if (written.error !== null) return fail(written.error);
+      await this.storage.write({ ...ledger, [accountId]: direction === "out" ? balance - input.amount : balance + input.amount });
+      return ok({ id: written.data.id });
+    });
+  }
+
+  withdraw(accountId: string, input: { amount: number; description: string }): Promise<NessieResult<{ id: string }>> {
+    return this.move(accountId, input, "out");
+  }
+
+  deposit(accountId: string, input: { amount: number; description: string }): Promise<NessieResult<{ id: string }>> {
+    return this.move(accountId, input, "in");
+  }
+
+  // Our balance. The sandbox is never asked: its balance field is static.
   async getAccount(accountId: string): Promise<NessieResult<NessieAccount>> {
     const balance = (await this.storage.read())[accountId];
     return balance === undefined ? fail("no such account") : ok({ id: accountId, balance, nickname: this.nicknames.get(accountId) ?? "" });
