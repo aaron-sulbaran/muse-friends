@@ -48,6 +48,12 @@ export async function injectSignal(store: Store, signal: Signal, wallNow: () => 
   return { contextId, planId };
 }
 
+// The timeline says a turn failed and why in a word; the full reason (an API error body, an incomplete
+// response) goes to the server log, where the person running the demo can read it.
+function logFailure(agent: AgentId, result: TurnResult): void {
+  if (process.env.NODE_ENV !== "test") console.error(`agent turn failed (${agent})`, result.failure);
+}
+
 // The initiator's turn: read the reel, extract the place from the caption, check the calendar,
 // and open the conversation. A turn that cannot produce a message ends the thread as failed.
 export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; signalId: string; contextId: string }): Promise<TurnResult> {
@@ -71,6 +77,7 @@ export async function runSignalTurn(options: RuntimeOptions & { agent: AgentId; 
     requiredTools: ["send_to_friend_agent"],
   });
   if (result.status === "failed") {
+    logFailure(agent, result);
     await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
   }
   return result;
@@ -103,6 +110,7 @@ export async function runInboxTurn(options: RuntimeOptions & { agent: AgentId; c
     requiredTools: ["send_to_friend_agent"],
   });
   if (result.status === "failed") {
+    logFailure(agent, result);
     await failThread(store, contextId, agent, result.failure?.detail ?? "turn failed", options.wallNow?.());
   }
   return result;
