@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { AGENT_IDS, ModelProof, PolicyStamp, Redaction, type AgentId, type TaskState } from "@/lib/protocol";
-import { validateIncoming } from "@/lib/policy";
+import { AGENT_IDS, ModelProof, PolicyStamp, Redaction, isPaymentType, type AgentId, type TaskState } from "@/lib/protocol";
+import { validateIncoming, type IncomingCheck } from "@/lib/policy";
+import { validatePaymentIncoming } from "./payment-rules";
 import { getPersona, displayName } from "@/lib/seed/fixtures";
 import type { Store } from "@/lib/store";
 import type { AgentRuntimeContext } from "./context";
@@ -79,7 +80,7 @@ export async function receiveMessage(
     const duplicate = prior.find((message) => message.seq === loose?.seq && message.id === loose?.id);
     if (duplicate) return { ok: true, status: 202, body: { contextId, seq: duplicate.seq, state: duplicate.state }, runTurn: false, finish: async () => {} } as const;
 
-    const check = validateIncoming({
+    const generic = validateIncoming({
       raw: envelope.data.message,
       authenticatedSender: input.sender,
       recipient: input.recipient,
@@ -90,6 +91,13 @@ export async function receiveMessage(
       senderPersona: getPersona(input.sender),
       rejectedWindowHashes,
     });
+
+    // A payment message gets the payments checks on top: its plan, the sender's own wallet, the cap, the open payment.
+    let check: IncomingCheck = generic;
+    if (generic.ok && isPaymentType(generic.message.type)) {
+      const extra = await validatePaymentIncoming(store, generic.message, senderPolicy);
+      if (!extra.ok) check = { ok: false, status: extra.status, error: extra.error };
+    }
 
     if (!check.ok) {
       const now = input.wallNow?.() ?? Date.now();

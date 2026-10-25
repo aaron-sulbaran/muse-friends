@@ -115,7 +115,7 @@ describe("2c: pick friends", () => {
 
 describe("the avatar sheet keeps working on the extracted tier control", () => {
   const sharing = { tier: "close", categories: { food: true, events: true, availability: true, location: true, interests: true } } as const;
-  const html = renderToStaticMarkup(createElement(AvatarSheet, { museName: "Mochi", friendMuseName: "Sprout", sharing, onChanged: noop, onClose: noop }));
+  const html = renderToStaticMarkup(createElement(AvatarSheet, { role: "b", museName: "Mochi", friendMuseName: "Sprout", sharing, onChanged: noop, onClose: noop }));
 
   it("shows the current tier, keeps Off out of reach, and still names who the friend is", () => {
     const [group] = radioGroups(html);

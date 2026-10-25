@@ -104,7 +104,7 @@ describe("the friend's disc with their Muse behind it", () => {
 });
 
 describe("the avatar sheet says the same things as the share sheet", () => {
-  const html = renderToStaticMarkup(createElement(AvatarSheet, { museName: "Mochi", friendMuseName: "Sprout", sharing: sharingFor("close"), onChanged: noop, onClose: noop }));
+  const html = renderToStaticMarkup(createElement(AvatarSheet, { role: "b", museName: "Mochi", friendMuseName: "Sprout", sharing: sharingFor("close"), onChanged: noop, onClose: noop }));
 
   it("uses the relabeled rows, and drops the old names", () => {
     for (const row of SWITCH_ROWS) {
