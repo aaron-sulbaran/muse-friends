@@ -88,7 +88,10 @@ export const copy = {
   outcomeDidnt: "Didn't happen",
   outcomeWentReply: "Love that. That's one plan that made it out of the chat.",
   outcomeDidntReply: (activity: string) => `No worries, plans slip. I'll keep ${activity} in mind for another time.`,
-  closingLine: "Done. It's in Goals.",
+  closingLine: "Done. You two are actually going. It's in Goals.",
+  /** The line under the plan card (human connection): who agreed and how fast, then that the two friends actually go. */
+  agreedLine: (names: string, count: number) => `${names} agreed in ${count} ${count === 1 ? "message" : "messages"}, so you two actually go.`,
+  agreedSeeHow: "See how",
   nudgeSent: (friend: string) => `Can you check with ${friend} about the shawarma reel?`,
   /** `asker` is "Alex's Muse", or the Muse's own name when the person has not given theirs. */
   friendMuseAsking: (asker: string) => `${asker} is asking about this reel.`,

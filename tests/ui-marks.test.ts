@@ -53,9 +53,9 @@ describe("Muse's blue check mark", () => {
     for (const value of strings) expect(value).not.toMatch(/[\u2713\u2714]/);
   });
 
-  it("goes in front of the words You said yes and Done. It's in Goals, drawn by the chat rather than typed", () => {
+  it("goes in front of the words You said yes and Done. You two are actually going, drawn by the chat rather than typed", () => {
     expect(copy.youSaidYes).toBe("You said yes");
-    expect(copy.closingLine).toBe("Done. It's in Goals.");
+    expect(copy.closingLine).toBe("Done. You two are actually going. It's in Goals.");
     const items = viewForRole(at("confirmed"), "a").items.filter((item) => item.kind === "collapsed");
     expect(items.some((item) => item.text === copy.youSaidYes && item.check === true)).toBe(true);
     const done = viewForRole(at("followed_up"), "a").items.filter((item) => item.kind === "collapsed" && item.id === "closing");

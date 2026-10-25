@@ -59,9 +59,11 @@ describe("the stage header", () => {
     const script = /<img [^>]*muse-script-blue[^>]*>/.exec(heading)?.[0] ?? "";
     expect(script).toContain('src="/brand/muse-script-blue.svg"');
     expect(script).toContain('alt=""');
-    expect(script).toContain('height="26"');
-    expect(script).toContain('width="68"');
-    for (const part of ["mb-[-2.6px]", "mr-[4.5px]", "h-[26px]", "w-auto"]) expect(script).toContain(part);
+    expect(script).toContain('height="23"');
+    expect(script).toContain('width="66"');
+    // Sun 10:06am: the ink is centered on "Friends'" capitals by a `top` on a relatively positioned image; a margin cannot move an image in a baseline row.
+    for (const part of ["relative", "top-[3.95px]", "mr-[5px]", "h-[23.4px]", "w-[65.8px]"]) expect(script).toContain(part);
+    for (const gone of ["mb-[-2.6px]", "mr-[4.5px]", "w-auto", "h-[26px]"]) expect(script).not.toContain(gone);
     // The word after the script is plain text, not the old two-color text lockup.
     expect(heading.replace(/<[^>]+>/g, "").trim()).toBe("Friends");
     expect(heading).not.toContain("text-accent-dot");
@@ -83,18 +85,22 @@ describe("the stage header", () => {
     // Sun 8:45am: the wordmark's capitals (about 8.5px) match the subtitle's, so 9 by 44, not Meta's 12px minimum.
     expect(image).toContain('height="9"');
     expect(image).toContain('width="44"');
-    expect(image).toContain('class="mb-px"');
-    expect(html).toMatch(/<span class="[^"]*\bgap-1\b[^"]*\bitems-end\b|<span class="[^"]*\bitems-end\b[^"]*\bgap-1\b/);
+    // The ink is centered on the middle of the words' capitals: a 0.27px `top` in a baseline row, not `mb-px` and not `items-end`.
+    expect(image).toContain('class="relative top-[0.27px]"');
+    expect(image).not.toContain("mb-px");
+    expect(html).toMatch(/<span class="[^"]*\binline-flex\b[^"]*\bitems-baseline\b[^"]*\bgap-1\b/);
+    expect(html).not.toMatch(/<span class="[^"]*\bitems-end\b[^"]*text-\[12px\]/);
     expect(html).toMatch(/alt="Meta"[^>]*\/><\/span>/);
   });
 
   it("ships the script as the traced brand file, in its own blue gradient, never recolored", () => {
     const svg = readFileSync("public/brand/muse-script-blue.svg", "utf8");
-    expect(svg).toContain('viewBox="0 0 353 134"');
+    // Cut to its ink (Sun 10:06am), so the image box is the ink and the offset is exact.
+    expect(svg).toContain('viewBox="7.31 6.64 339.04 120.48"');
     for (const stop of ["#0040DC", "#0064E0", "#0082FB"]) expect(svg).toContain(stop);
     expect(svg).toContain('fill="url(#muse-blue)"');
-    // 26 pixels tall keeps the traced aspect: 353 by 134 is 68 by 26.
-    expect(Math.round((353 / 134) * 26)).toBe(68);
+    // 23.4 pixels tall keeps the ink's aspect: 339.04 by 120.48 is 65.8 by 23.4.
+    expect(Math.round((339.04 / 120.48) * 23.4 * 10) / 10).toBe(65.8);
   });
 
   it("keeps the files the lockup points at, rasterized at 2x and 3x of the 12 pixel original", () => {

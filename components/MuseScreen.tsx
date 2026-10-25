@@ -13,6 +13,7 @@ import { runInProgress } from "@/lib/ui/entry";
 import { friendsIndicator, pickerMode, ROOM_FRIEND, roomFriendTier, shareFriend, startRequest, startsRunAtDone } from "@/lib/ui/onboarding-flow";
 import { getRoom } from "@/lib/ui/room";
 import { endsRun, lineOfBubble, startsRun, voicesOf, type Sender, type ThreadLine } from "@/lib/ui/thread";
+import { useExchangeOpen } from "@/lib/ui/use-exchange";
 import { useFriendReplied } from "@/lib/ui/use-friend-reply";
 import { useOnboarding } from "@/lib/ui/use-onboarding";
 import { AFTER_SKIP_IDS, SKIP_AFTER_MS, SKIP_SEPARATOR_IDS, skipTarget } from "@/lib/ui/time-skip";
@@ -46,6 +47,7 @@ import { ReplayBadge } from "./ReplayBadge";
 import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
 import { ThreadBubble } from "./ThreadBubble";
+import { ThreadTyping, typingLine } from "./ThreadTyping";
 import { TimeSkipCard } from "./TimeSkipCard";
 import { TabBar, type Tab } from "./TabBar";
 import { WalletChip } from "./WalletChip";
@@ -103,7 +105,8 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem, lineOf: (
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
 export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, onOpenPayment, standalone, onboarding = false }: Props) {
   const friendReplied = useFriendReplied(snapshot.plan);
-  const view = viewForRole(snapshot, role, { friendReplied });
+  const exchangeOpen = useExchangeOpen(snapshot.plan);
+  const view = viewForRole(snapshot, role, { friendReplied, exchangeOpen });
   const [pending, setPending] = useState(false);
   const [replanError, setReplanError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -129,7 +132,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   // Bubbles and the Muses' own lines read as one thread: who is speaking is a sender, and a run shows its chip once.
   const voices = voicesOf(view);
   const lineOf = (item: ChatItem | undefined): ThreadLine | undefined =>
-    item?.kind === "thread-line" ? item.line : item?.kind === "bubble" ? lineOfBubble(item, voices) : undefined;
+    item?.kind === "thread-line" ? item.line : item?.kind === "thread-typing" ? typingLine(item.sender) : item?.kind === "bubble" ? lineOfBubble(item, voices) : undefined;
   const friendSender: Sender = { kind: "friend", name: view.friendHumanName, simulated };
   // Onboarding (D26): a judge's own phone opens with Sprout's greeting, a name, and the choice of Friends. Until it is done
   // it is the whole chat, with no tab bar and no composer; after an opt-out the chat is still there, but nothing starts.
@@ -457,7 +460,9 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 const line = lineOf(item);
                 return (
                   <div key={item.id} className={`${spacingBefore(previous, item, lineOf)} ${AFTER_SKIP_IDS.has(item.id) ? "animate-after-skip" : ""}`}>
-                    {line ? (
+                    {item.kind === "thread-typing" && line ? (
+                      <ThreadTyping line={line} showSender={startsRun(lineOf(previous), line)} />
+                    ) : line ? (
                       <ThreadBubble line={line} showSender={startsRun(lineOf(previous), line)} showPicture={endsRun(line, lineOf(chatItems[index + 1]))} />
                     ) : (
                       renderItem(item)
@@ -470,7 +475,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                   <TimeSkipCard day={pendingSkip.day} time={pendingSkip.time} />
                 </div>
               ) : null}
-              {thinking ? (
+              {thinking && !chatItems.some((item) => item.kind === "thread-typing") ? (
                 <div className="mt-3.5">
                   <TypingDots />
                 </div>
