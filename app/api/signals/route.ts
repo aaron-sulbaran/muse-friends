@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { reserveRun, runBudget } from "@/lib/agent/caps";
 import { startGroup } from "@/lib/agent/group";
+import { driveTrip, startTrip } from "@/lib/agent/trip";
 import { injectSignal, runSignalTurn } from "@/lib/agent/runtime";
 import { newId } from "@/lib/agent/ids";
 import { httpDeliver } from "@/lib/agent/wire";
@@ -9,6 +10,7 @@ import { getLiveReel } from "@/lib/instagram";
 import type { Signal } from "@/lib/protocol";
 import { rawShawarmaSignal } from "@/lib/seed/fixtures";
 import { getStore } from "@/lib/store";
+import { modelPlayers } from "@/lib/ui/group";
 
 // "Lisa sent Aaron a reel": injects the signal and starts the receiving agent's turn after responding.
 // The reel is read live from its owner's Instagram (lib/instagram.ts) when a token is set, else the seeded,
@@ -20,9 +22,12 @@ import { getStore } from "@/lib/store";
 //
 // scenario "group" is the same reel, but Sprout makes it a plan for three (Mochi and Pebble): one pair thread per
 // friend, the protocol unchanged, a groupId on each thread, one plan with a group on it.
+//
+// scenario "trip" is a plan for three months out (Plan.kind "trip"): no reel, the group chat that never made it out of
+// the chat. Sprout asks each Muse a bounded question; a model plays the people who are not in the room (lib/agent/trip.ts).
 export const maxDuration = 300;
 
-const Body = z.strictObject({ scenario: z.enum(["shawarma", "group"]).default("shawarma") });
+const Body = z.strictObject({ scenario: z.enum(["shawarma", "group", "trip"]).default("shawarma") });
 
 export async function GET() {
   return Response.json({ budget: runBudget() }, { headers: { "Cache-Control": "no-store" } });
@@ -42,6 +47,21 @@ export async function POST(request: Request) {
   }
   const budget = reserved.budget;
   const store = await getStore();
+
+  if (body.data.scenario === "trip") {
+    const started = await startTrip(store);
+    after(async () => {
+      try {
+        await driveTrip(store, started.planId, modelPlayers);
+      } catch (error) {
+        console.error("trip failed", error);
+      }
+    });
+    return Response.json(
+      { contextId: started.firstContextId, planId: started.planId, groupId: started.groupId, contexts: started.contexts, status: { state: "working" }, budget },
+      { status: 202 },
+    );
+  }
 
   const seeded = rawShawarmaSignal();
   const live = await getLiveReel();

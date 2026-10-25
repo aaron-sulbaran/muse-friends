@@ -45,11 +45,18 @@ export const TITLE_MAX = 60;
 export const NEGOTIATION_TYPES = ["intent", "propose", "counter", "accept", "decline"] as const;
 export const NegotiationType = z.enum(NEGOTIATION_TYPES);
 export const PAYMENT_TYPES = ["payment", "payment_received"] as const;
-export const MESSAGE_TYPES = [...NEGOTIATION_TYPES, ...PAYMENT_TYPES] as const;
+// The trip channel (a long-horizon group plan): the coordinator asks each member's Muse a bounded question, the member
+// answers from its person, the coordinator proposes a budget cap and an itinerary, the member's person joins or not.
+// Like payments, it has threads of its own and the runtime writes it, never a model through the negotiation tool.
+export const TRIP_TYPES = ["trip_ask", "trip_answer", "trip_plan", "trip_reply"] as const;
+export const MESSAGE_TYPES = [...NEGOTIATION_TYPES, ...PAYMENT_TYPES, ...TRIP_TYPES] as const;
 export const MessageType = z.enum(MESSAGE_TYPES);
 export type MessageType = z.infer<typeof MessageType>;
 export function isPaymentType(type: MessageType): type is (typeof PAYMENT_TYPES)[number] {
   return (PAYMENT_TYPES as readonly string[]).includes(type);
+}
+export function isTripType(type: MessageType): type is (typeof TRIP_TYPES)[number] {
+  return (TRIP_TYPES as readonly string[]).includes(type);
 }
 
 // A2A v0.3 task-state names, the subset this protocol uses.
@@ -57,7 +64,7 @@ export const TASK_STATES = ["working", "input-required", "completed", "rejected"
 export const TaskState = z.enum(TASK_STATES);
 export type TaskState = z.infer<typeof TaskState>;
 
-export const REASONS = ["both_free", "interest_match", "no_overlap", "not_interested", "cap_reached", "settle_up"] as const;
+export const REASONS = ["both_free", "interest_match", "no_overlap", "not_interested", "cap_reached", "settle_up", "trip"] as const;
 export const Reason = z.enum(REASONS);
 export type Reason = z.infer<typeof Reason>;
 
@@ -182,6 +189,57 @@ function checkWindowRules(value: WindowRuleInput, ctx: z.RefinementCtx) {
     case "payment_received":
       if (count > 0) issue("a payment carries no windows");
       return;
+    case "trip_ask":
+    case "trip_answer":
+    case "trip_plan":
+    case "trip_reply":
+      if (count > 0) issue("a trip message carries no windows");
+      return;
+  }
+}
+
+// Whole dollars per person for a trip: a ceiling, a cap, a price from the seeded catalog, a deposit.
+const TripMoney = z.number().int().min(0).max(100_000);
+
+// What a trip message carries. ask: the bounded question and the range it is about. answer: the person's answer, with
+// the ceiling it means, one taste and maybe one constraint. plan: the cap, the itinerary lines (catalog ids) and the
+// deposit proposed to each person. reply: the person's choice, and the deposit they confirmed when they are in.
+// The numbers are the people's and the seed's, copied by the runtime: a model never authors one.
+export const TripPayload = z.strictObject({
+  planId: Id,
+  prompt: z.string().min(1).max(140).optional(),
+  range: z.strictObject({ low: TripMoney, high: TripMoney }).optional(),
+  answer: z.enum(["yes", "no", "limit"]).optional(),
+  limit: TripMoney.optional(),
+  taste: z.string().min(1).max(40).optional(),
+  constraint: z.string().min(1).max(40).optional(),
+  // person: a human tapped the card; person_model: a model plays the person (the UI says so); seed: the model did not
+  // answer, so the seeded profile did (the UI says that too).
+  by: z.enum(["person", "person_model", "seed"]).optional(),
+  cap: TripMoney.optional(),
+  lines: z.array(Id).max(6).optional(),
+  total: TripMoney.optional(),
+  deposit: TripMoney.optional(),
+  choice: z.enum(["in", "out"]).optional(),
+  ledgerRef: Id.optional(),
+});
+export type TripPayload = z.infer<typeof TripPayload>;
+
+// A trip message carries a trip payload, and only a trip message does.
+function checkTripShape(value: { type: MessageType; trip?: TripPayload }, ctx: z.RefinementCtx) {
+  const issue = (message: string) => ctx.addIssue({ code: "custom", message, path: ["trip"] });
+  const trip = value.trip;
+  if (!isTripType(value.type)) {
+    if (trip) issue("only a trip message carries a trip payload");
+    return;
+  }
+  if (!trip) return issue(`${value.type} needs a trip payload`);
+  if (value.type === "trip_ask" && (!trip.prompt || !trip.range)) issue("trip_ask needs the question and its range");
+  if (value.type === "trip_answer" && (!trip.answer || trip.limit === undefined || !trip.taste || !trip.by)) issue("trip_answer needs the answer, the limit, a taste and who answered");
+  if (value.type === "trip_plan" && (trip.cap === undefined || !trip.lines || trip.lines.length === 0 || trip.total === undefined || trip.deposit === undefined)) issue("trip_plan needs the cap, the lines, the total and the deposit");
+  if (value.type === "trip_reply") {
+    if (!trip.choice) issue("trip_reply needs a choice");
+    if (trip.choice === "in" && (trip.deposit === undefined || !trip.ledgerRef)) issue("a person who is in has put a deposit in the pot: trip_reply needs the deposit and its ledger reference");
   }
 }
 
@@ -221,6 +279,7 @@ export const AgentMessage = z
     note: z.string().max(NOTE_MAX).optional(),
     shared: Shared.optional(),
     payment: Payment.optional(),
+    trip: TripPayload.optional(),
     at: IsoDateTime,
   })
   .superRefine((message, ctx) => {
@@ -229,6 +288,7 @@ export const AgentMessage = z
     }
     checkWindowRules(message, ctx);
     checkPaymentShape(message, ctx);
+    checkTripShape(message, ctx);
   });
 export type AgentMessage = z.infer<typeof AgentMessage>;
 
@@ -413,6 +473,79 @@ export const PlanGroup = z.strictObject({
 });
 export type PlanGroup = z.infer<typeof PlanGroup>;
 
+// A trip plan (Plan.kind "trip"): a long-horizon group plan months out. The wire messages are the audit trail; this is
+// the state the thread and the cards render. Every number in it names where it came from: the seeded catalog, a
+// person's answer, or a rule of the coordinator's.
+export const TripAnswer = z.strictObject({
+  answer: z.enum(["yes", "no", "limit"]),
+  limit: TripMoney,
+  taste: z.string().min(1).max(40),
+  constraint: z.string().min(1).max(40).optional(),
+  by: z.enum(["person", "person_model", "seed"]),
+  at: IsoDateTime,
+});
+export type TripAnswer = z.infer<typeof TripAnswer>;
+
+export const TripLine = z.strictObject({
+  id: Id,
+  kind: z.enum(["flight", "stay", "excursion"]),
+  label: z.string().min(1).max(80),
+  cost: TripMoney,
+  source: z.string().min(1).max(80),
+  serves: z.array(z.string().min(1).max(40)).max(4),
+});
+export type TripLine = z.infer<typeof TripLine>;
+
+export const TripItinerary = z.strictObject({
+  lines: z.array(TripLine).min(1).max(6),
+  total: TripMoney,
+  composedBy: z.enum(["model", "fallback"]),
+  rationale: z.string().min(1).max(240),
+});
+export type TripItinerary = z.infer<typeof TripItinerary>;
+
+export const TripDeposit = z.strictObject({
+  amount: TripMoney,
+  status: z.enum(["proposed", "confirmed", "declined", "failed"]),
+  withdrawalId: Id.optional(),
+  depositId: Id.optional(),
+  error: z.string().max(160).optional(),
+  at: IsoDateTime.optional(),
+});
+export type TripDeposit = z.infer<typeof TripDeposit>;
+
+export const TripPot = z.strictObject({
+  // The local demo ledger always: the pot never touches the shared Nessie sandbox.
+  source: z.literal("local"),
+  potAccountId: Id,
+  // Each person's seeded trip wallet, with the balance last read back from the ledger.
+  wallets: z.partialRecord(MemberId, z.strictObject({ accountId: Id, balance: z.number().int() })),
+  perPerson: TripMoney,
+  target: TripMoney,
+  // The proposal's breakdown, each line with its source (D28): what the deposit is made of.
+  breakdown: z.array(z.strictObject({ label: z.string().min(1).max(80), amount: TripMoney, source: z.string().min(1).max(100) })).max(6),
+  deposits: z.partialRecord(MemberId, TripDeposit),
+});
+export type TripPot = z.infer<typeof TripPot>;
+
+export const TripState = z.strictObject({
+  title: z.string().min(1).max(60),
+  destination: z.string().min(1).max(60),
+  horizon: z.strictObject({ label: z.string().min(1).max(30), start: IsoDateTime, end: IsoDateTime }),
+  // The range the bounded question is about, from the seeded catalog's flight prices.
+  range: z.strictObject({ low: TripMoney, high: TripMoney }),
+  answers: z.partialRecord(MemberId, TripAnswer),
+  cap: z.strictObject({ amount: TripMoney, basis: z.string().min(1).max(160) }).optional(),
+  itinerary: TripItinerary.optional(),
+  pot: TripPot.optional(),
+  // What the coordinator does not know and says so, instead of inventing it.
+  unknowns: z.array(z.string().min(1).max(140)).max(6),
+});
+export type TripState = z.infer<typeof TripState>;
+
+export const PlanKind = z.enum(["hangout", "trip"]);
+export type PlanKind = z.infer<typeof PlanKind>;
+
 export const Plan = z.strictObject({
   id: Id,
   contextId: Id,
@@ -424,6 +557,9 @@ export const Plan = z.strictObject({
   decisions: z.record(AgentId, Decision),
   // Present when this plan is a group of three.
   group: PlanGroup.optional(),
+  // "hangout" when absent. A trip is a group plan months out; see TripState.
+  kind: PlanKind.optional(),
+  trip: TripState.optional(),
   draft: z.string().max(500).optional(),
   dropReason: DropReason.optional(),
   history: z.array(PlanHistoryEntry),

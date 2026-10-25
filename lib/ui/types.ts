@@ -16,12 +16,13 @@ import type {
   Role,
   ShareTier,
   TaskState as ThreadState,
+  TripPayload,
   Window as TimeWindow,
 } from "@/lib/protocol";
 
 // The wire vocabulary comes from the protocol, never a copy, so a new reason or
 // category cannot silently break the adapter's types.
-export type { AgentId, Category, Decision, MemberId, MessageReason, MessageType, PlanState, Role, ShareTier, ThreadState, TimeWindow };
+export type { AgentId, Category, Decision, MemberId, MessageReason, MessageType, PlanState, Role, ShareTier, ThreadState, TimeWindow, TripPayload };
 
 /** What a Muse is doing, for the header avatar's loop: nothing, reading or waiting on a model, or talking to the other Muse. */
 export type AvatarMood = "idle" | "thinking" | "talking";
@@ -60,6 +61,8 @@ export type UiMessage = {
   at: string;
   /** Present on messages a model call produced; absent on scripted fixtures. */
   proof?: ModelProof;
+  /** A trip message's payload (the bounded question, the person's answer, the proposal, the reply). */
+  trip?: TripPayload;
   /** Present when the receiving inbox rejected the message. */
   blockedRule?: string;
   /** The message as delivered, shown only in the JSON drawer. */
@@ -78,6 +81,43 @@ export type UiGroup = {
   contextIds: string[];
 };
 
+/** One person of a trip, as the thread names them: who, whose Muse speaks for them, and whether a model plays them. */
+export type UiTripPerson = { member: MemberId; name: string; muse: string; simulated: boolean; taste: string; constraint: string | null };
+
+/** A person's answer to the bounded question. `by` says who gave it: a human tap, a model that plays them, or the seeded profile. */
+export type UiTripAnswer = { member: MemberId; answer: "yes" | "no" | "limit"; limit: number; taste: string; constraint: string | null; by: "person" | "person_model" | "seed"; at: string };
+
+export type UiTripLine = { id: string; kind: "flight" | "stay" | "excursion"; label: string; cost: number; source: string; serves: string[] };
+
+export type UiTripDeposit = { member: MemberId; amount: number; status: "proposed" | "confirmed" | "declined" | "failed"; withdrawalId?: string; depositId?: string; error?: string };
+
+/** The trip a plan of kind "trip" carries: every number with its source, nothing booked. */
+export type UiTrip = {
+  title: string;
+  destination: string;
+  horizon: { label: string; start: string; end: string };
+  /** The range the bounded question is about, per person for the whole trip. */
+  range: { low: number; high: number };
+  /** Everyone in the trip, coordinator first. */
+  people: UiTripPerson[];
+  answers: UiTripAnswer[];
+  cap: { amount: number; basis: string } | null;
+  itinerary: { lines: UiTripLine[]; total: number; composedBy: "model" | "fallback"; rationale: string } | null;
+  pot: {
+    perPerson: number;
+    target: number;
+    /** What the pot holds now, read from the ledger; null if the ledger has no such account. */
+    balance: number | null;
+    breakdown: Array<{ label: string; amount: number; source: string }>;
+    deposits: UiTripDeposit[];
+    wallets: Array<{ member: MemberId; balance: number | null }>;
+  } | null;
+  /** What the coordinator says it does not know. */
+  unknowns: string[];
+  /** The label every seeded price and line carries on screen. */
+  seededLabel: string;
+};
+
 export type UiPlan = {
   id: string;
   contextId: string;
@@ -93,6 +133,10 @@ export type UiPlan = {
   decisions: Record<Role, Decision>;
   /** Set when the plan is for three; the pair's plans have none. */
   group: UiGroup | null;
+  /** "trip" for a long-horizon plan for three; a hangout otherwise. */
+  kind: "hangout" | "trip";
+  /** The trip itself, when the plan is one. */
+  trip: UiTrip | null;
   draft: string | null;
   droppedReason: string | null;
   /** When each state was reached, oldest first. */

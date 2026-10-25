@@ -5,8 +5,9 @@
 //
 //   pnpm demo:group                                   http://localhost:3001
 //   pnpm demo:group -- --base http://localhost:3001 --runs 1
+//   pnpm demo:group -- --kind trip                    the long-horizon trip: bounded questions, a cap, an itinerary, a pot
 //
-// Options: --base URL  --runs N (default 1)  --keep (do not reset the room at the end)
+// Options: --base URL  --runs N (default 1)  --kind hangout|trip (default hangout)  --keep (do not reset the room at the end)
 //          --timeout SECONDS (default 180)  --force (start even if the room holds a plan; it will be cleared)
 //
 // It RESETS the room at the start of every run (and at the end unless --keep), so only point it at a room you are
@@ -19,6 +20,7 @@ function option(name, fallback) {
 }
 const base = option("base", process.env.DEMO_BASE_URL ?? "http://localhost:3001").replace(/\/$/, "");
 const runs = Number(option("runs", "1"));
+const kind = option("kind", "hangout");
 const keep = argv.includes("--keep");
 const force = argv.includes("--force");
 const timeoutMs = Number(option("timeout", "180")) * 1000;
@@ -113,6 +115,67 @@ async function runHangout(label) {
   return { last: now };
 }
 
+// The trip: one judge alone. Sprout asks each Muse one bounded question; a model plays Michelle and Kai; the judge answers
+// for themself and joins. Checks that every number has a source and that nothing is called booked.
+async function runTrip(label) {
+  console.log(`\nDEMO group trip, one judge alone, ${label} against ${base}`);
+  const reset = await call("POST", "/api/controls", { type: "reset" });
+  check(reset.status === 200, `reset the room (${reset.status}, ${reset.ms}ms)`);
+  const alone = await call("POST", "/api/controls", { type: "simulated_friend", on: true });
+  check(alone.status === 200, `Michelle and Kai played by a model for the room (${alone.status})`);
+  etag = null;
+
+  const t0 = Date.now();
+  const ack = await call("POST", "/api/signals", { scenario: "trip" });
+  if (ack.status === 429) console.log(`  The room is paused by a run cap (${ack.json?.reason}): "${ack.json?.text}".`);
+  check(ack.status === 202, `POST /api/signals {scenario: trip} answered 202 in ${ack.ms}ms`);
+  if (ack.status !== 202) return null;
+  const { planId } = ack.json;
+
+  const asked = await waitFor("the questions are out", (s) => s.plan?.id === planId && s.messages.some((m) => m.type === "trip_ask"));
+  check(asked?.messages.filter((m) => m.type === "trip_ask").length === 2, `Sprout asked both Muses (${asked?.messages.filter((m) => m.type === "trip_ask").length ?? 0} trip_ask)`);
+
+  // The judge answers their own bounded question: yes.
+  const mine = await call("POST", "/api/trip/answer", { planId, member: "aaron", answer: "yes" });
+  check(mine.status === 200, `the judge answered the bounded question (${mine.status})`);
+
+  const proposed = await waitFor("the proposal", (s) => s.plan?.id === planId && (s.plan.state === "awaiting_humans" || s.plan.state === "dropped"));
+  const trip = proposed?.plan?.trip;
+  check(proposed?.plan?.state === "awaiting_humans" && trip !== null, `the trip reached awaiting_humans in ${seconds(Date.now() - t0)} (was ${proposed?.plan?.state ?? "none"})`);
+  if (!trip) return null;
+
+  console.log(`  answers: ${trip.answers.map((a) => `${trip.people.find((p) => p.member === a.member)?.name} up to $${a.limit} (${a.by})`).join("; ")}`);
+  check(trip.answers.length === 3, "all three people answered");
+  check(trip.answers.filter((a) => a.by === "person_model").length === 2, `Michelle and Kai were played by a model (${trip.answers.map((a) => a.by).join(", ")})`);
+  const lowest = Math.min(...trip.answers.map((a) => a.limit));
+  check(trip.cap?.amount === lowest, `the cap is the lowest ceiling, $${trip.cap?.amount} (${trip.cap?.basis})`);
+  const itinerary = trip.itinerary;
+  check(itinerary?.lines.length === 4, `a four-line itinerary: ${itinerary?.lines.map((l) => l.id).join(", ")} = $${itinerary?.total} per person, composed by ${itinerary?.composedBy}`);
+  check(itinerary?.total <= trip.cap?.amount, `the total is within the cap ($${itinerary?.total} <= $${trip.cap?.amount})`);
+  check(itinerary?.lines.every((l) => l.source.startsWith(trip.seededLabel)), `every line says it is seeded (${trip.seededLabel})`);
+  check(trip.unknowns.some((u) => /do not know/i.test(u)), `the coordinator says what it does not know: "${trip.unknowns[0]}"`);
+  check(trip.pot && trip.pot.breakdown.every((b) => b.source) && trip.pot.perPerson > 0, `the pot proposes $${trip.pot?.perPerson} each, every breakdown line sourced`);
+  const types = proposed.messages.map((m) => m.type);
+  check(["trip_ask", "trip_answer", "trip_plan"].every((t) => types.filter((x) => x === t).length === 2), `each member thread carries ask, answer and plan over the protocol (${types.length} messages)`);
+  check(proposed.messages.filter((m) => m.type === "trip_plan").every((m) => m.proof), "the coordinator's plan message carries model proof");
+
+  // Michelle and Kai join on their own (a model plays them); the judge confirms their own deposit.
+  const others = await waitFor("the others join", (s) => s.plan?.id === planId && s.plan.group?.members.filter((m) => m.id !== "aaron").every((m) => m.decision === "accepted"));
+  check(others?.plan?.group?.members.filter((m) => m.id !== "aaron").every((m) => m.decision === "accepted"), `Michelle and Kai joined and funded their deposits (${others?.plan?.group?.members.map((m) => `${m.id}:${m.decision}`).join(" ")})`);
+  check(others?.plan?.trip?.pot?.balance === 2 * trip.pot.perPerson, `the pot holds $${others?.plan?.trip?.pot?.balance} after two deposits`);
+
+  const join = await call("POST", "/api/trip/join", { planId, member: "aaron", choice: "in" });
+  check(join.status === 200, `the judge confirmed their own deposit (${join.status}, ${seconds(join.ms)})`);
+  etag = null;
+  const now = await state();
+  check(now.plan?.state === "confirmed", `the trip is confirmed by all three (${now.plan?.state})`);
+  check(now.plan?.trip?.pot?.balance === 3 * trip.pot.perPerson, `the pot holds $${now.plan?.trip?.pot?.balance}, the target $${trip.pot.target}`);
+  const replies = now.messages.filter((m) => m.type === "trip_reply");
+  check(replies.length === 2 && replies.every((m) => m.trip?.choice === "in" && m.trip?.ledgerRef), "Mochi and Pebble each told Sprout they are in, with the pot ledger reference");
+  console.log(`  total ${seconds(Date.now() - t0)} from the group chat to a confirmed trip; nothing is booked`);
+  return { last: now };
+}
+
 const initial = await state();
 if (!force && initial && (initial.plan || initial.messages.length > 0)) {
   console.log(`The room at ${base} is not empty (plan ${initial.plan?.state ?? "none"}, ${initial.messages.length} messages). Pass --force to clear it and run anyway.`);
@@ -122,7 +185,7 @@ etag = null;
 
 for (let index = 1; index <= runs; index += 1) {
   try {
-    await runHangout(`run ${index}/${runs}`);
+    await (kind === "trip" ? runTrip : runHangout)(`run ${index}/${runs}`);
   } catch (error) {
     check(false, `run ${index} threw: ${error instanceof Error ? error.message : error}`);
   }

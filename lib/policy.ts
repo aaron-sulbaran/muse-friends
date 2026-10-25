@@ -152,6 +152,21 @@ export function enforceSharePolicy({ message, policy, sender, windowsDropped = 0
     }
   }
 
+  // A trip message's words are a person's or the seed's, scanned like a note: a private detail never travels in them.
+  if (out.trip) {
+    const text = (value: string | undefined, replacement: string | null): string | undefined => {
+      if (!value) return value;
+      const hits = scanText(value, policy, sender, { place: originalPlace, topic: out.activity?.title });
+      if (hits.length === 0) return value;
+      for (const hit of hits) removed.add(hit);
+      return replacement ?? undefined;
+    };
+    out.trip.prompt = text(out.trip.prompt, "A question for you") ?? out.trip.prompt;
+    out.trip.taste = text(out.trip.taste, "something") ?? out.trip.taste;
+    out.trip.constraint = text(out.trip.constraint, null);
+    if (out.trip.constraint === undefined) delete out.trip.constraint;
+  }
+
   if (out.activity) {
     const hits = scanText(out.activity.title, policy, sender, { eventsOnly: true });
     if (hits.length > 0) {
