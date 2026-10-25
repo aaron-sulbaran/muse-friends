@@ -98,7 +98,7 @@ export function ActivityPanel({ snapshot, connected, onOpenMessage, onClose, foo
       <header className="flex items-center justify-between gap-2">
         <h2 className="text-[22px] font-semibold leading-7">{copy.activityTitle}</h2>
         <div className="flex items-center gap-2">
-          {snapshot ? <ReplayBadge mode={snapshot.mode} compact={sheet} /> : null}
+          {snapshot ? <ReplayBadge mode={snapshot.mode} compact={sheet} recording={snapshot.recording} /> : null}
           {sheet ? (
             <button
               ref={closeButton}
