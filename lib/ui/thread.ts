@@ -45,6 +45,8 @@ export const FRIEND_REPLY_DELAY_MS = 6000;
 export type ThreadOptions = {
   /** False while the friend's answer to the handoff is still being "typed": the line is left out until the phone's own timer says so. */
   friendReplied?: boolean;
+  /** False once the plan is agreed and the phone's hold is over: the Muses' exchange folds into the "agreed in n messages" line. */
+  exchangeOpen?: boolean;
 };
 
 /** When the person handed the message off (the plan was scheduled): the moment the friend's answer is a reply to. */
@@ -54,8 +56,8 @@ export function handoffAt(plan: Pick<UiPlan, "history"> | null | undefined): str
 
 const roleAgent: Record<Role, AgentId> = { a: "aaron", b: "lisa" };
 
-/** The turns that move a plan: an intent only opens the thread, and the reel and Sprout's read already say so. */
-const PLAN_CHANGING: ReadonlySet<MessageType> = new Set(["propose", "counter", "accept", "decline"]);
+/** The turns the thread shows as they land: the opening intent (the offer), then each propose, counter, accept and decline. */
+const PLAN_CHANGING: ReadonlySet<MessageType> = new Set(["intent", "propose", "counter", "accept", "decline"]);
 
 /** A friend who is played by a model says one thing, once she has decided; a real friend's lines are their own. */
 const decisionLine = { accepted: copy.threadFriendYes, declined: copy.threadFriendNo } as const;
@@ -115,6 +117,18 @@ export function threadLines(snapshot: UiSnapshot, role: Role, options: ThreadOpt
   if (mine && mine.windows.length > 0) notes.push({ id: "thread-typed-free", sender: muse(me), text: copy.threadTypedFree(describeFree(mine.windows)), onlyYou: true, phase: "talk" });
   if (typed?.overlap === false) notes.push({ id: "thread-no-shared-free", sender: muse(me), text: copy.threadNoSharedFree, onlyYou: true, phase: "talk" });
   return [...notes, ...lines];
+}
+
+/**
+ * The Muse whose model call is running right now, as this phone's reader sees it ("Sprout, your Muse", "Mochi, Michelle's
+ * Muse"), or null when nobody is thinking or the plan is not a plain pair. It is the typing bubble's sender.
+ */
+export function typingSender(snapshot: UiSnapshot, role: Role): Sender | null {
+  const flight = snapshot.inFlight;
+  if (!flight || snapshot.plan?.group || (flight.agent !== "aaron" && flight.agent !== "lisa")) return null;
+  const me = roleAgent[role];
+  const names = namesFor(snapshot);
+  return { kind: flight.agent === me ? "your-muse" : "friend-muse", name: snapshot.sides[flight.agent], owner: names.human[flight.agent], agent: flight.agent };
 }
 
 /** True when a line opens a run: a different sender than the line before it, so the chip shows above this bubble only. */
