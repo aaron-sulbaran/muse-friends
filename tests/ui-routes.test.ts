@@ -91,10 +91,10 @@ describe("decision, handoff, hold, clock", () => {
 });
 
 describe("controls", () => {
-  it("keeps Free times and the Off tier on, and refuses side a", async () => {
+  it("keeps Free times and the Off tier on, and refuses a side that is not a or b", async () => {
     expect((await answer(await postControls(json({ type: "privacy", side: "b", category: "availability", on: false })))).status).toBe(409);
     expect((await answer(await postControls(json({ type: "privacy", side: "b", tier: "off" })))).status).toBe(409);
-    expect((await answer(await postControls(json({ type: "privacy", side: "a", category: "food", on: false })))).status).toBe(400);
+    expect((await answer(await postControls(json({ type: "privacy", side: "c", category: "food", on: false })))).status).toBe(400);
   });
 
   it("flips location and replays the propose in place", async () => {

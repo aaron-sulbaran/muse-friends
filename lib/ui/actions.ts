@@ -165,6 +165,7 @@ export function postReset() {
 
 export type PrivacyChange = { tier: ShareTier } | { category: Category; on: boolean };
 
-export function postPrivacy(change: PrivacyChange) {
-  return post("/api/controls", { type: "privacy", side: "b", ...change });
+/** Side b is the friend's Muse (the avatar sheet); side a is the judge's own (the onboarding's share sheet). */
+export function postPrivacy(change: PrivacyChange, side: "a" | "b" = "b") {
+  return post("/api/controls", { type: "privacy", side, ...change });
 }

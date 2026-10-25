@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withRoom, withoutRoom } from "@/app/api/_lib/room";
-import { resetDemo, setPayments, setSharePolicy } from "@/lib/agent/controls";
+import { categoriesForTier, resetDemo, setPayments, setSharePolicy } from "@/lib/agent/controls";
 import { otherAgent } from "@/lib/agent/ids";
 import { Category, PAYMENT_MAX_DOLLARS, ShareTier } from "@/lib/protocol";
 import { ROLE_TO_AGENT } from "@/lib/seed/fixtures";
@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 const privacySchema = z
   .object({
     type: z.literal("privacy"),
-    /** Whose sharing is changing. Only side b's is switchable in the demo. */
-    side: z.literal("b"),
+    /** Whose sharing is changing: b is the friend's Muse, a is the judge's own (onboarding sets it). */
+    side: z.enum(["a", "b"]),
     tier: ShareTier.optional(),
     category: Category.optional(),
     on: z.boolean().optional(),
@@ -56,7 +56,7 @@ function badBodyMessage(raw: unknown): string {
   return "Expected a privacy change, a payments change (side, enabled, cap), a reset, or the simulated friend switch";
 }
 
-/** The controls: a sharing switch on side b, Reset for the one demo room, and the simulated friend for a judge playing alone. */
+/** The controls: a sharing switch on either side, payments, Reset for the one demo room, and the simulated friend for a judge playing alone. */
 export async function POST(request: Request) {
   const raw = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(withoutRoom(raw));
@@ -85,14 +85,17 @@ export async function POST(request: Request) {
     if (body.category === "availability" && body.on === false) {
       return refuse("Free times are how the Muses find a day, so they stay on in this demo", 409);
     }
+    const owner = ROLE_TO_AGENT[body.side];
+    const friend = otherAgent(owner);
     const result = await setSharePolicy(store, {
-      owner: "lisa",
-      friend: "aaron",
+      owner,
+      friend,
       tier: body.tier,
-      categories: body.category !== undefined && body.on !== undefined ? { [body.category]: body.on } : undefined,
+      // Picking a tier refills every switch from it; flipping one switch changes that category alone.
+      categories: body.category !== undefined && body.on !== undefined ? { [body.category]: body.on } : body.tier !== undefined ? categoriesForTier(body.tier) : undefined,
     });
     if (!result.ok) return refuse(result.error, result.status);
-    const sharing = room.isDemo ? (await readSnapshot()).sharing.lisa : toUiSnapshot(await store.snapshot(), { mode: "live" }).sharing.lisa;
+    const sharing = room.isDemo ? (await readSnapshot()).sharing[owner] : toUiSnapshot(await store.snapshot(), { mode: "live" }).sharing[owner];
     return NextResponse.json({ data: { sharing, replayed: result.value.replayed.length }, error: null });
   });
 }

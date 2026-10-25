@@ -3,7 +3,8 @@ import { PLAN_STATES, type PlanState, type StateSnapshot } from "@/lib/protocol"
 import { recordedSnapshot, seedSnapshot } from "@/lib/seed/fixtures";
 import { snapshotAtPlanState } from "@/lib/seed/states";
 import { copy } from "@/lib/ui/copy";
-import { viewForRole, type ChatItem } from "@/lib/ui/chat";
+import { onboardingItems, viewForRole, type ChatItem } from "@/lib/ui/chat";
+import { initialOnboarding, reduceOnboarding, type OnboardingAction } from "@/lib/ui/onboarding";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
 import type { Role } from "@/lib/ui/types";
 
@@ -334,5 +335,45 @@ describe("the thread in the chat", () => {
       const ids = viewForRole(at("awaiting_humans"), role).items.map((item) => item.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
+  });
+});
+
+describe("the onboarding in the chat", () => {
+  const after = (...actions: OnboardingAction[]) => actions.reduce(reduceOnboarding, initialOnboarding());
+  const bubbles = (items: ChatItem[]) => items.flatMap((item) => (item.kind === "bubble" ? [{ from: item.from, text: item.text }] : []));
+
+  it("opens with Sprout's greeting and the Friends card", () => {
+    const items = onboardingItems(initialOnboarding(), "Michelle");
+    expect(kinds(items)).toEqual(["bubble", "onboarding-friends"]);
+    expect(bubbles(items)).toEqual([{ from: "muse", text: "Hi, I'm Sprout, your Muse." }]);
+  });
+
+  it("answers the card with the judge's own choice once Friends is on, and the card is gone", () => {
+    for (const state of [after({ type: "friendsOn" }), after({ type: "friendsOn" }, { type: "sync" }, { type: "continue" }), after({ type: "friendsOn" }, { type: "sync" }, { type: "continue" }, { type: "done" })]) {
+      const items = onboardingItems(state, "Michelle");
+      expect(kinds(items)).toEqual(["bubble", "bubble"]);
+      expect(bubbles(items)[1]).toEqual({ from: "user", text: "Turn on Friends" });
+    }
+  });
+
+  it("after Not now shows the opt-out card, then says that planning needs Friends and offers one pill", () => {
+    const items = onboardingItems(after({ type: "notNow" }), "Michelle");
+    expect(kinds(items)).toEqual(["bubble", "bubble", "onboarding-optout", "bubble", "onboarding-turn-on"]);
+    expect(bubbles(items)).toEqual([
+      { from: "muse", text: "Hi, I'm Sprout, your Muse." },
+      { from: "user", text: "Not now" },
+      { from: "muse", text: "Want to plan this with Michelle? That needs Friends." },
+    ]);
+  });
+
+  it("treats a Continue with everyone at Off as the opt-out, naming the room's friend", () => {
+    const items = onboardingItems(after({ type: "friendsOn" }, { type: "pick" }, { type: "continue" }), "Priya");
+    expect(kinds(items)).toContain("onboarding-optout");
+    expect(bubbles(items).at(-1)?.text).toBe("Want to plan this with Priya? That needs Friends.");
+  });
+
+  it("gives every item a distinct id, so the chat can key them", () => {
+    const items = onboardingItems(after({ type: "notNow" }), "Michelle");
+    expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
   });
 });

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { postSimulatedFriendSwitch } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
+import { onboardingBypassed } from "@/lib/ui/onboarding-flow";
 import { FRIEND_PARAM, markMichelleSeen, needsMichelleOnLoad, runInProgress, wantsSimulatedFriend, wasMichelleSeen } from "@/lib/ui/entry";
 import { namesFor } from "@/lib/ui/format";
 import { getRoom } from "@/lib/ui/room";
@@ -98,6 +99,7 @@ export function PhoneRoute({ role }: { role: Role }) {
       readOnly={replay.active}
       onPaused={pause}
       onOpenPayment={setOpenPayment}
+      onboarding={role === "a" && !onboardingBypassed(window.location.search)}
       standalone={{
         activity: (close) => (
           <ActivityPanel

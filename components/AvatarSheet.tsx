@@ -4,9 +4,12 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { postPrivacy, type PrivacyChange } from "@/lib/ui/actions";
 import { copy } from "@/lib/ui/copy";
-import type { Category, PaymentsSettings, Role, ShareTier, SharingSettings } from "@/lib/ui/types";
+import { SWITCH_ROWS } from "@/lib/ui/categories";
+import type { PaymentsSettings, Role, SharingSettings } from "@/lib/ui/types";
 import { MuseAvatar } from "./MuseAvatar";
 import { PaymentsSection } from "./PaymentsSection";
+import { SwitchRow } from "./SwitchRow";
+import { TierControl } from "./TierControl";
 
 type Props = {
   /** The grey-disc letter when this Muse person is a stand-in; null for the character art. */
@@ -27,20 +30,8 @@ type Props = {
   onClose: () => void;
 };
 
-const tiers: ReadonlyArray<{ value: ShareTier; label: string }> = [
-  { value: "close", label: "Close friend" },
-  { value: "friend", label: "Friend" },
-  { value: "acquaintance", label: "Acquaintance" },
-  { value: "off", label: "Off" },
-];
-
-const categories: ReadonlyArray<{ value: Category; label: string; fixedOn?: string }> = [
-  { value: "food", label: "Food and places" },
-  { value: "events", label: "Events" },
-  { value: "availability", label: "Free times", fixedOn: "Always on: this is how the Muses find a day" },
-  { value: "location", label: "Location" },
-  { value: "interests", label: "Interests" },
-];
+/** The avatar sheet keeps Free times as a locked-on row; the onboarding's share sheet states it as a line instead. */
+const FREE_TIMES = { label: "Free times", line: "Always included: open windows only, never what is in them" };
 
 /**
  * What this Muse tells its friend's Muse, one switch per category. Changing a
@@ -59,7 +50,7 @@ export function AvatarSheet({ role, initial, museName, friendMuseName, sharing, 
   async function change(next: PrivacyChange) {
     setPending(true);
     setError(null);
-    const result = await postPrivacy(next);
+    const result = await postPrivacy(next, role);
     setPending(false);
     if (!result.ok) setError(result.message);
     onChanged();
@@ -108,54 +99,30 @@ export function AvatarSheet({ role, initial, museName, friendMuseName, sharing, 
         </header>
 
         {sharing ? (
-            <>
-            <fieldset className="mt-5">
-              <legend className="sr-only">Who {friendMuseName} is to {museName}</legend>
-              <div className="flex gap-1 rounded-full bg-group p-1">
-                {tiers.filter(({ value }) => value !== "acquaintance" || sharing.tier === "acquaintance").map(({ value, label }) => (
-                  <label key={value} className="flex-1">
-                    <input
-                      type="radio"
-                      name="tier"
-                      value={value}
-                      checked={sharing.tier === value}
-                      disabled={pending || value === "off" || value === "acquaintance"}
-                      onChange={() => change({ tier: value })}
-                      className="peer sr-only"
-                    />
-                    <span className="block cursor-pointer rounded-full px-2 py-1.5 text-center text-[13px] font-semibold text-muted transition-colors peer-checked:bg-surface peer-checked:text-ink peer-checked:shadow-float peer-disabled:cursor-default peer-disabled:opacity-50 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
-                      {label}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+          <>
+            <div className="mt-5">
+              <TierControl
+                value={sharing.tier}
+                onChange={(tier) => change({ tier })}
+                label={`Who ${friendMuseName} is to ${museName}`}
+                disabled={(tier) => pending || tier === "off" || tier === "acquaintance"}
+              />
+            </div>
 
             <ul className="mt-3 divide-y divide-bezel-line">
-              {categories.map(({ value, label, fixedOn }) => (
-                <li key={value}>
-                  <label className="flex items-center justify-between gap-4 py-3">
-                    <span>
-                      <span className="block text-[16px] leading-[22px]">{label}</span>
-                      {fixedOn ? <span className="block text-[12px] leading-4 text-muted">{fixedOn}</span> : null}
-                    </span>
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      checked={sharing.categories[value]}
-                      disabled={pending || fixedOn !== undefined}
-                      onChange={(event) => change({ category: value, on: event.target.checked })}
-                      className="peer sr-only"
-                    />
-                    <span
-                      aria-hidden="true"
-                      className="relative h-7 w-12 shrink-0 cursor-pointer rounded-full bg-faint transition-colors after:absolute after:left-0.5 after:top-0.5 after:size-6 after:rounded-full after:bg-surface after:shadow-float after:transition-transform peer-checked:bg-tracking peer-checked:after:translate-x-5 peer-disabled:cursor-default peer-disabled:opacity-60 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
-                    />
-                  </label>
-                </li>
+              {SWITCH_ROWS.map(({ value, label, line }) => (
+                <SwitchRow
+                  key={value}
+                  label={label}
+                  line={line}
+                  checked={sharing.categories[value]}
+                  disabled={pending}
+                  onChange={(on) => change({ category: value, on })}
+                />
               ))}
+              <SwitchRow label={FREE_TIMES.label} line={FREE_TIMES.line} checked={sharing.categories.availability} disabled />
             </ul>
-            </>
+          </>
         ) : null}
 
         {payments ? <PaymentsSection role={role} settings={payments} onChanged={onChanged} /> : null}

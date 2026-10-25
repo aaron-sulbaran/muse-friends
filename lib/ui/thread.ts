@@ -62,20 +62,23 @@ export function threadLines(snapshot: UiSnapshot, role: Role): ThreadLine[] {
     }
   }
 
+  // The simulated friend always sits in the second seat. She answers when the plan settles, so that is when her line belongs;
+  // a plan whose history does not show it yet puts her after the last turn.
+  const decision = plan?.decisions.b ?? "pending";
+  if (snapshot.simulatedFriend && decision !== "pending") {
+    const sender: Sender = { kind: role === "a" ? "friend" : "you", name: names.human.lisa, simulated: true };
+    const settled = plan?.history.find((entry) => entry.state === (decision === "accepted" ? "confirmed" : "dropped"))?.at;
+    lines.push({ id: `thread-friend-${decision}`, sender, text: decisionLine[decision], at: settled ?? lines.at(-1)?.at, phase: "after" });
+  }
+
   // Your own private conversation with your Muse (D31): your question, and its answer as an aside. Only side a has one.
+  // Each line sits where it happened, before or after the friend's answer, not in a block at the end.
   if (role === "a") {
     for (const entry of snapshot.chat) {
       const sender: Sender = entry.from === "user" ? { kind: "you", name: names.human[me] } : muse(me);
       lines.push({ id: `thread-chat-${entry.id}`, sender, text: entry.text, onlyYou: true, ...(entry.from === "user" ? { to: snapshot.sides[me] } : {}), at: entry.at, phase: "after" });
     }
     lines.sort((first, second) => Date.parse(first.at ?? "") - Date.parse(second.at ?? ""));
-  }
-
-  // The simulated friend always sits in the second seat.
-  const decision = plan?.decisions.b ?? "pending";
-  if (snapshot.simulatedFriend && decision !== "pending") {
-    const sender: Sender = { kind: role === "a" ? "friend" : "you", name: names.human.lisa, simulated: true };
-    lines.push({ id: `thread-friend-${decision}`, sender, text: decisionLine[decision], at: lines.at(-1)?.at, phase: "after" });
   }
   return lines;
 }

@@ -162,6 +162,18 @@ describe("your private conversation with your Muse", () => {
     expect(ids.indexOf("thread-chat-chat_1")).toBeLessThan(ids.indexOf("thread-msg_shawarma_005"));
   });
 
+  it("sits after the friend's answer when you asked once she had answered, and before it when you asked first", () => {
+    const settled = "2026-10-25T14:00:50-05:00";
+    const plan = { ...agreed().plan!, decisions: { a: "accepted" as const, b: "accepted" as const }, history: [...agreed().plan!.history, { state: "confirmed" as const, at: settled }] };
+    const base = { ...withMichelle(agreed(), "accepted"), plan };
+    const late = threadLines({ ...base, chat }, "a").map((line) => line.id);
+    expect(late.at(-3)).toBe("thread-friend-accepted");
+    expect(late.slice(-2)).toEqual(["thread-chat-chat_1", "thread-chat-chat_2"]);
+    const early = chat.map((entry) => ({ ...entry, at: entry.at.replace("14:01:0", "14:00:4") }));
+    const ids = threadLines({ ...base, chat: early }, "a").map((line) => line.id);
+    expect(ids.indexOf("thread-chat-chat_2")).toBeLessThan(ids.indexOf("thread-friend-accepted"));
+  });
+
   it("needs no plan: you can ask before anything has started", () => {
     const lines = threadLines({ ...asked, plan: null, messages: [] }, "a");
     expect(lines.map((line) => line.id)).toEqual(["thread-chat-chat_1", "thread-chat-chat_2"]);
