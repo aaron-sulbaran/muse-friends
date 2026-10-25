@@ -3,7 +3,7 @@ import { snapshotAtPlanState } from "@/lib/seed/states";
 import { copy } from "@/lib/ui/copy";
 import { messageTitle } from "@/lib/ui/format";
 import { toUiSnapshot } from "@/lib/ui/snapshot";
-import { FRIEND_REPLY_DELAY_MS, endsRun, handoffAt, startsRun, threadLines, type ThreadLine } from "@/lib/ui/thread";
+import { FRIEND_REPLY_DELAY_MS, endsRun, handoffAt, startsRun, threadLines, typingSender, type ThreadLine } from "@/lib/ui/thread";
 import type { Decision, UiMessage, UiSnapshot } from "@/lib/ui/types";
 
 const live = { mode: "live" } as const;
@@ -59,10 +59,11 @@ describe("a Muse's line for each turn that changed the plan", () => {
     expect(lines.filter((line) => line.sender.kind === "friend-muse").map((line) => line.sender.owner)).toEqual(["Michelle", "Michelle"]);
   });
 
-  it("leaves the opening intent out, because it opens the thread rather than moving the plan", () => {
+  it("shows the opening intent first, as the offer that starts the exchange", () => {
     const lines = threadLines(agreed(), "a");
-    expect(lines.some((line) => line.id === "thread-msg_shawarma_001")).toBe(false);
-    expect(lines).toHaveLength(5);
+    expect(lines[0]).toMatchObject({ id: "thread-msg_shawarma_001", text: "Asked about Shawarma Point", sender: { kind: "your-muse", name: "Sprout" }, phase: "talk" });
+    expect(lines).toHaveLength(6);
+    expect(threadLines(agreed(), "b")[0].sender).toMatchObject({ kind: "friend-muse", name: "Sprout" });
   });
 
   it("keeps a decline, which does move the plan", () => {
@@ -213,5 +214,25 @@ describe("runs of the same sender", () => {
     expect(endsRun(line("your-muse", "Sprout"), undefined)).toBe(true);
     expect(endsRun(line("your-muse", "Sprout"), line("your-muse", "Sprout"))).toBe(false);
     expect(endsRun(line("your-muse", "Sprout"), line("friend-muse", "Mochi"))).toBe(true);
+  });
+});
+
+describe("whose Muse is typing", () => {
+  const flight = (agent: "aaron" | "lisa") => ({ ...agreed(), inFlight: { agent, agents: [agent] } });
+
+  it("is the Muse whose model call is running, from the reader's side", () => {
+    expect(typingSender(flight("lisa"), "a")).toMatchObject({ kind: "friend-muse", name: "Mochi", agent: "lisa" });
+    expect(typingSender(flight("aaron"), "a")).toMatchObject({ kind: "your-muse", name: "Sprout", agent: "aaron" });
+    expect(typingSender(flight("lisa"), "b")).toMatchObject({ kind: "your-muse", name: "Mochi" });
+  });
+
+  it("names the friend's person as the owner of her Muse, like the chip on a message", () => {
+    expect(typingSender(withMichelle(flight("lisa"), "pending"), "a")).toMatchObject({ kind: "friend-muse", owner: "Michelle" });
+  });
+
+  it("is nobody when nothing runs, and nobody in a plan for three", () => {
+    expect(typingSender({ ...agreed(), inFlight: null }, "a")).toBeNull();
+    const group = { ...flight("lisa"), plan: { ...agreed().plan!, group: { groupId: "g", coordinator: "aaron" as const, members: [], contextIds: [] } } };
+    expect(typingSender(group as unknown as UiSnapshot, "a")).toBeNull();
   });
 });

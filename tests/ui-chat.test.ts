@@ -388,6 +388,48 @@ describe("the order the person is asked in (what comes after what)", () => {
   });
 });
 
+describe("the Muses' exchange, live and folded", () => {
+  const lines = (items: ChatItem[]) => items.flatMap((item) => (item.kind === "thread-line" ? [item.line] : []));
+  const talk = (items: ChatItem[]) => lines(items).filter((line) => line.phase === "talk" && !line.onlyYou);
+
+  it("shows a typing bubble for the Muse whose call is running, last in the exchange, while they negotiate", () => {
+    const items = viewForRole(at("negotiating"), "a").items;
+    const typing = items.find((item) => item.kind === "thread-typing");
+    expect(typing).toMatchObject({ sender: expect.objectContaining({ name: expect.any(String), agent: expect.any(String) }) });
+    const after = items.slice(items.indexOf(typing!) + 1);
+    expect(after.filter((item) => item.kind === "thread-line" && item.line.phase === "talk")).toEqual([]);
+  });
+
+  it("shows it from the first beat, before any message, for the Muse that opens", () => {
+    const snapshot = { ...at("detected"), inFlight: { agent: "aaron" as const, agents: ["aaron" as const] } };
+    expect(viewForRole(snapshot, "a").items.find((item) => item.kind === "thread-typing")).toMatchObject({ sender: { kind: "your-muse", name: "Sprout" } });
+    expect(viewForRole(snapshot, "b").items.find((item) => item.kind === "thread-typing")).toMatchObject({ sender: { kind: "friend-muse", name: "Sprout" } });
+  });
+
+  it("has no typing bubble when no call runs, once the plan is agreed, or in a plan for three", () => {
+    expect(kinds(viewForRole(quietNegotiation(), "a").items)).not.toContain("thread-typing");
+    expect(kinds(viewForRole({ ...at("awaiting_humans"), inFlight: { agent: "lisa", agents: ["lisa"] } }, "a").items)).not.toContain("thread-typing");
+  });
+
+  it("keeps the whole exchange while it is open, and folds it to the agreed line once the hold is over", () => {
+    const open = viewForRole(at("awaiting_humans"), "a", { exchangeOpen: true }).items;
+    expect(talk(open).length).toBeGreaterThan(2);
+    const folded = viewForRole(at("awaiting_humans"), "a", { exchangeOpen: false }).items;
+    expect(talk(folded)).toEqual([]);
+    expect(kinds(folded)).toContain("agreed-line");
+    expect(kinds(folded)).toContain("plan-card");
+  });
+
+  it("never folds while the Muses are still talking, and keeps a Muse's private note when it does fold", () => {
+    expect(talk(viewForRole(at("negotiating"), "a", { exchangeOpen: false }).items).length).toBeGreaterThan(0);
+    const base = at("awaiting_humans");
+    const redacted = { ...base, messages: base.messages.map((message) => (message.id === "msg_shawarma_003" ? { ...message, removed: ["location" as const] } : message)) };
+    const folded = viewForRole(redacted, "a", { exchangeOpen: false }).items;
+    expect(lines(folded).filter((line) => line.onlyYou).length).toBe(1);
+    expect(talk(folded)).toEqual([]);
+  });
+});
+
 describe("the onboarding in the chat", () => {
   const after = (...actions: OnboardingAction[]) => actions.reduce(reduceOnboarding, initialOnboarding());
   const bubbles = (items: ChatItem[]) => items.flatMap((item) => (item.kind === "bubble" ? [{ from: item.from, text: item.text }] : []));

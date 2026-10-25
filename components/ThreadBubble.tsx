@@ -13,7 +13,7 @@ type Props = {
 };
 
 /** The fill says who is speaking without reading: blue is you, grey a person, and each Muse its own tint. */
-function fillFor(sender: Sender): string {
+export function fillFor(sender: Sender): string {
   if (sender.kind === "you") return "bg-bubble-user";
   if (sender.agent === "aaron") return "bg-bubble-sprout";
   if (sender.agent === "lisa") return "bg-bubble-mochi";
