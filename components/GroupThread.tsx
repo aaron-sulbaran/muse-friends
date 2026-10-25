@@ -3,8 +3,8 @@
 import { CircleDashed } from "lucide-react";
 import { useState } from "react";
 import type { ChatItem } from "@/lib/ui/chat";
-import { postTripJoin } from "@/lib/ui/actions";
-import { answerWord, money, personOf, servedBy, tripDates, type GroupLine } from "@/lib/ui/group";
+import { postTripHotel, postTripJoin, postTripSeat } from "@/lib/ui/actions";
+import { answerWord, money, personOf, servedBy, tripDates, type GroupLine, type UiBooking } from "@/lib/ui/group";
 import type { AvatarMood, MemberId, UiTrip } from "@/lib/ui/types";
 import { capital } from "@/lib/ui/tokens";
 import { CheckMark } from "./CheckMark";
@@ -303,7 +303,317 @@ export function GroupAvatars({ trip, mood, viewer }: { trip: UiTrip; mood: Avata
   );
 }
 
-type GroupItemKind = Extract<ChatItem, { kind: "group-line" | "trip-question" | "trip-budget" | "trip-itinerary" | "trip-open" | "trip-pot" }>;
+
+// ---------------------------------------------------------------------------
+// Booking the trip with each person's yes (Lisa's plan): the progress, the flight seat, the hotel
+// ---------------------------------------------------------------------------
+
+const SIMULATED_BOOKING = "Simulated booking";
+
+/** "Played by a model" or "seeded" beside a model-played person's own tap, the same as the pot row says it. */
+function bySuffix(by: "person" | "person_model" | "seed" | null | undefined): string {
+  return by === "person_model" ? ", played by a model" : by === "seed" ? ", seeded: the model did not answer" : "";
+}
+
+type Step = { key: string; label: string; state: "waiting" | "working" | "done" | "skipped"; found: string; detail: string };
+
+function bookingSteps(trip: UiTrip, booking: UiBooking): Step[] {
+  const seats = booking.seats.length;
+  const hotel = booking.hotel;
+  const dates = tripDates(trip);
+  return [
+    { key: "dates", label: "Dates", state: booking.datesHeld ? "done" : "working", found: dates, detail: "Held on all three calendars. Costs nothing, and anyone can remove the hold." },
+    {
+      key: "flights",
+      label: "Flights",
+      state: !booking.datesHeld ? "waiting" : seats === 3 ? "done" : "working",
+      found: "All three seats booked",
+      detail: `${seats} of 3 booked, each by its own person`,
+    },
+    {
+      key: "hotel",
+      label: "Hotel",
+      state: !hotel ? "waiting" : hotel.state === "booked" ? "done" : hotel.state === "none_fit" ? "skipped" : "working",
+      found: hotel?.state === "booked" ? hotel.option.label : "No hotel booked",
+      detail:
+        hotel?.state === "booked"
+          ? `${money(hotel.option.cost)} each from your trip wallets, after all three said yes`
+          : hotel?.state === "none_fit"
+            ? "No stay is left that all three can do. Nothing was booked."
+            : "Books only when all three say yes",
+    },
+    {
+      key: "days",
+      label: "Days",
+      state: booking.daysHeld ? "done" : booking.hotel && booking.hotel.state !== "proposed" ? "working" : "waiting",
+      found: booking.days.map((day) => day.label).join("; ") || "Free days",
+      detail: "Free holds. Reserved, pay on the day.",
+    },
+  ];
+}
+
+/** The progress of the booking, a row at a time: a spinning row while Sprout is on it, a check when it is done, and the ledger's numbers at the end. */
+function BookingCard({ trip, viewer }: { trip: UiTrip; viewer: MemberId }) {
+  const booking = trip.booking!;
+  const steps = bookingSteps(trip, booking);
+  const mine = booking.wallets.find((wallet) => wallet.member === viewer)?.balance ?? null;
+  const seat = booking.seats.find((entry) => entry.member === viewer);
+  const stay = booking.hotel?.state === "booked" ? booking.hotel.booked.find((entry) => entry.member === viewer) : undefined;
+  return (
+    <section className={cardShell} aria-live="polite">
+      <div className="flex items-center justify-between gap-2">
+        <CardLabel>{booking.done ? "Trip booked" : "Booking the trip"}</CardLabel>
+        <span className="rounded-full bg-group px-1.5 py-px text-[11px] font-semibold leading-[14px] text-muted">{SIMULATED_BOOKING}</span>
+      </div>
+      <h3 className="mt-0.5 text-[21px] font-bold leading-[26px]">{trip.title}</h3>
+      <ul className="mt-3 divide-y divide-bezel-line">
+        {steps.map((step) => (
+          <li key={step.key} className="flex items-start gap-2.5 py-2.5">
+            {step.state === "done" ? (
+              <CheckMark className="mt-0.5 size-4" />
+            ) : step.state === "working" ? (
+              <CircleDashed className="mt-0.5 size-4 shrink-0 animate-spin text-accent [animation-duration:2s]" strokeWidth={1.75} aria-hidden="true" />
+            ) : (
+              <CircleDashed className="mt-0.5 size-4 shrink-0 text-faint" strokeWidth={1.75} aria-hidden="true" />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold leading-[18px] text-muted">{step.label}</p>
+              <p className={`text-[15px] leading-5 ${step.state === "done" || step.state === "skipped" ? "font-semibold" : "text-muted"}`}>
+                {step.state === "done" || step.state === "skipped" ? step.found : step.state === "working" ? "In progress" : "Not yet"}
+              </p>
+              <p className="text-[13px] leading-[18px] text-muted">{step.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {booking.done ? (
+        <div className="mt-1 rounded-group bg-group p-3 text-[13px] leading-[18px]">
+          <p className="font-semibold">{viewer === "aaron" ? "Your numbers" : "Your numbers, from the ledger"}</p>
+          {seat ? (
+            <p>
+              Seat {money(seat.amount)}: {money(seat.fromPot)} from the pot and {money(seat.fromWallet)} from your trip wallet
+            </p>
+          ) : null}
+          {stay ? <p>Hotel {money(stay.amount)} from your trip wallet</p> : null}
+          {mine !== null ? (
+            <p className="font-semibold">
+              Your trip wallet: {money(booking.walletStart)} to {money(mine)}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <p className="mt-2 text-[12px] leading-4 text-muted">
+        {SIMULATED_BOOKING}, {trip.seededLabel.toLowerCase()}: paper dollars on the demo&apos;s local ledger. Nothing real was bought.
+      </p>
+    </section>
+  );
+}
+
+/** Each person books their own seat: the three seeded flights, why each fits or not, and a button that says what it costs and where it comes from. */
+function FlightCard({ item, readOnly, onChanged }: { item: Extract<ChatItem, { kind: "trip-flights" }>; readOnly: boolean; onChanged: () => void }) {
+  const { trip, planId, answerable, viewer } = item;
+  const booking = trip.booking!;
+  const perPerson = trip.pot?.perPerson ?? 0;
+  const seatOf = (member: MemberId) => booking.seats.find((seat) => seat.member === member);
+  const ownMember = answerable.find((member) => !seatOf(member));
+  const options = booking.flights;
+  const [choice, setChoice] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const picked = ownMember ? (options.find((option) => option.id === choice && option.withinLimit[ownMember]) ?? options.find((option) => option.recommended && option.withinLimit[ownMember]) ?? options.find((option) => option.withinLimit[ownMember])) : undefined;
+  const fromPot = picked ? Math.min(perPerson, picked.cost) : 0;
+  const cap = trip.cap?.amount ?? 0;
+
+  async function book() {
+    if (readOnly || !ownMember || !picked) return;
+    setPending(true);
+    setError(null);
+    const result = await postTripSeat(planId, ownMember, picked.id);
+    setPending(false);
+    if (!result.ok) setError(result.message);
+    onChanged();
+  }
+
+  return (
+    <section className={cardShell}>
+      <div className="flex items-center justify-between gap-2">
+        <CardLabel>Flights, book your own seat</CardLabel>
+        <span className="rounded-full bg-group px-1.5 py-px text-[11px] font-semibold leading-[14px] text-muted">{SIMULATED_BOOKING}</span>
+      </div>
+      <ul className="mt-2.5 space-y-2">
+        {options.map((option) => {
+          const allowed = ownMember ? option.withinLimit[ownMember] : false;
+          const selected = picked?.id === option.id;
+          return (
+            <li key={option.id}>
+              <button
+                type="button"
+                disabled={!ownMember || !allowed || pending || readOnly}
+                aria-pressed={selected}
+                onClick={() => setChoice(option.id)}
+                className={`flex w-full items-start gap-2.5 rounded-group border px-3 py-2 text-left transition-colors disabled:cursor-default ${selected ? "border-accent bg-surface" : "border-bezel-line bg-surface"} ${allowed || !ownMember ? "" : "opacity-60"}`}
+              >
+                <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${selected ? "bg-accent" : "bg-faint"}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold leading-5">
+                    {option.label}, {money(option.cost)}
+                  </span>
+                  <span className="block text-[12px] leading-4 text-muted">
+                    {option.recommended ? "Sprout's pick. " : ""}
+                    {option.withinCap ? `Within the ${money(cap)} cap` : `Over the ${money(cap)} cap`}
+                    {ownMember && !allowed ? ", and over your own limit" : ""}. {trip.seededLabel}.
+                  </span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <ul className="mt-3 space-y-2">
+        {trip.people.map((person) => {
+          const seat = seatOf(person.member);
+          const name = person.member === viewer ? "You" : capital(person.name);
+          return (
+            <li key={person.member} className="flex items-center gap-3">
+              <PersonDisc name={name} size={28} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold leading-5">{name}</p>
+                <p className="text-[12px] leading-4 text-muted">
+                  {seat
+                    ? `${seat.label.split(",")[0]}, ${money(seat.fromPot)} pot + ${money(seat.fromWallet)} wallet${bySuffix(seat.by)}${seat.by !== "person" && person.member !== "aaron" ? `; ${person.muse} sent it` : ""}`
+                    : person.member === ownMember
+                      ? "Your seat"
+                      : "Has not booked yet"}
+                </p>
+              </div>
+              {seat ? (
+                <span className="flex shrink-0 items-center gap-1 text-[15px] font-semibold">
+                  <CheckMark className="size-4" />
+                  {money(seat.amount)}
+                </span>
+              ) : (
+                <span className="shrink-0 text-[13px] text-muted">Not yet</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {ownMember && picked ? (
+        <>
+          <button
+            type="button"
+            disabled={pending || readOnly}
+            onClick={book}
+            className="mt-3.5 w-full rounded-full bg-accent px-4 py-2.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110 active:brightness-90 disabled:opacity-50"
+          >
+            Book my seat, {money(picked.cost)}
+          </button>
+          <p className="mt-1.5 text-center text-[12px] leading-4 text-muted">
+            {money(fromPot)} from the pot, {money(picked.cost - fromPot)} from your trip wallet
+          </p>
+        </>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mt-3 text-[13px] leading-[18px] text-withheld">
+          {error}
+        </p>
+      ) : null}
+      <p className="mt-2.5 text-[12px] leading-4 text-muted">Nothing is booked for you until you tap. The price comes out of your own share of the pot first.</p>
+    </section>
+  );
+}
+
+/** The hotel: Sprout's pick, why, each person's answer, and Looks good or Show me another. It books only when all three say yes. */
+function HotelCard({ item, readOnly, onChanged }: { item: Extract<ChatItem, { kind: "trip-hotel" }>; readOnly: boolean; onChanged: () => void }) {
+  const { trip, planId, answerable, viewer } = item;
+  const hotel = trip.booking!.hotel!;
+  const answerOf = (member: MemberId) => hotel.approvals.find((approval) => approval.member === member);
+  const ownMember = answerable.find((member) => !answerOf(member));
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function answer(choice: "yes" | "no") {
+    if (readOnly || !ownMember) return;
+    setPending(true);
+    setError(null);
+    const result = await postTripHotel(planId, ownMember, choice);
+    setPending(false);
+    if (!result.ok) setError(result.message);
+    onChanged();
+  }
+
+  return (
+    <section className={cardShell}>
+      <div className="flex items-center justify-between gap-2">
+        <CardLabel>Hotel, all three say yes</CardLabel>
+        <span className="rounded-full bg-group px-1.5 py-px text-[11px] font-semibold leading-[14px] text-muted">{SIMULATED_BOOKING}</span>
+      </div>
+      <h3 className="mt-0.5 text-[17px] font-semibold leading-[22px]">{hotel.option.label}</h3>
+      <p className="text-[15px] font-semibold leading-5">{money(hotel.option.cost)} each, from your trip wallets</p>
+      <p className="mt-0.5 text-[13px] leading-[18px] text-muted">
+        {hotel.why} {trip.seededLabel}.
+      </p>
+      {hotel.lower.length > 0 ? (
+        <details className="mt-2 text-[12px] leading-4 text-muted">
+          <summary className="cursor-pointer font-semibold">Why the others rank lower</summary>
+          <ul className="mt-1 space-y-1">
+            {hotel.lower.map((stay) => (
+              <li key={stay.id}>
+                {stay.label}, {money(stay.cost)}: {stay.reason}.
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <ul className="mt-3 space-y-2">
+        {trip.people.map((person) => {
+          const answered = answerOf(person.member);
+          const name = person.member === viewer ? "You" : capital(person.name);
+          return (
+            <li key={person.member} className="flex items-center gap-3">
+              <PersonDisc name={name} size={28} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold leading-5">{name}</p>
+                <p className="text-[12px] leading-4 text-muted">
+                  {answered ? `${answered.answer === "yes" ? "Said yes" : "Said no"}${bySuffix(answered.by)}` : hotel.misfits[person.member] ? `Pebble will refuse: ${hotel.misfits[person.member]}` : "Has not answered yet"}
+                </p>
+              </div>
+              {answered?.answer === "yes" ? <CheckMark className="size-4" /> : <span className="shrink-0 text-[13px] text-muted">{answered ? "No" : "Not yet"}</span>}
+            </li>
+          );
+        })}
+      </ul>
+      {ownMember ? (
+        <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            disabled={pending || readOnly}
+            onClick={() => answer("no")}
+            className="rounded-full bg-group px-3 py-2.5 text-[15px] font-semibold transition-colors hover:bg-bubble-muse active:bg-bubble-muse disabled:opacity-50"
+          >
+            Show me another
+          </button>
+          <button
+            type="button"
+            disabled={pending || readOnly}
+            onClick={() => answer("yes")}
+            className="rounded-full bg-accent px-3 py-2.5 text-[15px] font-semibold text-white transition-[filter] hover:brightness-110 active:brightness-90 disabled:opacity-50"
+          >
+            Looks good
+          </button>
+        </div>
+      ) : null}
+      {error ? (
+        <p role="alert" className="mt-3 text-[13px] leading-[18px] text-withheld">
+          {error}
+        </p>
+      ) : null}
+      <p className="mt-2.5 text-[12px] leading-4 text-muted">Nothing is booked until all three say yes. A no brings the next best stay, and nothing that breaks a person&apos;s own limit is booked without their yes.</p>
+    </section>
+  );
+}
+
+type GroupItemKind = Extract<ChatItem, { kind: "group-line" | "trip-question" | "trip-budget" | "trip-itinerary" | "trip-open" | "trip-pot" | "trip-booking" | "trip-flights" | "trip-hotel" }>;
 
 export function isGroupItem(item: ChatItem): item is GroupItemKind {
   return item.kind === "group-line" || item.kind.startsWith("trip-");
@@ -324,5 +634,11 @@ export function GroupItem({ item, readOnly, onChanged }: { item: GroupItemKind; 
       return <OpenCard trip={item.trip} />;
     case "trip-pot":
       return <PotCard item={item} readOnly={readOnly} onChanged={onChanged} />;
+    case "trip-booking":
+      return <BookingCard trip={item.trip} viewer={item.viewer} />;
+    case "trip-flights":
+      return <FlightCard item={item} readOnly={readOnly} onChanged={onChanged} />;
+    case "trip-hotel":
+      return <HotelCard item={item} readOnly={readOnly} onChanged={onChanged} />;
   }
 }

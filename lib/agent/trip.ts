@@ -32,6 +32,7 @@ import {
 import type { Store } from "@/lib/store";
 import { LocalLedger } from "@/lib/nessie";
 import { GROUP_COORDINATOR, GROUP_MEMBERS } from "./group";
+import { driveBooking, type BookingPlayers } from "./trip-booking";
 import { newId } from "./ids";
 import { decide } from "./lifecycle";
 import { withLock } from "./lock";
@@ -651,7 +652,7 @@ export async function refundPot(store: Store, planId: string, options: Options =
 // ---------------------------------------------------------------------------
 
 /** What plays a simulated person: one real model call each, injected so a test can script it. */
-export type TripPlayers = {
+export type TripPlayers = BookingPlayers & {
   answers: (member: SimulatedMember, range: { low: number; high: number }) => Promise<{ answer: "yes" | "no" | "limit"; limit?: number }>;
   joins: (member: SimulatedMember, summary: string) => Promise<{ choice: "in" | "out" }>;
 };
@@ -681,9 +682,14 @@ export async function driveTrip(store: Store, planId: string, players: TripPlaye
         await refundPot(store, planId, options);
         return;
       }
-      if (!isTripPlan(plan) || plan.state === "confirmed") return;
       // Kai is fictional in every room, so a model always plays them; Michelle only when no second person is in (the simulated-friend switch).
       const simulated: MemberId[] = room.simulatedFriend ? OTHER_MEMBERS : ["kai"];
+      if (!isTripPlan(plan)) return;
+      // Once everyone is in, Sprout books the trip with each person's own yes (lib/agent/trip-booking.ts).
+      if (plan.state === "confirmed") {
+        await driveBooking(store, planId, players, simulated, options);
+        return;
+      }
 
       if (plan.state === "negotiating") {
         if ((await store.listMessages(plan.group.contexts[OTHER_MEMBERS[0]]!)).length === 0) await askMembers(store, planId, options);

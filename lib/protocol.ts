@@ -571,6 +571,49 @@ export const TripPot = z.strictObject({
 });
 export type TripPot = z.infer<typeof TripPot>;
 
+// After the trip is confirmed, Sprout books it with each person's yes (Lisa's plan, trip-booking-consent-v1). The rule: nothing
+// that costs money is booked until the person it is for says yes; holds that cost nothing (the dates, the free day
+// activities) happen on their own. Every booking is simulated: seeded prices on the demo's local ledger, nothing real.
+export const TripSeat = z.strictObject({
+  flightId: Id,
+  amount: TripMoney,
+  // The price is paid from that person's share of the pot first, then from their own trip wallet.
+  fromPot: TripMoney,
+  fromWallet: TripMoney,
+  withdrawalIds: z.array(Id).max(2),
+  by: z.enum(["person", "person_model", "seed"]),
+  at: IsoDateTime,
+});
+export type TripSeat = z.infer<typeof TripSeat>;
+
+export const TripHotelBooking = z.strictObject({ amount: TripMoney, withdrawalId: Id, by: z.enum(["person", "person_model", "seed"]), at: IsoDateTime });
+
+export const TripHotel = z.strictObject({
+  // The stay on the table now, and every stay offered so far, in order.
+  optionId: Id,
+  offered: z.array(Id).min(1).max(4),
+  // Each person's answer for the stay on the table; it books only when all three say yes. `by` says who gave each: a tap,
+  // a model that plays the person, or the seeded profile when that model did not answer.
+  approvals: z.partialRecord(MemberId, z.enum(["yes", "no"])),
+  by: z.partialRecord(MemberId, z.enum(["person", "person_model", "seed"])).optional(),
+  // Who said no to which stay, and why (a refusal can be a person's, or Pebble's for Kai's limit).
+  refusals: z.array(z.strictObject({ stayId: Id, member: MemberId, reason: z.string().min(1).max(160), at: IsoDateTime })).max(8),
+  booked: z.partialRecord(MemberId, TripHotelBooking),
+  state: z.enum(["proposed", "booked", "none_fit"]),
+});
+export type TripHotel = z.infer<typeof TripHotel>;
+
+export const TripBooking = z.strictObject({
+  // Where a booked price goes on the ledger, so the pot, the wallets and this one always add up to what was seeded.
+  vendorAccountId: Id,
+  datesHeldAt: IsoDateTime.optional(),
+  seats: z.partialRecord(MemberId, TripSeat),
+  hotel: TripHotel.optional(),
+  daysHeldAt: IsoDateTime.optional(),
+  doneAt: IsoDateTime.optional(),
+});
+export type TripBooking = z.infer<typeof TripBooking>;
+
 export const TripState = z.strictObject({
   title: z.string().min(1).max(60),
   destination: z.string().min(1).max(60),
@@ -581,6 +624,8 @@ export const TripState = z.strictObject({
   cap: z.strictObject({ amount: TripMoney, basis: z.string().min(1).max(160) }).optional(),
   itinerary: TripItinerary.optional(),
   pot: TripPot.optional(),
+  // Present once the trip is confirmed and Sprout starts booking it.
+  booking: TripBooking.optional(),
   // What the coordinator does not know and says so, instead of inventing it.
   unknowns: z.array(z.string().min(1).max(140)).max(6),
 });
