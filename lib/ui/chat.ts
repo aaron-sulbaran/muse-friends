@@ -2,6 +2,7 @@ import { copy } from "./copy";
 import { googleCalendarUrl } from "./gcal";
 import { daySeparatorFor, formatSpokenHour, formatWindowSpoken, namesFor } from "./format";
 import { OTHER_SIGNALS, SHAWARMA_REEL, pastSignal, type PastSignal } from "@/lib/seed/past-signals";
+import type { OnboardingState } from "./onboarding";
 import type { AgentId, AvatarMood, Role, UiPlan, UiSnapshot } from "./types";
 
 /*
@@ -20,7 +21,10 @@ export type ChatItem =
   | { kind: "collapsed"; id: string; text: string }
   | { kind: "draft-card"; id: string; plan: UiPlan; draft: string }
   | { kind: "hold-row"; id: string; title: string; planId: string; googleUrl: string | null }
-  | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend"; friendName: string };
+  | { kind: "start-card"; id: string; variant: "send-reel" | "simulated-friend"; friendName: string }
+  | { kind: "onboarding-friends"; id: string }
+  | { kind: "onboarding-optout"; id: string }
+  | { kind: "onboarding-turn-on"; id: string };
 
 /** Which animated glyph a status line shows (public/status/status-<glyph>.svg). */
 export type StatusGlyph = "reading" | "thinking" | "talking" | "waiting-you" | "waiting-friend" | "retrying" | "done";
@@ -269,4 +273,22 @@ function pastDayLabel(at: Date, daysAgo: number): string {
 
 function dayWordFor(iso: string): string {
   return daySeparatorFor(iso, "2000-01-01T00:00:00Z").day;
+}
+
+/**
+ * The chat items onboarding owns, for the judge's phone: Sprout's greeting, the Friends card until it is answered, the
+ * judge's answer as their own bubble, and after an opt-out the card that says what it means, then the one way back in.
+ * Pure like the rest of this file. `friendName` is the room's friend (Michelle in the demo).
+ */
+export function onboardingItems(state: OnboardingState, friendName: string): ChatItem[] {
+  const greeting: ChatItem = { kind: "bubble", id: "onboarding-greeting", from: "muse", text: copy.onboarding.greeting };
+  if (state.step === "name") return [greeting, { kind: "onboarding-friends", id: "onboarding-friends" }];
+  if (state.friendsOn) return [greeting, { kind: "bubble", id: "onboarding-answer", from: "user", text: copy.onboarding.turnOn }];
+  return [
+    greeting,
+    { kind: "bubble", id: "onboarding-answer", from: "user", text: copy.onboarding.notNow },
+    { kind: "onboarding-optout", id: "onboarding-optout" },
+    { kind: "bubble", id: "onboarding-needs-friends", from: "muse", text: copy.onboarding.needsFriends(friendName) },
+    { kind: "onboarding-turn-on", id: "onboarding-turn-on" },
+  ];
 }
