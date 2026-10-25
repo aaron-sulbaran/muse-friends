@@ -200,7 +200,8 @@ export type UiNote = {
     | "payment_proposed"
     | "payment_cancelled"
     | "receipt_read"
-    | "chat_asked";
+    | "chat_asked"
+    | "remembered";
   at: string;
   text: string;
   /** On a "You asked" row: the pages the answer's web search found, up to 3, to show as "Source" chips (SourceChips). */

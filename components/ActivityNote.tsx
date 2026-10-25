@@ -1,4 +1,4 @@
-import { CalendarX, Film, MessageCircle, Receipt, Shield, ShieldCheck, TriangleAlert, Undo2, UserMinus, Users, Wallet, type LucideIcon } from "lucide-react";
+import { BookmarkCheck, CalendarX, Film, MessageCircle, Receipt, Shield, ShieldCheck, TriangleAlert, Undo2, UserMinus, Users, Wallet, type LucideIcon } from "lucide-react";
 import { formatTimeWithSeconds } from "@/lib/ui/format";
 import type { UiNote } from "@/lib/ui/types";
 import { chatLineContext, withSearchSources } from "@/lib/ui/tools";
@@ -22,6 +22,8 @@ const kinds: Record<UiNote["kind"], { icon: LucideIcon; title: string; plain?: b
   receipt_read: { icon: Receipt, title: "Read a receipt" },
   // The tools the answer used show under this row as plain lines (UiNote.toolCalls), a web search with its pages as Source chips.
   chat_asked: { icon: MessageCircle, title: "You asked your Muse" },
+  // After "We went!" or "Didn't happen": the Muse remembers it (no model call).
+  remembered: { icon: BookmarkCheck, title: "Remembered" },
 };
 
 /** A timeline row that is not a message: what the agents noticed or a person switched. Line icon in a tile, never an avatar. */

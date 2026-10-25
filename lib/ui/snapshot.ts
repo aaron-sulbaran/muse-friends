@@ -7,6 +7,7 @@ import { displayName } from "@/lib/seed/personas";
 import { CONTACTS, getContact, isMutual } from "@/lib/seed/contacts";
 import { SEEDED_LABEL, TRIP_PEOPLE } from "@/lib/seed/trip";
 import { toUiBooking } from "./booking";
+import { copy } from "./copy";
 import { describeNote, describePayment, eventLabel } from "./payments";
 import { simulatedFriend } from "./tokens";
 import { toolCallsOf } from "./tools";
@@ -279,6 +280,29 @@ function reelSourceNotes(state: StateSnapshot): UiNote[] {
 }
 
 /**
+ * After the person answers "We went!" or "Didn't happen": one plain row that their Muse remembers it. Built from the
+ * outcome the store already records, so it costs no model call and adds no engine state. A pair plan only.
+ */
+function rememberedNotes(state: StateSnapshot, plan: Plan | null, standIn: UiSnapshot["standIn"], humans: UiSnapshot["humans"]): UiNote[] {
+  if (!plan || plan.kind === "trip" || plan.group) return [];
+  const outcome = outcomeFor(plan, state);
+  if (!outcome) return [];
+  const person = (agent: AgentId): string => humans?.[agent] ?? (agent === "lisa" ? (standIn?.person ?? "your friend") : "Aaron");
+  const you = plan.initiator;
+  const friend = you === "aaron" ? "lisa" : "aaron";
+  const muse = you === "lisa" && standIn ? standIn.muse : displayName(you);
+  const place = plan.activity?.title ?? "the plan";
+  return [
+    {
+      id: `note_remembered_${plan.id}`,
+      kind: "remembered",
+      at: outcome.at,
+      text: outcome.result === "went" ? copy.rememberedWent(person(you), person(friend), place, muse) : copy.rememberedDidnt(person(friend), place, muse),
+    },
+  ];
+}
+
+/**
  * A rejection as privacy proof: one plain sentence per reason, naming the Muses (the server does not know the
  * people's names). The raw technical text stays as the row's hover detail.
  */
@@ -524,7 +548,7 @@ export function toUiSnapshot(stored: StateSnapshot, overlay: UiOverlay): UiSnaps
     standIn,
     sides: { aaron: displayName("aaron"), lisa: displayName("lisa"), kai: displayName("kai") },
     messages,
-    notes: [...reelSourceNotes(state), ...toNotes(state, rename, payments, (agent) => (agent === "lisa" && standIn ? standIn.muse : displayName(agent)))].sort((first, second) => first.at.localeCompare(second.at)),
+    notes: [...reelSourceNotes(state), ...rememberedNotes(state, plan, standIn, humans), ...toNotes(state, rename, payments, (agent) => (agent === "lisa" && standIn ? standIn.muse : displayName(agent)))].sort((first, second) => first.at.localeCompare(second.at)),
     contacts: CONTACTS.map((contact) => ({
       id: contact.id,
       name: contact.displayName,
