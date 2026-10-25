@@ -1,9 +1,11 @@
 "use client";
 
-import { BatteryFull, Shield, Signal, Wifi } from "lucide-react";
+import { Activity, ArrowLeftRight, BatteryFull, Shield, Signal, Wifi } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { viewForRole, type ChatItem } from "@/lib/ui/chat";
 import { copy } from "@/lib/ui/copy";
+import { otherRole, sideHref } from "@/lib/ui/entry";
 import { formatStatusBarTime, namesFor } from "@/lib/ui/format";
 import { postDecision, postHandoff, postReplan } from "@/lib/ui/actions";
 import type { GoalContext } from "@/lib/ui/goals";
@@ -15,6 +17,7 @@ import { GoalDetail, GoalsTab } from "./GoalsTab";
 import { HoldRow } from "./HoldRow";
 import { MuseAvatar } from "./MuseAvatar";
 import { RecommendationCard } from "./RecommendationCard";
+import { ReplayBadge } from "./ReplayBadge";
 import { StartCard } from "./StartCard";
 import { StatusPill } from "./StatusPill";
 import { TabBar, type Tab } from "./TabBar";
@@ -30,6 +33,11 @@ type Props = {
   readOnly?: boolean;
   /** A run could not start because the live-run caps are reached; the page falls back to a recording. */
   onPaused?: (text: string) => void;
+  /**
+   * Set when this screen is a phone on its own (the stage has the Activity panel and the other phone beside
+   * it): adds a row to switch sides and open Activity as a sheet, whose content the page supplies.
+   */
+  standalone?: { activity: (close: () => void) => React.ReactNode };
 };
 
 function StatusBar({ time }: { time: string }) {
@@ -51,12 +59,44 @@ function spacingBefore(previous: ChatItem | undefined, item: ChatItem): string {
   return sameSpeaker ? "mt-1.5" : "mt-3.5";
 }
 
+type StandaloneBarProps = { snapshot: UiSnapshot; role: Role; onOpenActivity: () => void };
+
+/** Switch to the other side, see the recording badge, open Activity: what the stage gives a judge for free and a lone phone has to carry. */
+function StandaloneBar({ snapshot, role, onOpenActivity }: StandaloneBarProps) {
+  const other = otherRole(role);
+  const otherName = namesFor(snapshot).human[other === "a" ? "aaron" : "lisa"];
+  return (
+    <div className="flex h-10 shrink-0 items-center justify-between gap-2 px-4">
+      <Link
+        href={sideHref(other)}
+        aria-label={copy.switchSideLabel(otherName)}
+        className="inline-flex h-9 min-w-0 items-center gap-1.5 rounded-full bg-group px-3 text-[13px] font-semibold transition-colors hover:bg-bubble-muse"
+      >
+        <ArrowLeftRight className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        <span className="truncate">{copy.switchSide(otherName)}</span>
+      </Link>
+      <div className="flex shrink-0 items-center gap-2">
+        {snapshot.mode === "replay" ? <ReplayBadge mode="replay" compact /> : null}
+        <button
+          type="button"
+          onClick={onOpenActivity}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-group px-3 text-[13px] font-semibold transition-colors hover:bg-bubble-muse"
+        >
+          <Activity className="size-4" strokeWidth={1.75} aria-hidden="true" />
+          {copy.activityOpen}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** One Muse phone's screen: avatar and status on top, the chat, and the tab bar. */
-export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused }: Props) {
+export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false, onPaused, standalone }: Props) {
   const view = viewForRole(snapshot, role);
   const [pending, setPending] = useState(false);
   const [replanError, setReplanError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("chat");
   const [goalOpen, setGoalOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -136,6 +176,7 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
   return (
     <div className="relative flex h-full flex-col bg-screen">
       {framed ? <StatusBar time={formatStatusBarTime(snapshot.now)} /> : <div className="h-[env(safe-area-inset-top)] shrink-0" />}
+      {standalone ? <StandaloneBar snapshot={snapshot} role={role} onOpenActivity={() => setActivityOpen(true)} /> : null}
       {simulated && role === "b" ? (
         <p className="shrink-0 bg-group px-4 py-2 text-center text-[13px] font-semibold">{copy.simulatedFriendBanner}</p>
       ) : null}
@@ -149,10 +190,10 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
                 aria-label={`Open ${view.museName} settings`}
                 className="rounded-full transition-transform hover:scale-105"
               >
-                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
+                <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} mood={view.mood} />
               </button>
             ) : (
-              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} />
+              <MuseAvatar agent={view.agent} simulated={simulated && view.agent === "lisa"} name={view.museName} size={44} mood={view.mood} />
             )}
             <StatusPill name={view.museName} status={view.status} />
             {role === "b" && !readOnly ? (
@@ -197,6 +238,21 @@ export function MuseScreen({ snapshot, role, framed, onChanged, readOnly = false
           setGoalOpen(false);
         }}
       />
+      {activityOpen && standalone ? (
+        <div
+          className="absolute inset-0 z-30 flex items-end bg-black/10"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setActivityOpen(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setActivityOpen(false);
+          }}
+        >
+          <div role="dialog" aria-modal="true" aria-label={copy.activityTitle} className="h-[88%] w-full animate-card-in overflow-hidden rounded-t-card shadow-float">
+            {standalone.activity(() => setActivityOpen(false))}
+          </div>
+        </div>
+      ) : null}
       {sheetOpen && role === "b" ? (
         <AvatarSheet
           simulated={simulated}
